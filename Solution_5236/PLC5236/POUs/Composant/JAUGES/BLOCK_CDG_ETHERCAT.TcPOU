@@ -1,0 +1,84 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CDG_ETHERCAT" Id="{fb006662-3dc9-4dde-885c-b2b337e22f58}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CDG_ETHERCAT
+
+
+(* Gestion d'une jauge capacitive de type CDGxxx en ethercat*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - 04-2015 - affaire 9015 - AC450 N27 *)
+(* Version 2-0 - AB - 09-2015 - Ajout IN_WcState pour gestion perte communication ethercat *)
+(* Version 3-0 - GV - 09-2015 - affaire 9070 - Adaptation pour journal des évènements externe *)
+(*************************************************************************)
+
+VAR_INPUT
+(*paramètre standard*)
+	RESET:   				BOOL; 													(*Condition RAZ actionneur*)
+	MANUAL:  				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)				(*Mode manuel*)
+	IN_Pression: 			REAL; 													(* Valeur de la pression donnée par le bloc vanne asservie 650 profibus *)
+
+	IN_WcState AT%I*:		BOOL;													(*0 = Data valid, 1 = Data invalid*)
+
+	CO_inhibe_Seuil:		BOOL;													(*information externe d'inhibition des seuils*)
+	PRM_Seuil: 				ARRAY[0..10] OF REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		 (* Valeur des seuils*)
+	PRM_Delais:				ARRAY[0..10] OF TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Delais de validation du seuil en multiple de 100ms *)
+	PRM_Type_seuil: 		ARRAY[0..10] OF BOOL; 											(* Type du seuil n°1 (False=seuil vide, True=seuil pression) *)
+
+
+END_VAR
+
+VAR_OUTPUT
+(*Variable d'état*)
+	STATE_Seuil:		 		ARRAY[0..10] OF BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Tableau des seuils*)
+	STATE_Pression:				REAL; 		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Valeur de la pression (dans l'unité sélectionnée) *)
+	STATE_Ok:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Jauge à l'état OK*)
+	STATE_Nok:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Jauge en défaut*)
+
+END_VAR
+
+VAR
+	i:							USINT;
+	TIMER_Seuil:				ARRAY[0..10] OF TON;
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	CONF_Unit: 				USINT:=0; 					(* Unité : 0=mb,1=mTorr,2=Pa *)
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Test de validité du signal de jauge si signal > 0.6V et si la jauge est en marche *)
+STATE_OK := NOT IN_WcState;
+STATE_NOK:=FALSE;
+IF STATE_Ok THEN
+	IF (IN_Pression < 0.00001) THEN
+		STATE_Pression:= 0.00001;
+	ELSE
+		STATE_Pression:= IN_Pression;
+	END_IF
+ELSE
+	STATE_Pression := 0;
+END_IF
+
+(* GESTION DES SEUILS *)
+FOR i:=1 TO 10 DO
+		TIMER_Seuil[i].PT		:=	PRM_Delais[i];
+		TIMER_Seuil[i].IN		:=	(((STATE_Pression >= PRM_Seuil[i]) AND PRM_Type_seuil[i]) OR		(*Seuil en pression*)
+								((STATE_Pression <= PRM_Seuil[i]) AND NOT PRM_Type_seuil[i]))		(*Seuil de vide*)
+								AND NOT RESET AND NOT CO_inhibe_Seuil AND STATE_Ok;
+		TIMER_Seuil[i]();
+		STATE_Seuil[i]		:= 	TIMER_Seuil[i].Q;
+END_FOR;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CDG_ETHERCAT">
+      <LineId Id="52" Count="21" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

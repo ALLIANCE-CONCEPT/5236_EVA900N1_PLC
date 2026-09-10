@@ -1,0 +1,322 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="ALIM_EFFLUVAGE" Id="{f8b6e764-064f-4f0a-b2be-b37d0e813383}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ALIM_EFFLUVAGE
+
+(* Gestion d'un effluvage HPG *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INITIALE - 7326 BA8*)
+(* Version 1-1 - GV - Modification autorisations (Ajout VAC) + Modification défauts + Ajout CONF_Tension_Plasma *)
+(* Version 2-0 - HG - Ajout config PID *)
+(* Version 3-0 - GV - Ajout alarme et défaut surveillance tension *)
+
+VAR_INPUT
+
+	I_PARAM_SYSTEM_OK:			BOOL;
+
+	RESET:						BOOL;			(*Condition de réinitialisation de la fonction*)
+	MANUAL:						BOOL;			(*Ordre de commmande manuel de la fonction*)
+	DOOR:						BOOL;			(*Entrée interlock utilisateur du generateur*)
+	VAC:						BOOL;
+	PRM_Consigne:				REAL;			(*Consigne puissance*)
+	PRM_Tension_attendue:		REAL;			(*Tension attendue pour surveillance*)
+
+	M_ON:						BOOL;			(*Consigne logique manuel*)
+	CTRL_PID:					FB_CTRL_PID;	(*Controleur PID courant*)
+	(*entrée analogique*)
+	IN_CURRENT:					ANALOG_INPUT;
+	IN_VOLTAGE:					ANALOG_INPUT;
+	OUT_SETPOINT:				ANALOG_OUTPUT;
+
+	(*variable de surveillance*)
+	VAR_ALM_SURV_CURRENT:		SURVPRC;
+	VAR_DEF_SURV_CURRENT:		SURVPRC;
+	VAR_ALM_SURV_VOLTAGE:		SURVPRC;
+	VAR_DEF_SURV_VOLTAGE:		SURVPRC;
+	(*Variable de defaut*)
+	ALM_Surv_Current:			PRCDEF; 	(*Alarme surveillance courant*)
+	DEF_Surv_Current:			PRCDEF;  	(*Défaut surveillance courant*)
+	ALM_Surv_Voltage:			PRCDEF;		(*Alarme surveillance tension*)
+	DEF_Surv_Voltage:			PRCDEF;		(*Défaut surveillance tension*)
+	DEF_On_Imposs:				PRCDEF;		(*Défaut d'activation non autorisé en mode automatique*)
+	DEF_Off_Imposs:				PRCDEF;		(*Défaut de désactivation non autorisée en mode automatique*)
+	DEF_Off_auto:				PRCDEF;		(*Défaut de désactivation automatique*)
+	DEF_Amorcage_Plasma:		PRCDEF;		(*Défaut plasma*)
+	DEF_Perte_Plasma:			PRCDEF;		(*Défaut de perte plasma*)
+
+	CO_On:   					BOOL; 		(*Ordre mode automatique activation*)
+	EN_On_INT:   				BOOL:=TRUE;	(*Condition d'autorisation d'activation donnée par le bloc qui instancie le bloc actuator*)
+	EN_On_EXT:					BOOL:=TRUE;	(*Condition d'autorisation d'activation externe*)
+
+
+END_VAR
+
+VAR_OUTPUT
+	OUT_ON:						BOOL;	(*Sortie de marche du générateur*)
+	STATE_OFF:					BOOL;	(*Générateur à l'arrêt*)
+	STATE_ON:					BOOL;	(*Générateur en marche*)
+	STATE_NOK:					BOOL;	(*Générateur en défaut*)
+	STATE_READY:				BOOL;	(*Générateur prêt pour demande marche manuel*)
+	STATE_plasma:				BOOL;	(*Indicateur plasma ok*)
+	STATE_tension:				REAL;	(*Mesure tension*)
+	STATE_current:				REAL;	(*Mesure courrant *)
+	STATE_Setpoint_current:		REAL;	(*Consigne appliquée de courant*)
+	STATE_Setpoint_Voltage:		REAL;	(*Tension attendue*)
+	STATE_Setpoint_Power:		REAL;	(*Consigne appliquée en % *)
+
+	AUTOR_On_IHM:				BOOL; 	(*etat activation autorisée depuis la supervision*)
+	AUTOR_Off_IHM:				BOOL; 	(*etat désactivation autorisée depuis la supervision*)
+	AUTOR_On_PLC:				BOOL;	(*etat activation autorisée depuis l'automate*)
+	AUTOR_Off_PLC:				BOOL;	(*etat désactivation autorisée depuis l'automate*)
+END_VAR
+VAR
+	M_stParams: 				ST_CTRL_PID_PARAMS;
+	RCP_M_On:					BOOL;
+	VAR_mem_plasma:				BOOL;
+	VAR_on:						BOOL;
+	TIMER_Plasma_ok:			TON;
+	VAR_Ctrl_Mode:				E_CTRL_MODE := eCTRL_MODE_MANUAL;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Courant_Plasma:			REAL;			(*Valeur du courant de détéction plasma amorcé (A)*)
+	CONF_Tension_Plasma:			REAL;			(*Valeur de la tension de détection plasma amorcé (V)*)
+	CONF_Tps_Valid_Plasma:			TIME;			(*Delais de validation plasma*)
+	CONF_No_Safety_Auto:			BOOL:=FALSE;	(*option de desactivation des conditions d'autorisation en mode automatique*)
+	CONF_EN_On:						USINT:=0;		(*définit la réaction du système en cas de perte des conditions d'autorisation d'activation EN_On*)
+													(* 0 = désactivation automatique  en cas de perte des conditions d'autorisation d'activation uniquement en manuel*)
+													(* 1 = désactivation automatique en cas de perte des conditions d'autorisation d'activation en auto et en manuel*)
+													(* 2 = Pas de déscativation automatique*)
+	CONF_Kp:						REAL;			(*composante P*)
+	CONF_Tn:						TIME;			(*Composante I (s)*)
+	CONF_Tv:						TIME;			(*Composante D (s)*)
+	CONF_Td:						TIME;			(*Composante damping time*)
+
+	IdXML:							STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:							UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:						STRING;			(*MNEMO de l'appelant*)
+	MNEMO:							STRING;			(*MNEMO de l'entité*)
+	IsComponent:					BOOL;			(*entité : composant*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	IdXml							:=	'14';
+	TagXml							:=	1;
+
+	DEF_Off_Auto.IdXml				:=	'3';
+	DEF_Off_Auto.TagXml				:=	10;
+
+	DEF_On_imposs.IdXml				:=	'3';
+	DEF_On_imposs.TagXml			:=	5;
+
+	DEF_Off_imposs.IdXml			:=	'3';
+	DEF_Off_imposs.TagXml			:=	8;
+
+	DEF_Surv_Current.IdXml			:=	'17';
+	DEF_Surv_Current.TagXml			:=	1;
+	
+	DEF_Surv_Voltage.IdXml			:=	'17';
+	DEF_Surv_Voltage.TagXml			:=	3;
+
+	ALM_Surv_Current.IdXml			:=	'17';
+	ALM_Surv_Current.TagXml			:=	2;
+	ALM_Surv_Current.Groupe			:=	1;
+	
+	ALM_Surv_Voltage.IdXml			:=	'17';
+	ALM_Surv_Voltage.TagXml			:=	4;
+	ALM_Surv_Current.Groupe			:=	1;
+	
+
+	DEF_Amorcage_Plasma.IdXml		:=	'4';
+	DEF_Amorcage_Plasma.TagXml		:=	1;
+
+	DEF_Perte_Plasma.IdXml			:=	'4';
+	DEF_Perte_Plasma.TagXml			:=	2;
+
+	M_stParams.tCtrlCycleTime    	:= 	T#10MS;
+   	M_stParams.tTaskCycleTime      	:= 	T#10MS;
+   	M_stParams.fKp            		:= 	CONF_Kp;	(*1*)     		(* proportional gain *)
+    M_stParams.tTn           		:=	CONF_Tn;	(*T#50ms;*)     (* Tn *)
+    M_stParams.tTv             		:= 	CONF_Tv;	(*T#50ms;*)     (* Tv *)
+    M_stParams.tTd              	:= 	CONF_Td;	(*T#10ms;*)     (* Td *)
+    M_stParams.fOutMaxLimit        	:=  100.0;
+    M_stParams.fOutMinLimit        	:=  0.0;
+    M_stParams.bPInTheFeedbackPath 	:= 	TRUE;
+    M_stParams.bDInTheFeedbackPath 	:= 	TRUE;
+
+(*mesure du courant*)
+IN_CURRENT(
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1.0,
+	Value=>STATE_current );
+(*mesure de la tension*)
+IN_VOLTAGE(
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1.0,
+	Value=>STATE_tension );
+
+(* Réception des ordres en mode manuel*)
+	RCP_M_On 			:=	M_On;
+(*Autorisation*)
+	AUTOR_On_IHM		:= 	MANUAL AND ((EN_On_INT AND EN_On_EXT)
+							OR MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_On AND DOOR AND VAC;
+	AUTOR_Off_IHM		:= 	MANUAL AND NOT RESET AND  VAR_On;
+	AUTOR_On_PLC		:=	 NOT MANUAL AND ((EN_On_INT AND EN_On_EXT)
+							OR CONF_No_Safety_Auto) AND NOT RESET AND DOOR AND VAC;
+	AUTOR_Off_PLC		:= 	NOT MANUAL AND NOT RESET;
+
+(*defaut activation impossible en mode automatique*)
+	DEF_On_Imposs.CONDITION:=	CO_On AND NOT AUTOR_On_PLC AND NOT RESET AND NOT MANUAL;
+	DEF_On_Imposs.DELAY := T#0ms;
+	DEF_On_Imposs();
+(*Defaut désactivation impossible en mode automatique*)
+	DEF_Off_Imposs.CONDITION:=	NOT CO_On AND NOT AUTOR_Off_PLC
+								AND NOT RESET AND NOT MANUAL;
+	DEF_Off_Imposs.DELAY := T#0ms;
+	DEF_Off_Imposs();
+(*defaut desactivation automatique*)
+	DEF_Off_Auto.CONDITION :=        (NOT EN_On_INT OR NOT EN_On_EXT OR NOT DOOR OR NOT VAC) AND  VAR_On AND ((CONF_En_ON=1) OR ((CONF_EN_On=0) AND MANUAL)) AND NOT RESET;
+	DEF_Off_auto.DELAY:=T#0ms;
+	DEF_Off_Auto();
+
+
+(*gestion des sorties*)
+IF 		(RCP_M_On AND AUTOR_On_IHM AND NOT VAR_ON) OR
+		(CO_On AND AUTOR_On_PLC AND NOT VAR_ON) THEN
+				VAR_On		:= 	TRUE;
+ELSIF 	(RCP_M_On  AND VAR_ON  AND AUTOR_Off_IHM) OR
+	    	(NOT CO_On AND VAR_ON AND AUTOR_Off_PLC) OR
+		DEF_Off_Auto.DEF THEN
+				VAR_On		:=	FALSE;
+ELSIF 	RESET  THEN
+				VAR_On		:= 	FALSE;
+END_IF;
+OUT_On			:=	VAR_On;
+
+(*Gestion de la consigne*)
+IF OUT_ON THEN
+	STATE_Setpoint_current 	:=	PRM_Consigne;
+	STATE_Setpoint_Voltage	:=	PRM_Tension_attendue;
+ELSE
+	STATE_Setpoint_Current 	:= 0.0;
+	STATE_Setpoint_Voltage	:= 0.0;
+END_IF
+
+(*mode controller*)
+	IF	STATE_OFF THEN
+		VAR_CTRL_Mode	:=	eCTRL_MODE_PASSIVE;
+	ELSE
+		VAR_CTRL_Mode	:=	eCTRL_MODE_ACTIVE;
+	END_IF
+
+CTRL_PID(
+	fSetpointValue:=STATE_setpoint_current ,
+	fActualValue:= STATE_current,
+	fManSyncValue:= ,
+	bSync:= ,
+	eMode:=VAR_Ctrl_Mode ,
+	bHold:= ,
+	stParams:=m_stParams ,
+	fOut=> STATE_Setpoint_Power ,
+	bARWactive=> ,
+	eState=> ,
+	eErrorId=> ,
+	bError=> );
+
+(*Gestion de la consigne*)
+	OUT_SETPOINT(
+	CONF_Max:= 100.0,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1.0,
+	Value:= STATE_Setpoint_power,
+	OUTPUT=> );
+
+
+(*Gestion des état*)
+STATE_On	:=	VAR_ON;
+STATE_Off	:=	NOT VAR_ON;
+STATE_Nok	:=	DEF_Amorcage_Plasma.DEF OR DEF_Off_auto.DEF OR DEF_Off_Imposs.DEF OR DEF_On_Imposs.DEF
+				OR DEF_Surv_Current.DEF OR ALM_Surv_Current.DEF OR DEF_Surv_Voltage.DEF OR ALM_Surv_Voltage.DEF OR DEF_Perte_Plasma.DEF;
+(*Tempo detection plasma*)
+TIMER_PLASMA_OK(
+					PT:= CONF_TPS_VALID_PLASMA,
+					IN:= (STATE_current >= CONF_Courant_Plasma) AND (STATE_tension >=CONF_Tension_Plasma)
+						AND VAR_on,
+					);
+(* affectation de la valeur qui permet de savoir si il y a un plasma*)
+STATE_Plasma := TIMER_PLASMA_OK.Q;
+
+STATE_READY:= VAC AND DOOR;
+
+(*surveillance*)
+(*Courant*)
+VAR_ALM_SURV_CURRENT.MEASURE	:=	STATE_current;
+VAR_ALM_SURV_CURRENT.SETPOINT	:=	STATE_setpoint_current;
+VAR_DEF_SURV_CURRENT.MEASURE	:=	STATE_current;
+VAR_DEF_SURV_CURRENT.SETPOINT	:=	STATE_Setpoint_current;
+VAR_ALM_SURV_CURRENT();
+ALM_surv_Current.CONDITION	:=	VAR_ALM_SURV_CURRENT.CONDITION AND STATE_ON;
+VAR_DEF_SURV_CURRENT();
+DEF_surv_Current.CONDITION	:=	VAR_DEF_SURV_CURRENT.CONDITION AND STATE_ON;
+
+ALM_SURV_Current();
+DEF_SURV_Current();
+
+(*Tension*)
+VAR_ALM_SURV_VOLTAGE.MEASURE	:=	STATE_tension;
+VAR_ALM_SURV_VOLTAGE.SETPOINT	:=	STATE_Setpoint_Voltage;
+VAR_DEF_SURV_VOLTAGE.MEASURE	:=	STATE_tension;
+VAR_DEF_SURV_VOLTAGE.SETPOINT	:=	STATE_Setpoint_Voltage;
+VAR_ALM_SURV_VOLTAGE();
+ALM_surv_Voltage.CONDITION	:=	VAR_ALM_SURV_VOLTAGE.CONDITION AND STATE_ON;
+VAR_DEF_SURV_VOLTAGE();
+DEF_surv_Voltage.CONDITION	:=	VAR_DEF_SURV_VOLTAGE.CONDITION AND STATE_ON;
+
+ALM_SURV_Voltage();
+DEF_SURV_Voltage();
+
+(*gestion des défaut*)
+DEF_Amorcage_Plasma.CONDITION	:=   OUT_On AND NOT VAR_mem_plasma
+									 AND NOT STATE_Plasma AND (Def_amorcage_plasma.DELAY > T#0S);
+DEF_amorcage_plasma();
+
+IF OUT_On AND STATE_Plasma THEN
+	VAR_mem_plasma := TRUE;
+END_IF
+IF NOT OUT_On THEN
+	VAR_mem_plasma := FALSE;
+END_IF
+
+DEF_Perte_Plasma.CONDITION		:=	VAR_Mem_Plasma AND NOT STATE_plasma
+									AND (def_perte_plasma.DELAY > T#0S);
+DEF_Perte_plasma();
+
+IF RCP_M_On AND M_ON THEN
+	M_ON:=FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="ALIM_EFFLUVAGE">
+      <LineId Id="92" Count="13" />
+      <LineId Id="360" Count="2" />
+      <LineId Id="106" Count="3" />
+      <LineId Id="365" Count="1" />
+      <LineId Id="368" Count="1" />
+      <LineId Id="367" Count="0" />
+      <LineId Id="110" Count="69" />
+      <LineId Id="483" Count="0" />
+      <LineId Id="180" Count="1" />
+      <LineId Id="484" Count="0" />
+      <LineId Id="182" Count="23" />
+      <LineId Id="207" Count="25" />
+      <LineId Id="370" Count="0" />
+      <LineId Id="234" Count="10" />
+      <LineId Id="372" Count="0" />
+      <LineId Id="371" Count="0" />
+      <LineId Id="374" Count="9" />
+      <LineId Id="373" Count="0" />
+      <LineId Id="245" Count="19" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

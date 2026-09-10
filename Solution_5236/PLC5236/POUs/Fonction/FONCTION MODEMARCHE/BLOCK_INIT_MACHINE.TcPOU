@@ -1,0 +1,202 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_INIT_MACHINE" Id="{d5e3a9ac-92e3-47db-977d-3602e388e69a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_INIT_MACHINE
+
+(*block de gestion d'initialisation d'une machine de type EVA601 sans SAS*)
+
+(****************historique des versions*****************************)
+(* Version 1-0 - GV - VERSION INITIALE - 12191 *)
+(* Version 1-1 - GV - Demande arrêt XTC si pas en Stop - 13375 - 09/2022*)
+(*************************************************************************)
+
+
+VAR_INPUT
+	(*demandes par bloc Mode de Marche*)
+	CO_Inter:					BOOL;
+	CO_Stop_Prod:				BOOL;
+	CO_Init_Prod:				BOOL;
+	CO_init:					BOOL;
+	OP_init:					BLOCK_G7;
+
+	M_Stop_Procedure:			BOOL;		(*Ordre IHM d'interruption de la procédure d'arrêt*)
+	RCP_Stop_Procedure:			BOOL;
+                                
+	I_STOP_EVAP_OK:				BOOL;
+	I_STOP_CONTROLLER_OK:		BOOL;
+	I_STOP_EFFLUVAGE_OK:		BOOL;
+	I_STOP_GAZ_OK:				BOOL;
+	I_STOP_CHAUFFAGE_OK:		BOOL;
+	I_STOP_MVTS_OK:				BOOL;
+	I_INIT_PRISE_OK:			BOOL;
+	I_INIT_POSE_OK:				BOOL;
+	I_STOP_IAD_OK:				BOOL;
+	I_POMPAGE_SEC_OK:			BOOL;
+	I_TH_ATM:					BOOL;
+	I_DOOR:						BOOL;
+	I_PURGE_EC:				BOOL;
+END_VAR
+VAR
+	FM_Etape1:					R_TRIG;
+	FM_Etape2:					R_TRIG;
+	FM_Etape3:					R_TRIG;
+	FM_Etape4:					R_TRIG;
+	FM_Etape5:					R_TRIG;
+	FM_Etape6:					R_TRIG;
+	FM_Etape7:					R_TRIG;
+	FM_Etape8:					R_TRIG;
+
+	I_PURGE_RAH_OK: BOOL;
+END_VAR
+
+VAR_OUTPUT
+	STATE_OK:					BOOL;
+	RQ_STOP_EFFLUVAGE:			BOOL;
+	RQ_STOP_CHAUFFAGE:			BOOL;
+	RQ_STOP_GAZ:				BOOL;
+	RQ_STOP_EVAP:				BOOL;
+	RQ_STOP_CONTROLLER:			BOOL;
+	RQ_START_PUMP:				BOOL;
+	RQ_START_PUMPING:			BOOL;
+	RQ_STOP_MVTS:				BOOL;
+	RQ_STOP_IAD:				BOOL;
+	RQ_INIT_PRISE:				BOOL;
+	RQ_INIT_POSE:				BOOL;
+                                
+	STATE_ABORT:				BOOL;	(*Indique que la procédure d'arrêt est en cours*)
+
+END_VAR
+VAR_INPUT PERSISTENT
+	IsFunction:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+
+VAR
+	I:				INT;		(*Variable d'itération*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Scrutation G7*)
+ACT_INIT();
+
+FM_etape1(CLK:=OP_init.Etape.1);
+FM_etape2(CLK:=OP_init.Etape.2);
+FM_etape3(CLK:=OP_init.Etape.3);
+FM_etape4(CLK:=OP_init.Etape.4);
+FM_etape5(CLK:=OP_init.Etape.5);
+FM_etape6(CLK:=OP_init.Etape.6);
+FM_etape7(CLK:=OP_init.Etape.7);
+FM_etape8(CLK:=OP_init.Etape.8);
+
+RQ_STOP_CONTROLLER := OP_Init.Etape.1 AND NOT I_STOP_CONTROLLER_OK;
+RQ_STOP_EVAP := FM_ETAPE1.Q;
+RQ_STOP_IAD:= FM_ETAPE2.Q OR FM_ETAPE7.Q;
+RQ_STOP_EFFLUVAGE := FM_ETAPE1.Q;
+RQ_STOP_CHAUFFAGE := FM_ETAPE1.Q;
+RQ_STOP_GAZ := (FM_ETAPE1.Q AND NOT I_PURGE_EC);
+RQ_STOP_MVTS := FM_ETAPE1.Q;
+RQ_START_PUMP := FM_ETAPE5.Q;
+RQ_START_PUMPING := FM_ETAPE6.Q;
+RQ_INIT_POSE := FM_ETAPE3.Q AND I_DOOR AND CO_Stop_Prod;
+RQ_INIT_PRISE := FM_ETAPE4.Q AND I_DOOR AND CO_Init_Prod;
+
+
+STATE_OK:=	OP_INIT.OK;]]></ST>
+    </Implementation>
+    <Action Name="ACT_INIT" Id="{91fd618d-1b77-4102-82eb-ec364a50b473}">
+      <Implementation>
+        <ST><![CDATA[OP_INIT(
+	N_STEP_OP_OK:= 8,
+	N_STEP_OP_NOK:= 0);
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_INIT.ETAPE = 0
+		THEN
+				OP_INIT.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	NOT CO_Inter  AND NOT CO_Init AND NOT CO_Stop_Prod AND NOT CO_Init_Prod THEN
+
+				OP_INIT.ETAPE := 0;			(*RAZ grafcet*)
+				OP_INIT.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_INIT.ETAPE.0
+		AND (CO_Init
+		OR CO_Stop_Prod
+		OR CO_Init_Prod
+		OR CO_Inter)
+		THEN
+				OP_INIT.ETAPE.1:=TRUE;
+				OP_INIT.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_INIT.Etape.1
+		AND I_STOP_EVAP_OK
+		AND I_STOP_CONTROLLER_OK
+		AND I_STOP_EFFLUVAGE_OK
+		AND I_STOP_CHAUFFAGE_OK
+		AND (I_STOP_GAZ_OK OR I_PURGE_EC)
+	 	AND I_STOP_MVTS_OK
+		THEN
+				OP_INIT.ETAPE.2:=TRUE;
+				OP_INIT.ETAPE.1:=FALSE;
+(*étape 2-3*)
+ELSIF OP_INIT.Etape.2
+		AND I_STOP_IAD_OK THEN
+				OP_INIT.Etape.3 := TRUE;
+				OP_INIT.Etape.2 := FALSE;
+(*étape 3-4*)
+ELSIF 	OP_INIT.Etape.3
+		AND (I_INIT_POSE_OK OR NOT I_DOOR OR NOT CO_Stop_Prod) THEN
+				OP_INIT.Etape.4 := TRUE;
+				OP_INIT.Etape.3 := FALSE;
+(*étape 4-5*)
+ELSIF	OP_INIT.Etape.4
+		AND (I_INIT_PRISE_OK OR NOT I_DOOR OR NOT CO_Init_Prod) THEN
+				OP_INIT.Etape.5 := TRUE;
+				OP_INIT.Etape.4 := FALSE;
+(*étape 5-8*)
+ELSIF	OP_INIT.Etape.5
+		AND I_TH_Atm THEN
+				OP_INIT.Etape.8 := TRUE;
+				OP_INIT.Etape.5 := FALSE;
+(*étape 5-6*)
+ELSIF	OP_INIT.Etape.5
+		AND NOT I_TH_Atm AND I_DOOR
+		THEN
+				OP_INIT.Etape.6 := TRUE;
+				OP_INIT.Etape.5 := FALSE;
+(*étape 6-7*)
+ELSIF	OP_INIT.Etape.6
+		AND I_POMPAGE_SEC_OK
+		THEN
+				OP_INIT.Etape.7 := TRUE;
+				OP_INIT.Etape.6 := FALSE;
+(*étape 7-8*) (*Redemande d'arrêt IAD pour purge d'arrêt si besoin*)
+ELSIF	OP_INIT.Etape.7
+		AND I_STOP_IAD_OK
+		THEN
+				OP_INIT.Etape.8 := TRUE;
+				OP_INIT.Etape.7 := FALSE;
+END_IF
+OP_INIT.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_INIT_MACHINE">
+      <LineId Id="78" Count="10" />
+      <LineId Id="93" Count="7" />
+      <LineId Id="103" Count="1" />
+      <LineId Id="189" Count="1" />
+      <LineId Id="105" Count="2" />
+    </LineIds>
+    <LineIds Name="BLOCK_INIT_MACHINE.ACT_INIT">
+      <LineId Id="0" Count="18" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="19" Count="2" />
+      <LineId Id="29" Count="10" />
+      <LineId Id="51" Count="39" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

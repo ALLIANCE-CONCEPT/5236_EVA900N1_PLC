@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_OPERATION" Id="{b298e6ba-1fb9-46c2-829e-8f2c4bf71ff8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_OPERATION
+
+(* Fonction de gestion d'une opération standard *)
+
+(****************historique des versions******************************************************************************************************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE - 15/02/2010*)
+(* Version 1-1 - SP - l'opération ne genère plud de défaut si une demande de marche depuis l'automate (ON_PLC) est générée et si l'opération est en cours ou
+si l'opération est ok et que la marche de l'opération depuis l'état ok est autorisée*)
+(* Version 2-0 - HG - Adaptation pour journal des évènements externe - 24/06/2011*)
+(* Version 2.1 - SP - meilleur gestion du mem_on_ihm 17/11/2011 - SP - 7326 BA8*)
+
+(**************************************************************************************************************************************************************)
+
+
+VAR_INPUT
+	(*condition en entrée*)
+	ON_IHM:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*ordre externe de	marche opération depuis l'IHM*)
+	ON_PLC:					BOOL;						(*ordre interne de marche opération depuis l'automate*)
+	ON_AUTO_INT:			BOOL;						(*condition interne à la fonction de déclenchement automatique de l'opération *)
+	ON_AUTO_EXT:			BOOL;						(*condition externe à la fonction de déclenchement automatique de l'opération *)
+	CTRL_PLC:				BOOL;						(*mode de contrôle de la fonction - 0 = contrôle depuis l'IHM - 1=contrôle depuis l'automate*)
+	RESET:					BOOL;						(*condition de reset de la fonction*)
+	MANUAL:					BOOL;						(*information de mode manuel*)
+	ENABLE_EXT:				BOOL	:=TRUE;				(*condition externe à la fonction de marche de l'opération*)
+	ENABLE_INT:				BOOL;						(*condition interne à la fonction de marche de l'opération*)
+	RESTART_ENABLE_IF_OK:	BOOL;						(*le redémarrage de l'opération est autorisée si l'opération est à l'état OK*)
+	N_STEP_OP_OK:			UINT (0..31);				(*n° d'étape correspondant à l'état OPERATION OK - 0 = inhibé*)
+	N_STEP_OP_NOK:			UINT (0..31);				(*n° d'étape correspondant à l'état OPERATION NOK - 0 = inhibé*)
+
+	(*information d'état*)
+	AUTOR_IHM:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*état marche opération depuis l'IHM autorisée*)
+
+	AUTOR_PLC:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*état marche opération depuis l'automate*)
+	OK:							BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*code d'état OK de l'opération*)
+	EC:							BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*code d'état EN COURS de l'opération*)
+	AR:							BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*code d'état de l'opération à l'ARRET*)
+	NOK:						BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*code d'état de l'opération Non OK*)
+	MARCHE_OP:					BOOL;												(*bit de synthese de la demande de marche*)
+	Etape:						UDINT;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*étape du grafcet*)
+
+	(*défaut*)
+	DEF_AUTO_ON:				PRCDEF;											(*01 - défaut déclenchement automatique de l'opération*)
+	DEF_ON_REJECTED:			PRCDEF;											(*02 - défaut marche opération refusé*)
+END_VAR
+
+VAR_OUTPUT
+	STATUS:						UINT;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*code d'état de l'opération*)
+END_VAR
+
+VAR
+	I:					UINT;														(*variable d'itération*)
+	FM_ON_AUTO_INT:	R_TRIG;														(*FM du bit ON_AUTO_INT*)
+	FM_ON_AUTO_EXT:	R_TRIG;														(*FM du bit ON_AUTO_EXT*)
+	FM_ON_PLC:		R_TRIG;														(*FM du bit de marche depuis l'automate*)
+	MEM_ON_IHM:		BOOL;														(*bit mémoire de demande de marche depuis l'IHM*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsOperation:	BOOL;			(*entité : opération*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_AUTO_ON.IdXml			:=	'2';
+DEF_AUTO_ON.TagXml			:=	2;
+
+DEF_ON_REJECTED.IdXml		:=	'2';
+DEF_ON_REJECTED.TagXml		:=	1;]]></ST>
+    </Implementation>
+    <Action Name="POST" Id="{c3c4d62a-8eeb-48d6-bb6e-6e0a1dc27189}">
+      <Implementation>
+        <ST><![CDATA[(*renvoi du code d'état de l'opération*)
+STATUS 	:= 		LREAL_TO_UINT(LN(UDINT_TO_REAL(etape)) / LN(2));
+
+(*drapeau d'état de la fonction*)
+OK		:=		(ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0);
+AR		:=		ETAPE.0;
+EC 		:= 		NOT OK AND NOT AR;
+NOK		:=		(ETAPE=EXPT(2,N_STEP_OP_NOK)) AND (N_STEP_OP_NOK>0) OR DEF_ON_REJECTED.APP;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{5a95c14b-87b6-45ee-8c5d-6a4fac15850d}">
+      <Implementation>
+        <ST><![CDATA[MEM_ON_IHM := ON_IHM  ;								(*mémorisation de la demande IHM pour éviter les aléas*)
+
+(*gestion front on_auto_int, on_auto_ext et on_int*)
+FM_ON_AUTO_EXT(CLK:=ON_AUTO_EXT);
+FM_ON_AUTO_INT(CLK:=ON_AUTO_INT);
+FM_ON_PLC(CLK:=ON_PLC);
+
+
+(*Opération autorisée en mode externe*)
+AUTOR_IHM  	:=	NOT CTRL_PLC AND NOT MANUAL AND NOT RESET AND
+					ENABLE_EXT AND (ETAPE.0 OR ((ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0) AND RESTART_ENABLE_IF_OK))
+					AND ENABLE_INT;
+
+(*Opération autorisée en mode interne*)
+AUTOR_PLC		:=	CTRL_PLC AND NOT MANUAL AND NOT RESET AND
+					((ENABLE_EXT AND (ETAPE.0 OR ((ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0) AND RESTART_ENABLE_IF_OK))
+					AND ENABLE_INT)
+					OR NOT (ETAPE.0 OR ((ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0) AND RESTART_ENABLE_IF_OK)) )  ;
+
+(*Affectation de la condition de marche et reset des ordres de marches interne et externe*)
+MARCHE_OP	:=	(MEM_ON_IHM AND NOT CTRL_PLC  AND AUTOR_IHM) OR
+					(FM_ON_PLC.Q AND CTRL_PLC AND AUTOR_PLC) OR
+					(FM_ON_AUTO_INT.Q OR FM_ON_AUTO_EXT.Q) AND NOT RESET AND NOT MANUAL AND
+										(ETAPE.0 OR ((ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0) AND RESTART_ENABLE_IF_OK)) ;
+
+(*Gestion du défaut de demande de marche opération refusée*)
+DEF_ON_REJECTED.CONDITION 		:=	(MEM_ON_IHM AND NOT AUTOR_IHM) OR (FM_ON_PLC.Q AND NOT AUTOR_PLC);
+DEF_ON_REJECTED.DELAY			:=	T#0s;
+DEF_ON_REJECTED();
+(*Gestion du défaut de déclenchement automatique de la fonction*)
+DEF_AUTO_ON.CONDITION 			:=	(FM_ON_AUTO_INT.Q  OR FM_ON_AUTO_EXT.Q) AND NOT RESET AND NOT MANUAL AND
+										(ETAPE.0 OR ((ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0) AND RESTART_ENABLE_IF_OK)) ;
+DEF_AUTO_ON.DELAY				:=	T#0s;
+DEF_AUTO_ON();
+
+(*RAZ des demande de marche PLC et IHM*)
+IF ON_IHM AND MEM_ON_IHM THEN
+	ON_IHM :=FALSE;
+END_IF;
+ON_PLC			:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_OPERATION">
+      <LineId Id="66" Count="4" />
+    </LineIds>
+    <LineIds Name="BLOCK_OPERATION.POST">
+      <LineId Id="0" Count="7" />
+    </LineIds>
+    <LineIds Name="BLOCK_OPERATION.PRL">
+      <LineId Id="0" Count="39" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,156 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FORMAT_FLOAT_STRING" Id="{c14b81be-eb4f-4ed9-99e4-d9705ba902ef}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION FORMAT_FLOAT_STRING : STRING
+VAR_INPUT
+	IN_REAL:					REAL;
+	NB_DEC_APRES_SEPARATEUR:	INT;
+	OP_EXP:						BOOL;
+END_VAR
+VAR
+	VAR_String:		STRING;
+	VAR_String2:	STRING;
+	VAR_I:			INT;
+	VAR_J:			INT;
+	VAR_K:			INT;
+	VAR_Point:		BOOL;
+	VAR_Entier:		BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*conversion réel en string*)
+VAR_String	:=	REAL_TO_STRING(IN_REAL);
+
+(*recherche exposant*)
+VAR_J 	:=	FIND(VAR_String,'E');
+(*si format déjà en exposant, fonction terminée*)
+IF VAR_J > 0 THEN
+	FORMAT_FLOAT_STRING	:=	VAR_String;
+	RETURN;
+END_IF
+
+(*recherche emplacement séparateur décimal*)
+VAR_J	:=	FIND(VAR_String,'.');
+IF VAR_J = 0 THEN
+	VAR_J		:=	FIND(VAR_String,',');
+	VAR_Point	:=	FALSE;
+ELSE
+	VAR_Point	:=	TRUE;
+END_IF
+
+(*longueur chaine initiale*)
+VAR_I	:=	LEN(VAR_String);
+
+(*format pas exponentiel ou format exponentiel mais chiffre avant le séparateur décimal*)
+VAR_String2	:=	LEFT(VAR_String,1);
+
+IF NOT OP_EXP OR (OP_EXP AND STRING_TO_INT(VAR_String2) > 0) THEN
+	(*nombre de caractères à conserver*)
+	IF NB_DEC_APRES_SEPARATEUR > 0 THEN
+		VAR_K 	:= 	VAR_J + NB_DEC_APRES_SEPARATEUR; 
+	ELSE
+		VAR_K 	:=	VAR_J - 1; 
+	END_IF
+	(*chaine de sortie*)
+	FORMAT_FLOAT_STRING	:=	LEFT(VAR_String,VAR_K);
+
+ELSE
+
+	(*suppression des chiffres avant le séparateur et le séparateur*)
+	VAR_String	:=	RIGHT(VAR_String,VAR_I - VAR_J);
+	VAR_I		:=	LEN(VAR_String);
+	
+	(*suprresion des zeros à gauche*)
+	VAR_K := 1;
+	VAR_String2 	:= 	MID(VAR_String,1,VAR_K);
+	IF VAR_String2 <> '0' THEN
+		VAR_K  		:= 	0;
+	ELSE
+		WHILE (VAR_K <= VAR_I) AND (VAR_String2 = '0') DO
+			 VAR_String2 	:= 	MID(VAR_String,1,VAR_K);
+			 VAR_K			:=	VAR_K + 1;
+		END_WHILE	
+		VAR_K  		:= 	VAR_K - 2;
+		VAR_String 	:= 	RIGHT(VAR_String,VAR_I-VAR_K);
+	END_IF
+	
+	(*récupération du premier chiffre a supprimer pour arrondir si nécessaire*)
+	VAR_I		:=	LEN(VAR_String);
+	(*si chaine plus longue que nécessaire*)
+	IF VAR_I > NB_DEC_APRES_SEPARATEUR + 1 THEN
+		VAR_J := STRING_TO_INT(MID(VAR_String,1,NB_DEC_APRES_SEPARATEUR+2));
+		IF  VAR_J >= 5 THEN
+			VAR_J := STRING_TO_INT(MID(VAR_String,1,NB_DEC_APRES_SEPARATEUR+1));
+			VAR_J := VAR_J + 1;
+			VAR_String	:=	CONCAT(LEFT(VAR_String,NB_DEC_APRES_SEPARATEUR),INT_TO_STRING(VAR_J));
+		ELSE
+			VAR_String	:=	LEFT(VAR_String,NB_DEC_APRES_SEPARATEUR+1);
+		END_IF
+		(*ajout zéro si chaine pas assez longue*)
+	ELSE
+		FOR VAR_J := 1 TO NB_DEC_APRES_SEPARATEUR + 1 - VAR_I DO
+			VAR_String	:=	CONCAT(VAR_String,'0');
+		END_FOR
+	END_IF
+	
+	(*rajout séparateur*)
+	IF VAR_Point THEN
+		VAR_String	:=	INSERT(VAR_String,'.',1);
+	ELSE
+		VAR_String	:=	INSERT(VAR_String,',',1);
+	END_IF
+	
+	(*rajout e-*)
+	VAR_String	:=	CONCAT(VAR_String,'E-');
+	
+	(*rajout expostant*)
+	VAR_String			:=	CONCAT(VAR_String,INT_TO_STRING(VAR_K+1));
+	FORMAT_FLOAT_STRING	:=	VAR_String;
+	
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FORMAT_FLOAT_STRING">
+      <LineId Id="296" Count="0" />
+      <LineId Id="146" Count="0" />
+      <LineId Id="212" Count="0" />
+      <LineId Id="148" Count="1" />
+      <LineId Id="214" Count="0" />
+      <LineId Id="150" Count="3" />
+      <LineId Id="213" Count="0" />
+      <LineId Id="154" Count="7" />
+      <LineId Id="215" Count="0" />
+      <LineId Id="163" Count="1" />
+      <LineId Id="278" Count="1" />
+      <LineId Id="222" Count="0" />
+      <LineId Id="280" Count="0" />
+      <LineId Id="223" Count="9" />
+      <LineId Id="221" Count="0" />
+      <LineId Id="166" Count="2" />
+      <LineId Id="170" Count="0" />
+      <LineId Id="216" Count="0" />
+      <LineId Id="172" Count="4" />
+      <LineId Id="178" Count="5" />
+      <LineId Id="185" Count="1" />
+      <LineId Id="217" Count="0" />
+      <LineId Id="188" Count="0" />
+      <LineId Id="253" Count="0" />
+      <LineId Id="261" Count="0" />
+      <LineId Id="252" Count="0" />
+      <LineId Id="189" Count="0" />
+      <LineId Id="191" Count="6" />
+      <LineId Id="262" Count="0" />
+      <LineId Id="254" Count="0" />
+      <LineId Id="258" Count="2" />
+      <LineId Id="256" Count="0" />
+      <LineId Id="218" Count="0" />
+      <LineId Id="199" Count="5" />
+      <LineId Id="219" Count="0" />
+      <LineId Id="206" Count="1" />
+      <LineId Id="220" Count="0" />
+      <LineId Id="209" Count="1" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="234" Count="0" />
+      <LineId Id="233" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

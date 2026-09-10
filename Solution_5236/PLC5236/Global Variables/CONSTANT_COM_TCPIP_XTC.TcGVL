@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <GVL Name="CONSTANT_COM_TCPIP_XTC" Id="{cd09f64f-a797-4199-b959-a2b185060379}">
+    <Declaration><![CDATA[{attribute 'Tc2GvlVarNames'}
+
+VAR_GLOBAL CONSTANT
+	{attribute 'OPC.UA.DA'  := '1'}
+	MAX_BUFFER_DIALOG							: UDINT := 100;	(*Taille max du buffer de mémorisation des trames d'émission-réception*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	MAX_RXBUFFER_SIZE							: UDINT := 1000;    	(*Taille max du buffer de réception*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	MAX_TXBUFFER_SIZE							: UDINT := 255;    	(*Taille max du buffer d'émission*)
+	(* Codes d'erreur spécifiques *)
+	{attribute 'OPC.UA.DA'  := '1'}
+	ERROR_RECEIVE_BUFFER_OVERFLOW				: UDINT := 16#8101; (* receive buffer overflow*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	ERROR_RECEIVE_TIMEOUT						: UDINT := 16#8102; (* receive timeout error *)
+	{attribute 'OPC.UA.DA'  := '1'}
+	ERROR_MESSAGE_CCB							: UDINT := 16#8103; (*bad CCB*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	ERROR_MESSAGE_LENGTH						: UDINT := 16#8104; (*Bad message length*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	ERROR_MISSING_ACK							: UDINT := 16#8105; (*ACK missing*)
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

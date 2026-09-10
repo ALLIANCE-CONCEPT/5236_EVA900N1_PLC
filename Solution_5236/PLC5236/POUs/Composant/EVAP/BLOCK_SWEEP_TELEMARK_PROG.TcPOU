@@ -1,0 +1,244 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_SWEEP_TELEMARK_PROG" Id="{20059b83-1254-4d1b-aa44-a441afafb0ba}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_SWEEP_TELEMARK_PROG
+
+(* Gestion d'un controleur de balayage telemark programmable 16 motifs *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - GV - 01/15 - VERSION INIITIALE EVA760 n°12 - 8866 *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;		(*Mode de pilotage manuel *)
+	RESET:					BOOL;		(*Condition de réiinitialisation de la fonction *)
+	DOOR:					BOOL;		(*Interlock porte*)
+	WATER:					BOOL;		(*Interlock eau*)
+
+	DEF_Arret_Auto:			PRCDEF;	(* défaut d'arrêt automatique du balayage*)
+	DEF_Marche_imposs:		PRCDEF;	(* défaut de marche du balayage non autorisée*)
+
+	CO_On:					BOOL;		(*Demande de marche en mode automatique*)
+
+	PRM_NbBal:				USINT:=1;	(*Commande de position*)
+END_VAR
+
+VAR
+	TIMER_Valid_On:		TON;
+
+	(* Variables demande en mode manuel*)
+	M_RemLoc:			BOOL;	(* Ordre Remote/Local du module de balayage *)
+	RCP_M_RemLoc:		BOOL;	(* Bit de reception de l'ordre Remote/Local du module de balayage *)
+	VAR_RemLoc:			BOOL;	(* Variable intermédiare de l'ordre Remote/Local *)
+
+	M_On:				BOOL;	(* Ordre Marche/Arrêt du module de balayage *)
+	RCP_M_On:			BOOL;	(* Bit de reception de l'ordre de Marche/Arrêt du module de balayage *)
+	VAR_On:				BOOL;	(* Variable intermédiaire de marche du module de balayage*)
+END_VAR
+
+VAR_OUTPUT
+	(*variable d'état d'autorisation*)
+	AUTOR_Rem_IHM:		BOOL;			(*indique que le mode Remote est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Loc_IHM:		BOOL;			(*indique que le mode Local est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_On_IHM:		BOOL;			(*indique que la mise en marche du module est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Off_IHM:		BOOL;			(*indique que l'arrêt du module est autorisée en mode manuel depuis l'IHM*)
+
+	OUT_PSEL0:			BOOL;		(*sélection du motif*)
+	OUT_PSEL1:			BOOL;		(*sélection du motif*)
+	OUT_PSEL2:			BOOL;		(*sélection du motif*)
+	OUT_PSEL3:			BOOL;		(*sélection du motif*)
+	OUT_SWP_ON_OFF:		BOOL;		(*Marche/Arrêt balayage en mode Remote*)
+	OUT_REM_LOC:		BOOL;		(*Mode Remote/Local*)
+	STATE_NbBal:		USINT;
+	STATE_BAL:			STRING;
+	STATE_REM:			BOOL;		(*Module de balayage en mode Remote*)
+	STATE_LOC:			BOOL;		(*Module de balayage en mode Local*)
+	STATE_ON:			BOOL;		(*Module de balayage en marche*)
+	STATE_OFF:			BOOL;		(*Module de balayage à l'arrêt*)
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+
+	PRM_BAL: 		ARRAY[0..16] OF STRING;		(*nom du programme de balayage*)
+
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_Arret_Auto.IdXml			:=	'3';
+DEF_Arret_Auto.TagXml			:=	10;
+
+DEF_Marche_imposs.IdXml			:=	'3';
+DEF_Marche_imposs.TagXml		:=	5;
+
+(* Gestion des ordres en mode manuel *)
+	RCP_M_RemLoc		:=	M_RemLoc;
+	RCP_M_On			:=	M_On;
+
+(*gestion des bits d'autorisation en mode manuel*)
+	AUTOR_Rem_IHM		:=	NOT RESET AND NOT VAR_RemLoc  AND MANUAL;
+	AUTOR_Loc_IHM		:=	NOT RESET  AND VAR_RemLoc  AND MANUAL;
+	AUTOR_On_IHM		:=	NOT RESET AND NOT Var_On AND MANUAL AND DOOR AND WATER;
+	AUTOR_Off_IHM		:=	NOT RESET AND VAR_On AND MANUAL;
+
+(*défaut d'arrêt automatique du balyage *)
+	DEF_Arret_Auto.CONDITION :=		(NOT DOOR
+									OR  NOT WATER
+									OR NOT VAR_RemLoc)
+									AND VAR_On AND NOT RESET;
+	DEF_arret_auto.DELAY:=T#0ms;
+	DEF_Arret_Auto();
+
+(* Défaut de marche du balayage non autorisée en automatique*)
+	DEF_marche_imposs.CONDITION:=	NOT MANUAL AND CO_On AND (NOT DOOR OR NOT WATER)
+									AND NOT RESET;
+	DEF_marche_imposs.DELAY := T#0ms;
+	DEF_marche_imposs();
+
+(*gestion des variables intermédiare*)
+(* Mode Local*)
+	IF	RCP_M_RemLoc AND AUTOR_Loc_IHM OR RESET THEN
+				Var_RemLoc 	:= 	FALSE;
+(*Mode Remote*)
+	ELSIF	NOT MANUAL OR ( RCP_M_RemLoc AND AUTOR_Rem_IHM) THEN
+				Var_RemLoc 	:= 	TRUE;
+	END_IF
+
+(* Arrêt Balayage*)
+	IF 		(NOT CO_On AND NOT MANUAL)
+			OR ( RCP_M_On AND AUTOR_Off_IHM) OR DEF_arret_auto.DEF OR RESET
+			THEN
+				Var_On 				:= 	FALSE;
+(*Marche Balayage*)
+	ELSIF	( CO_On AND NOT MANUAL)
+			 OR 	( RCP_M_On AND AUTOR_On_IHM) THEN
+				Var_On 				:= 	TRUE;
+	END_IF;
+
+(*SORTIE Mode Remote/Local*)
+	OUT_REM_LOC		:= 	VAR_RemLoc;
+	OUT_SWP_ON_OFF	:=	VAR_On;
+
+(*affectation des bits d'état*)
+	STATE_REM			:=	OUT_REM_LOC;
+	STATE_LOC			:=	NOT OUT_REM_LOC;
+	STATE_OFF			:=	NOT OUT_SWP_ON_OFF;
+
+(*indicateur  STATE_ON*)
+TIMER_Valid_On.IN	:=	OUT_SWP_ON_OFF;
+TIMER_Valid_On(PT:=T#500ms);
+STATE_ON			:=	Timer_Valid_On.Q;
+
+
+(*Selection du mode de balayage*)
+CASE PRM_NbBal OF
+		16:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := TRUE;
+		15:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := TRUE;
+		14:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := TRUE;
+		13:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := TRUE;
+		12:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := TRUE;
+		11:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := TRUE;
+		10:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := TRUE;
+		9:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := TRUE;
+		8:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := FALSE;
+		7:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := FALSE;
+		6:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := FALSE;
+		5:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := TRUE;
+			OUT_PSEL3 := FALSE;
+		4:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := FALSE;
+		3:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := TRUE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := FALSE;
+		2:
+			OUT_PSEL0 := TRUE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := FALSE;
+		1:
+			OUT_PSEL0 := FALSE;
+			OUT_PSEL1 := FALSE;
+			OUT_PSEL2 := FALSE;
+			OUT_PSEL3 := FALSE;
+END_CASE
+
+STATE_NbBal := PRM_NbBal;
+
+IF STATE_NbBal > 0 THEN
+	STATE_BAL:= PRM_BAL[STATE_NbBal];
+ELSE
+	STATE_BAL:= '';
+END_IF
+
+(* Reset des ordres*)
+	IF M_RemLoc AND RCP_M_RemLoc THEN
+		M_RemLoc		:= FALSE;
+	END_IF
+	IF M_On	AND RCP_M_On THEN
+		M_On			:=	FALSE;
+	END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_SWEEP_TELEMARK_PROG">
+      <LineId Id="70" Count="163" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

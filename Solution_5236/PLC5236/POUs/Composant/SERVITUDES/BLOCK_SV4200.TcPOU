@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_SV4200" Id="{12954902-1345-461b-9be1-ce6fb644227e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_SV4200
+//  Fonction de gestion d'un débitmètre avec retour température et débit
+
+//HISTORIQUE				
+//VERSION 0.0 - 06/2023 - GV - (Basé sur version la version 3.0 du block d'Hélène des HC)
+					//Adaptation pour machine de dépôt
+					//Modification pour gestion AC4000 avec Struct_IHM 
+
+VAR_INPUT
+	RESET:					BOOL;			(*entrée de reset de la fonction*)
+
+	I_Device_OK:			BOOL;			(*INPUT carte OP - données exploitables*)
+	IN_ProcessData0	AT %I*:	USINT;			(*INPUT IO-link Data process*)
+	IN_ProcessData1	AT %I*:	USINT;			(*INPUT IO-link Data process*)
+	IN_ProcessData2	AT %I*:	USINT;			(*INPUT IO-link Data process*)
+	IN_ProcessData3	AT %I*:	USINT;			(*INPUT IO-link Data process*)
+	IN_ChannelState AT %I*:	USINT;			(*INPUT Device Channel State*)
+	
+	DEF_Channel:			PRCDEF;			(*défaut channel IO-link*)
+	DEF_Flow:				PRCDEF;			(*défaut débit hors limites*)
+	DEF_Temp:				PRCDEF;			(*défaut température hors limites*)	
+	
+	(*ELEMENTS DE CONFIGURATION*)
+	(*Entité*)
+	IsComponent:			BOOL;			(*entité : assemblage*)
+	IdXML:					STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:					UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:				STRING;			(*MNEMO de l'appelant*)
+	MNEMO:					STRING;			(*MNEMO de l'entité*)	
+END_VAR
+
+VAR_OUTPUT
+	STATE_OK:				BOOL;			(* O_STANDARD -- entité fonctionnelle*)
+	STATE_NOK:				BOOL;			(* O_STANDARD -- entité en défaut - pour affichage*)
+	STATE_Flow:				REAL;			(*débit courant en l/s*)
+	STATE_Temp:				REAL;			(*température courante en °C*)
+END_VAR
+
+VAR
+	VAR_Valid_Elmt:			BOOL;
+	VAR_W_Calcul1:			WORD;
+	VAR_W_Calcul2:			WORD;
+	VAR_W_Calcul3:			WORD;
+	VAR_Int_Calcul:			INT;
+END_VAR
+
+VAR_EXTERNAL
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'10';
+TagXML					:=	5;
+
+(*TAG DEFAUTS*)
+DEF_Channel.IdXML		:=	'8';
+DEF_Channel.TagXML		:=	12;
+DEF_Flow.IdXML			:=	'8';
+DEF_Flow.TagXML			:=	13;
+DEF_Temp.IdXML			:=	'8';
+DEF_Temp.TagXML			:=	14;
+
+(*MESURE VALIDE*)
+(*Défaut channel IO-link - CTRLOK*)
+DEF_Channel.CONDITION		:=	NOT RESET AND I_Device_OK AND (IN_ChannelState<>3);
+DEF_Channel.DELAY			:=	T#1S;
+DEF_Channel.VAL1			:=	USINT_TO_STRING(IN_ChannelState);
+DEF_Channel();
+VAR_Valid_Elmt				:=	NOT RESET AND I_Device_OK AND NOT DEF_Channel.DEF;
+	
+(*DEBIT - PVD2 dans la doc - correspondant à octet 0 et octet 1*)
+VAR_W_Calcul1	:= ROL(BYTE_TO_WORD(IN_ProcessData0),8); (*décalage de l'octet*)
+VAR_W_Calcul2	:= BYTE_TO_WORD(IN_ProcessData1);
+VAR_W_Calcul3	:= VAR_W_Calcul1 OR VAR_W_Calcul2; (*concaténation des 2 octets*)
+VAR_Int_Calcul 	:=	WORD_TO_INT(VAR_W_Calcul3);
+STATE_Flow		:=	INT_TO_REAL(VAR_Int_Calcul)/10.0;
+(*Défaut débit hors limite : 260 - CTRLOK*)
+DEF_Flow.CONDITION		:=	VAR_Valid_Elmt AND (VAR_Int_Calcul > 260);
+DEF_Flow.DELAY			:=	T#1S;
+DEF_Flow();
+
+(*TEMPERATURE - PVD1 dans la doc moins les 2 premiers bits - correspondant à octet 2 et octet 3*)
+VAR_W_Calcul1	:= ROL(BYTE_TO_WORD(IN_ProcessData2),8); (*décalage de l'octet*)
+VAR_W_Calcul2	:= BYTE_TO_WORD(IN_ProcessData3);
+VAR_W_Calcul3	:= SHR(VAR_W_Calcul1 OR VAR_W_Calcul2,2); (*concaténation des 2 octets et décalage de 2 bits pour supprimer*)
+VAR_Int_Calcul 	:=	WORD_TO_INT(VAR_W_Calcul3);
+STATE_Temp		:=	INT_TO_REAL(VAR_Int_Calcul)/10.0;
+(*Défaut temperature hors limite : 1105 / -305 - CTRLOK*)
+DEF_Temp.CONDITION		:=	VAR_Valid_Elmt AND ((VAR_Int_Calcul>1105) OR (VAR_Int_Calcul<-305));
+DEF_Temp.DELAY			:=	T#1S;
+DEF_Temp();
+
+
+(*ETATS GENERAUX*)
+STATE_OK		:=	VAR_Valid_Elmt AND NOT DEF_Flow.DEF AND NOT DEF_Temp.DEF;
+STATE_NOK		:=	NOT RESET AND (DEF_Channel.DEF OR DEF_Flow.DEF OR DEF_Temp.DEF);]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_SV4200">
+      <LineId Id="444" Count="0" />
+      <LineId Id="446" Count="0" />
+      <LineId Id="445" Count="0" />
+      <LineId Id="297" Count="0" />
+      <LineId Id="465" Count="0" />
+      <LineId Id="592" Count="3" />
+      <LineId Id="464" Count="0" />
+      <LineId Id="374" Count="0" />
+      <LineId Id="452" Count="0" />
+      <LineId Id="459" Count="4" />
+      <LineId Id="381" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="298" Count="0" />
+      <LineId Id="320" Count="0" />
+      <LineId Id="727" Count="0" />
+      <LineId Id="729" Count="1" />
+      <LineId Id="596" Count="3" />
+      <LineId Id="335" Count="0" />
+      <LineId Id="382" Count="0" />
+      <LineId Id="370" Count="0" />
+      <LineId Id="733" Count="2" />
+      <LineId Id="348" Count="0" />
+      <LineId Id="659" Count="0" />
+      <LineId Id="352" Count="2" />
+      <LineId Id="330" Count="0" />
+      <LineId Id="225" Count="0" />
+      <LineId Id="246" Count="2" />
+      <LineId Id="250" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

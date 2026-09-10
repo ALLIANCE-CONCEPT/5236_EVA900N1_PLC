@@ -1,0 +1,309 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_RS232_ONBOARD" Id="{81cf55ca-f9de-40ad-acb3-5430efc5b1ca}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_RS232_ONBOARD
+(* Communication RS232 - pour module On-Board Brooks *)
+(*Gestion d'une seule pompe*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	CO_Regen:					BOOL;							(* Demande de mise en régénération de la pompe *)
+	CO_Etat:					BOOL;							(* Commande 1 = Marche de la pompe 0 = Arret de la pompe *)
+	CO_Forcage:					BOOL;							(* Permet de forcer sur une trame particuliere numero de trame dans ValeurForcageCptSend *)
+
+	CONF_Forcage:				USINT;			(* Numero de la trame qui doit etre forcer avec le bool ForcageCptSend *)
+	RESET:						BOOL;			(* Reset du driver*)
+	OFF:						BOOL;			(* Désactivation du driver *)
+
+	CO_ModeManu:				BOOL;			(* Passage en envoi manuel *)
+	CO_EnvoiManu:				BOOL;			(* Commande d'envoi en mode manuel *)
+	PRM_TrameManu:				STRING;			(* Contient la trame pour l'envoi manuel *)
+
+	DEF_Port_com:				PRCDEF;			(* Defaut du port de communication rs232*)
+
+	IN_COM			AT %I* :	PcComInData;	(*  ~ {LinkedWith:TIID^RS232^Entrées^Status;TIID^RS232^Entrées^Data1;TIID^RS232^Entrées^Data2;TIID^RS232^Entrées^Data3;TIID^RS232^Entrées^Data4;TIID^RS232^Entrées^Data5;TIID^RS232^Entrées^Data6;TIID^RS232^Entrées^Data7;TIID^RS232^Entrées^Data8;TIID^RS232^Entrées^Data9;TIID^RS232^Entrées^Data10;TIID^RS232^Entrées^Data11;TIID^RS232^Entrées^Data12;TIID^RS232^Entrées^Data13;TIID^RS232^Entrées^Data14;TIID^RS232^Entrées^Data15;TIID^RS232^Entrées^Data16;TIID^RS232^Entrées^Data17;TIID^RS232^Entrées^Data18;TIID^RS232^Entrées^Data19;TIID^RS232^Entrées^Data20;TIID^RS232^Entrées^Data21;TIID^RS232^Entrées^Data22;TIID^RS232^Entrées^Data23;TIID^RS232^Entrées^Data24;TIID^RS232^Entrées^Data25;TIID^RS232^Entrées^Data26;TIID^RS232^Entrées^Data27;TIID^RS232^Entrées^Data28;TIID^RS232^Entrées^Data29;TIID^RS232^Entrées^Data30;TIID^RS232^Entrées^Data31;TIID^RS232^Entrées^Data32;TIID^RS232^Entrées^Data33;TIID^RS232^Entrées^Data34;TIID^RS232^Entrées^Data35;TIID^RS232^Entrées^Data36;TIID^RS232^Entrées^Data37;TIID^RS232^Entrées^Data38;TIID^RS232^Entrées^Data39;TIID^RS232^Entrées^Data40;TIID^RS232^Entrées^Data41;TIID^RS232^Entrées^Data42;TIID^RS232^Entrées^Data43;TIID^RS232^Entrées^Data44;TIID^RS232^Entrées^Data45;TIID^RS232^Entrées^Data46;TIID^RS232^Entrées^Data47;TIID^RS232^Entrées^Data48;TIID^RS232^Entrées^Data49;TIID^RS232^Entrées^Data50;TIID^RS232^Entrées^Data51;TIID^RS232^Entrées^Data52;TIID^RS232^Entrées^Data53;TIID^RS232^Entrées^Data54;TIID^RS232^Entrées^Data55;TIID^RS232^Entrées^Data56;TIID^RS232^Entrées^Data57;TIID^RS232^Entrées^Data58;TIID^RS232^Entrées^Data59;TIID^RS232^Entrées^Data60;TIID^RS232^Entrées^Data61;TIID^RS232^Entrées^Data62;TIID^RS232^Entrées^Data63;TIID^RS232^Entrées^Data64} *)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Temperature:			ARRAY[0..1] OF REAL;				(* Donne la température de chaque étage d'une pompe *)
+	STATE_Regen:				BOOL;			(* Donne l'etat de la regen *)
+	STATE_Pompe:				BOOL;			(* Donne l'etat du moteur de la cryo *)
+	OUT_Com 		AT %Q* : 	PcComOutData;	(*  ~ {LinkedWith:TIID^RS232^Sorties^Data1;TIID^RS232^Sorties^Data2;TIID^RS232^Sorties^Data3;TIID^RS232^Sorties^Data4;TIID^RS232^Sorties^Data5;TIID^RS232^Sorties^Data6;TIID^RS232^Sorties^Data7;TIID^RS232^Sorties^Data8;TIID^RS232^Sorties^Data9;TIID^RS232^Sorties^Data10;TIID^RS232^Sorties^Data11;TIID^RS232^Sorties^Data12;TIID^RS232^Sorties^Data13;TIID^RS232^Sorties^Data14;TIID^RS232^Sorties^Data15;TIID^RS232^Sorties^Data16;TIID^RS232^Sorties^Data17;TIID^RS232^Sorties^Data18;TIID^RS232^Sorties^Data19;TIID^RS232^Sorties^Data20;TIID^RS232^Sorties^Data21;TIID^RS232^Sorties^Data22;TIID^RS232^Sorties^Data23;TIID^RS232^Sorties^Data24;TIID^RS232^Sorties^Data25;TIID^RS232^Sorties^Data26;TIID^RS232^Sorties^Data27;TIID^RS232^Sorties^Data28;TIID^RS232^Sorties^Data29;TIID^RS232^Sorties^Data30;TIID^RS232^Sorties^Data31;TIID^RS232^Sorties^Data32;TIID^RS232^Sorties^Data33;TIID^RS232^Sorties^Data34;TIID^RS232^Sorties^Data35;TIID^RS232^Sorties^Data36;TIID^RS232^Sorties^Data37;TIID^RS232^Sorties^Data38;TIID^RS232^Sorties^Data39;TIID^RS232^Sorties^Data40;TIID^RS232^Sorties^Data41;TIID^RS232^Sorties^Data42;TIID^RS232^Sorties^Data43;TIID^RS232^Sorties^Data44;TIID^RS232^Sorties^Data45;TIID^RS232^Sorties^Data46;TIID^RS232^Sorties^Data47;TIID^RS232^Sorties^Data48;TIID^RS232^Sorties^Data49;TIID^RS232^Sorties^Data50;TIID^RS232^Sorties^Data51;TIID^RS232^Sorties^Data52;TIID^RS232^Sorties^Data53;TIID^RS232^Sorties^Data54;TIID^RS232^Sorties^Data55;TIID^RS232^Sorties^Data56;TIID^RS232^Sorties^Data57;TIID^RS232^Sorties^Data58;TIID^RS232^Sorties^Data59;TIID^RS232^Sorties^Data60;TIID^RS232^Sorties^Data61;TIID^RS232^Sorties^Data62;TIID^RS232^Sorties^Data63;TIID^RS232^Sorties^Data64} *)
+	(*OUT_DTR_RTS 	AT %Q* : 		UINT;*)
+	STATE_Ready:				BOOL;			(* Driver en fonctionnement *)
+	STATE_NOK:					BOOL;			(* Driver en défaut *)
+END_VAR
+
+VAR
+	TIMER_Cadence: 				TON;			(*Timer cadencement communication*)
+	TIMER_Demarrage: 			TON;
+	VAR_Cadence:				USINT;			(*Numéro de la trame en cours*)
+	VAR_Mem_Cadence:			USINT;			(*Mémorisation numéro dela trame*)
+
+	OUT_Send_Data:				SendString;		(*Fonction d'envoi*)
+	OUT_Buffer: 				ComBuffer;		(*Buffer trame d'envoi *)
+
+	IN_Receive_Data:			ReceiveString;	(*Fonction de réception*)
+	IN_Buffer: 					ComBuffer;		(*Buffer trame de réception *)
+
+	VAR_ClearBuffer: 			ClearComBuffer;	(*Fonction de RAZ buffer*)
+
+	(* background communication with the COM port device *)
+	VAR_COMportControl: 		SerialLineControl;
+	VAR_COMportControlError: 	BOOL;
+	VAR_COMportControlErrorID: 	ComError_t;
+
+	VAR_NB:						USINT;
+	VAR_NB2:					USINT;
+	VAR_BuffString:				STRING;
+	VAR_TrameRetour:			STRING;
+	VAR_STR1:					STRING[1];
+	VAR_STR2:					STRING[1];
+	VAR_ReceptionOk:			BOOL;
+
+	FM_On:						R_TRIG;
+	FM_Off:						F_TRIG;
+	FM_Regen:					R_TRIG;
+	VAR_Mem_CO_On:				BOOL;
+	VAR_Mem_CO_Off:				BOOL;
+	VAR_Mem_CO_Regen:			BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Cadence :
+Trame 1 : Demande état marche/arrêt - A?
+Trame 2 : Demande état regen - O
+Trame 3: Demande température étage 1 - J
+Trame 4 : Demande température étage 2 - K
+Trame 5 : Demande de marche ou d'arrêt d'une pompe - A1 / A0
+Trame 6:  Demande de regen d'une pompe - N1 / N0
+*)
+
+(* Paramètre statique *)
+IdXML							:=	'8';
+TagXML							:=	2;
+
+DEF_Port_com.IdXml				:=	'11';
+DEF_Port_com.TagXml				:=	1;
+
+(*Gestion des fronts demandes*)
+FM_On.CLK	:=	CO_Etat;
+FM_On();
+IF FM_On.Q THEN
+	VAR_Mem_CO_On	:=	TRUE;
+END_IF
+FM_Off.CLK	:=	CO_Etat;
+FM_Off();
+IF FM_Off.Q THEN
+	VAR_Mem_CO_Off	:=	TRUE;
+END_IF
+FM_Regen.CLK	:=	CO_Regen;
+FM_Regen();
+IF FM_Regen.Q THEN
+	VAR_Mem_CO_Regen	:=	TRUE;
+END_IF
+
+(*RESET ou DESACTIVATION Driver*)
+IF RESET OR OFF THEN
+	STATE_Temperature[0]	:=	0;
+	STATE_Temperature[1]	:=	0;
+	VAR_Mem_CO_On		:=	FALSE;
+	VAR_Mem_CO_Off		:=	TRUE;
+	VAR_Mem_CO_Regen		:=	FALSE;
+	RETURN;
+END_IF
+
+TIMER_Demarrage.IN 	:= 	NOT IN_Receive_Data.Busy AND NOT OUT_Send_Data.Busy AND NOT VAR_ReceptionOk;
+TIMER_Demarrage.PT	:=	T#5s;
+TIMER_Demarrage();
+IF TIMER_Demarrage.Q  THEN
+	VAR_ReceptionOk	:=	TRUE;
+	VAR_Cadence 		:= 	1;
+END_IF
+
+(*Cadencement des trames*)
+TIMER_Cadence(IN:=VAR_ReceptionOk, PT:=T#500ms);
+VAR_Mem_Cadence	:=	VAR_Cadence;
+
+(*GESTION ENVOI*)
+IF TIMER_Cadence.Q AND NOT OUT_Send_Data.Busy AND NOT CO_ModeManu THEN
+	VAR_STR2 := CHR(36);	(*$ = hex 24 = dec 36*)
+
+	(* Remplissage trame : $ + code + checksum + 0D*)
+	CASE VAR_Cadence OF
+
+			1: 	(* Demande état on/off pompe*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'A?');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			2: 	(* Demande état regen pompe*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'O');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			3: 	(* Demande température étage 1*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'J');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			4: 	(* Demande température étage 2*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'K');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			5: 	(* Demande de marche ou d'arrêt d'une pompe *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				IF	CO_ETAT THEN
+					VAR_BuffString	:=	CONCAT(VAR_BuffString,'A1');
+				ELSE
+					VAR_BuffString	:=	CONCAT(VAR_BuffString,'A0');
+				END_IF
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			6:	(* Demande de regen d'une pompe *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'N1');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+	END_CASE
+
+	(*Envoi*)
+	OUT_Send_Data(TXbuffer:= OUT_Buffer);
+
+	(* Reset timer *)
+	VAR_ReceptionOk := FALSE;
+ELSE
+	IF CO_ModeManu AND CO_EnvoiManu THEN
+		OUT_Send_Data.SendString	:=	VAR_BuffString;
+		(*Envoi*)
+		OUT_Send_Data(TXbuffer:= OUT_Buffer);
+		CO_EnvoiManu		:=	FALSE;
+		VAR_ReceptionOk 	:= 	FALSE;
+	END_IF
+END_IF
+
+IF CO_ModeManu THEN
+		VAR_STR1 		:= 	CHECKSUM(PRM_TrameManu ,FALSE);
+		VAR_STR2		:=	CHR(36);
+		VAR_BuffString	:=	CONCAT(VAR_STR2,PRM_TrameManu);
+		VAR_BuffString	:=	CONCAT(VAR_BuffString,VAR_STR1);
+		VAR_BuffString	:=	CONCAT(VAR_BuffString,CHR(13));
+END_IF
+
+(*GESTION RECEPTION*)
+(*Réception*)
+IN_Receive_Data(
+	(*Prefix := '$',*)
+	Suffix:= '$0D',
+	Timeout:= T#1s,
+	Reset :=OFF,
+	ReceivedString := VAR_TrameRetour,
+	RXbuffer := IN_Buffer);
+
+(*interprétation trame retour*)
+IF IN_Receive_Data.StringReceived THEN
+	IF NOT CO_ModeManu THEN
+		CASE VAR_Cadence OF
+
+			1: (* Demande état On/off pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Pompe	:=	(VAR_STR1 = '1');
+
+			2: (* Demande état regen pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Regen	:=	NOT((VAR_STR1 = 'V') OR (VAR_STR1 = 'P'));
+
+			3: (* demande température étage 1*)
+				STATE_Temperature[0]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+
+			4: (* demande température étage 2*)
+				STATE_Temperature[1]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+
+			5: (* Demande de marche ou d'arrêt d'une pompe *)
+				VAR_Mem_CO_Off	:=	FALSE;
+				VAR_Mem_CO_On	:=	FALSE;
+
+			6: (* Demande de regen d'une pompe *)
+				CO_REGEN			:=	FALSE;
+				VAR_Mem_CO_Regen	:=	FALSE;
+		END_CASE
+
+		(*trame suivante*)
+		IF NOT CO_Forcage THEN
+			IF VAR_Mem_CO_Regen THEN
+				VAR_Cadence := 6;
+			ELSIF VAR_Mem_CO_Off OR VAR_Mem_CO_On THEN
+				VAR_Cadence := 5;
+			ELSE
+				VAR_Cadence := VAR_Cadence + 1;
+				IF VAR_Cadence >= 5 THEN
+					VAR_Cadence	:=	1;
+				END_IF
+			END_IF
+		ELSE
+			VAR_Cadence 	 := 	CONF_Forcage;
+		END_IF
+	END_IF
+
+	VAR_ReceptionOk := TRUE;
+
+	(*Effacement buffer réception*)
+	VAR_ClearBuffer(Buffer := IN_Buffer);
+END_IF
+
+(* GESTION COMMUNICATION *)
+VAR_COMportControl(
+	Mode:= SERIALLINEMODE_PC_COM_PORT,
+	pComIn:= ADR(IN_COM),
+	pComOut:= ADR(OUT_COM),
+	SizeComIn:=SIZEOF(IN_COM),
+	TxBuffer:= OUT_Buffer,
+	RxBuffer:= IN_Buffer,
+	Error=> VAR_COMportControlError,
+	ErrorID=> VAR_COMportControlErrorID );
+
+(*GESTION DEFAUTS*)
+Def_port_com.DELAY :=T#0s;
+Def_port_com.CONDITION := VAR_COMportControlError;
+Def_port_com();
+
+(*Etat*)
+STATE_Ready		:=	NOT OFF;
+STATE_NOK			:=	Def_port_com.DEF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_RS232_ONBOARD">
+      <LineId Id="81" Count="217" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

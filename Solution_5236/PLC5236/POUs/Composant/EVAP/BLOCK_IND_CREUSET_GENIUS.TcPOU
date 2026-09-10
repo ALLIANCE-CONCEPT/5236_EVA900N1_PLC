@@ -1,0 +1,169 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_IND_CREUSET_GENIUS" Id="{3725ff77-dff7-4eaa-bca2-a4a17b906fd0}" SpecialFunc="None">
+    <Declaration><![CDATA[(*Gestion d'un indexeur de creuset par le contrôleur GENIUS*)
+(*Changement de position dés modification de la consigne*)
+(*Mode Ferrotec*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - Sezai - VERSION INIITIALE - 8152*)
+(* Version 2-0 - GV - Modification gestion des sorties pour gestion 8 creusets - 10315 - EVA451 n°20*)
+
+(*************************************************************************)
+
+FUNCTION_BLOCK BLOCK_IND_CREUSET_GENIUS
+
+VAR_INPUT
+	RESET:			 				BOOL;
+	PRM_NCR:						USINT:=1;		(*Commande de position*)
+	PRM_NBAL:						USINT:=1;		(*Numéro de balayage*)
+	IN_POS_OK  		AT %I* :		BOOL;			(*Etat indexeur sur creuset selectionné*)
+	I_FIL_ON:						BOOL;			(*interlock source en marche*)
+	DEF_POSITIONNEMENT:				PRCDEF;			(*Défaut de positionnement*)
+	IN_POWER:						REAL;			(*Puissance appliquée au creuset*)
+END_VAR
+
+VAR
+	VAR_WORD_CR:				WORD;
+	VAR_WORD_SW:				WORD;
+
+	FM_POS_OK:					R_TRIG;									(*Front montant de position ok*)
+
+	VAR_Cpt_Temps_C1: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 1*)
+	VAR_Cpt_Temps_C2: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 2*)
+	VAR_Cpt_Temps_C3: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 3*)
+	VAR_Cpt_Temps_C4: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 4*)
+	VAR_Cpt_Temps_C5: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 5*)
+	VAR_Cpt_Temps_C6: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 6*)
+	VAR_Cpt_Temps_C7: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 7*)
+	VAR_Cpt_Temps_C8: 			BLOCK_CPT_TEMPS;						(*Compteur de fonctionnement creuset 8*)
+
+END_VAR
+VAR_OUTPUT
+
+	OUT_POS_CR1 AT %Q*:			BOOL;		(*position de l'indexeur  OUT_POS_CRx*)
+	OUT_POS_CR2 AT %Q*:			BOOL;
+	OUT_POS_CR3 AT %Q*:			BOOL;
+	OUT_POS_CR4 AT %Q*:			BOOL;
+	OUT_POS_CR5 AT %Q*:			BOOL;
+	OUT_POS_CR6 AT %Q*:			BOOL;
+	STATE_POS_CR:				USINT;
+	STATE_ROT:					BOOL;		(*Creuset en rotation*)
+	STATE_NOK:					BOOL;
+	STATE_POS_OK:				BOOL;
+	STATE_MAT:					STRING;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_NCR:					INT:=6;					(*nombre de creuset de la source*)
+	PRM_MAT: 					ARRAY[0..8] OF STRING;	(*nom de la matière associée au creuset*)
+	VAR_MEM_CR:					USINT;					(*Mémoire numéro de creuset utilisé*)
+	VAR_MEM_SW:					USINT;					(*Mémoire numéri de balayage utilisé*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Défaut*)
+DEF_POSITIONNEMENT.IdXml		:=	'14';
+DEF_POSITIONNEMENT.TagXml		:=	2;
+
+(*memorisation de la consigne du creuset*)
+IF ( NOT ( CONF_NCR = 1))
+	AND (VAR_MEM_CR <> PRM_NCR)	 THEN
+	VAR_MEM_CR := PRM_NCR;
+	(* RAZ defaut positionnement*)
+	DEF_POSITIONNEMENT.CONDITION := FALSE;
+	DEF_POSITIONNEMENT();
+	STATE_POS_CR := 0;	(* pas de position determinée*)
+END_IF
+
+(*memorisation de la consigne de balayage*)
+IF (VAR_MEM_SW <> PRM_NBAL) THEN
+	VAR_MEM_SW := PRM_NBAL;
+END_IF
+
+
+FM_POS_OK(CLK:= IN_POS_OK);
+(* sur front montant si multi creuset*)
+IF FM_POS_OK.Q AND (CONF_NCR > 1) THEN
+	STATE_POS_CR := VAR_MEM_CR;
+END_IF
+
+VAR_WORD_CR := VAR_MEM_CR - 1;
+VAR_WORD_SW := VAR_MEM_SW - 1;
+
+(*Parametrage des positions*)
+OUT_POS_CR1:=	VAR_WORD_CR.0;
+OUT_POS_CR2:=	VAR_WORD_CR.1;
+OUT_POS_CR3:=	VAR_WORD_CR.2;
+OUT_POS_CR4:=	VAR_WORD_SW.0;
+OUT_POS_CR5:=	VAR_WORD_SW.1;
+OUT_POS_CR6:=	VAR_WORD_SW.2;
+
+DEF_POSITIONNEMENT.CONDITION := NOT ( STATE_POS_CR = VAR_MEM_CR) AND NOT (CONF_NCR = 1);
+DEF_POSITIONNEMENT.DELAY := T#120s;
+DEF_POSITIONNEMENT();
+
+
+(*gestion compteur d'utilisation*)
+(*creuset 1*)
+VAR_Cpt_Temps_C1.I_On := (STATE_POS_CR = 1) AND I_FIL_ON;
+VAR_Cpt_Temps_C1.TagXML := 11;
+VAR_Cpt_Temps_C1();
+
+(*creuset 2*)
+VAR_Cpt_Temps_C2.I_On := (STATE_POS_CR = 2) AND I_FIL_ON;
+VAR_Cpt_Temps_C2.TagXML := 12;
+VAR_Cpt_Temps_C2();
+
+(*creuset 3*)
+VAR_Cpt_Temps_C3.I_On := (STATE_POS_CR = 3) AND I_FIL_ON;
+VAR_Cpt_Temps_C3.TagXML := 13;
+VAR_Cpt_Temps_C3();
+
+(*creuset 4*)
+VAR_Cpt_Temps_C4.I_On := (STATE_POS_CR = 4) AND I_FIL_ON;
+VAR_Cpt_Temps_C4.TagXML := 14;
+VAR_Cpt_Temps_C4();
+
+(*creuset 5*)
+VAR_Cpt_Temps_C5.I_On := (STATE_POS_CR = 5) AND I_FIL_ON;
+VAR_Cpt_Temps_C5.TagXML := 15;
+VAR_Cpt_Temps_C5();
+
+(*creuset 6*)
+VAR_Cpt_Temps_C6.I_On := (STATE_POS_CR = 6) AND I_FIL_ON;
+VAR_Cpt_Temps_C6.TagXML := 16;
+VAR_Cpt_Temps_C6();
+
+(*creuset 7*)
+VAR_Cpt_Temps_C7.I_On := (STATE_POS_CR = 7) AND I_FIL_ON;
+VAR_Cpt_Temps_C7.TagXML := 17;
+VAR_Cpt_Temps_C7();
+
+(*creuset 8*)
+VAR_Cpt_Temps_C8.I_On := (STATE_POS_CR = 8) AND I_FIL_ON;
+VAR_Cpt_Temps_C8.TagXML := 18;
+VAR_Cpt_Temps_C8();
+(**)
+
+STATE_NOK:= DEF_POSITIONNEMENT.DEF;
+STATE_POS_OK := NOT (STATE_POS_CR = 0);
+
+IF STATE_POS_CR > 0 AND STATE_POS_CR <=8 THEN
+	STATE_MAT:= PRM_MAT[STATE_POS_CR];
+ELSE
+	STATE_MAT:= '';
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_IND_CREUSET_GENIUS">
+      <LineId Id="67" Count="91" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

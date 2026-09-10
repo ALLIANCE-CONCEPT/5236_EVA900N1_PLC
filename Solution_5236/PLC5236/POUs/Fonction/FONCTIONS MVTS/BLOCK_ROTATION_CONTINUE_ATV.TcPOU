@@ -1,0 +1,503 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_ROTATION_CONTINUE_ATV" Id="{fd3bad11-386e-4df1-82fc-b21060141538}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'call_after_init'}
+FUNCTION_BLOCK BLOCK_ROTATION_CONTINUE_ATV
+(* Gestion d'un porte substrat en rotation continue sur variateur altivar*)
+
+(****************historique des versions*****************************************)
+
+(* Version 0 - JBL - VERSION INIITIALE - 7341*)
+(* Version 1 - HG - Version pour moteur ATV Schneider EtherCAT*)
+(* Version 2 - HG - Correction bug + ajout arrêt sur ouverture porte*)
+
+
+VAR_INPUT
+	RESET:					BOOL;		(* Condition de réinitialisation de la fonction *)
+	MANUAL:					BOOL;		(* Ordre de commmande manuel de la fonction *)
+	CTRL_PLC:				BOOL;		(* Mode de contrôle de la fonction - 0 = contrôle depuis l'IHM - 1=contrôle depuis l'automate*)
+(*sécurité*)
+	I_DOOR:					BOOL;		(* Entrée d'interlock porte fermée*)
+(*Capteur position*)
+	IN_POS_C1	AT %I*:		BOOL;		(* Capteur position pour déchargement*)
+	IN_POS_C2	AT %I*:		BOOL;		(* Capteur position pour déchargement*)
+	IN_MVT		AT %I*:		BOOL;		(* Entrée pour mouvement porte ouverte*)
+(*Paramètres*)
+	PRM_vitesse:			REAL;
+	
+(*composant*)
+	PS:						BLOCK_MOTEUR_ATV_ANA;
+(*Opérations*)
+	OP_ROTATION:			BLOCK_OPERATION;	(*Opération rotation continue*)
+	OP_POSITION:			BLOCK_OPERATION;	(*Opération positionnement sur capteur*)
+	OP_ARRET:				BLOCK_OPERATION;	(*Opération arrêt mouvement*)
+(*Défauts*)
+	DEF_AUTOR_ROT_DOOR:		PRCDEF;		(* rotation non autorisée car porte ouverte *)
+	DEF_AUTOR_POS_DOOR:		PRCDEF;		(* positionnement non autorisé car porte ouverte *)
+	DEF_AUTOR_ROT_PS:		PRCDEF;		(* rotation non autorisée car variateur en défaut *)
+	DEF_AUTOR_POS_PS:		PRCDEF;		(* positionnement non autorisé car variateur en défaut *)
+	DEF_Position:			PRCDEF;		(* défaut de positionnement, capteur non rencontré*)
+	DEF_Rotation:			PRCDEF;		(* défaut de rotation, capteur non rencontré*)
+	DEF_Capt_C1:			PRCDEF;		(* défaut capteur C1 non fonctionnel - non rencontré*)
+	DEF_Capt_C2:			PRCDEF;		(* défaut capteur C2 non fonctionnel - non rencontré*)
+	
+	CO_Modif:				BOOL;		(*Demande modification en ligne*)
+	M_On:					BOOL;
+END_VAR
+
+VAR_OUTPUT
+	STATE_Vitesse:			REAL;		(*Consigne vitesse appliquée *)
+	STATE_Ready:			BOOL;		(*Moteur prêt*)
+	STATE_Nok:				BOOL;		(*Moteur en défaut*)
+	STATE_AR:				BOOL;		(*Pas de mouvement en cours*)
+	STATE_EC:				BOOL;		(*Mouvement en cours*)	
+	STATE_Position:			REAL;		(*Simulée depuis temps de rotation*)	
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_VMAX:				REAL;		(*Consigne vitesse max*)
+	CONF_VMIN:				REAL;		(*Consigne vitesse min*)
+	CONF_V_Door_Open:		REAL;		(*Consigne vitesse porte ouverte*)
+	CONF_V_Pos:				REAL:=1;	(*Consigne vitesse positionnement*)
+	CONF_Tim_AvantSup:		TIME;		(*Consigne temps marche avant sup après front descendant capteur*)
+	CONF_Tim_MarcheArriere:	TIME;		(*Consigne temps marche arrière pour centrer la clavette*)
+	CONF_Pos_Capt:			USINT;		(*Option positionnement pour arrêt:
+											0: sur présence capteur
+											1: front montant capteur
+											2: front descendant capteur*)
+	CONF_Pos_AvantSup:		BOOL;		(*Option positionnement pour temps marche avant supplémentaire*)
+	CONF_Pos_MarcheArriere:	BOOL;		(*Option positionnement pour marche arrière pour centrer la clavette*)	
+	
+	
+	CONF_C1:				BOOL;		(*Conf présence capteur 1 positionnement*) 
+	CONF_C2:				BOOL;		(*Conf présence capteur 2 positionnement*) 	
+	
+	(*Entité*)
+	isAssembly:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR
+	VAR_Cons_Vitesse:		REAL;		(*Mémorisation consigne vitesse*)
+	VAR_Door_Open:			BOOL;		(*Mouvement porte ouverte en automatique*)
+	RCP_M_ON:				BOOL;
+	VAR_On_Manu:			BOOL;
+	FM_CO_Modif:			R_TRIG;
+	FD_DOOR:				F_TRIG;
+	FM_JOG:					R_TRIG;
+	FM_IHM:					R_TRIG;
+	FD_CAPT:				F_TRIG;
+	FM_CAPT:				F_TRIG;
+	TIMER_Tick:				TON;		(*Simulation position*)
+	TIMER_AvantSup:			TON;
+	TIMER_DemiTour:			TON;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML	:= '5';
+TagXML	:=	0;
+
+OP_ROTATION.IdXML	:=	'6';
+OP_ROTATION.TagXML	:=	2;
+
+OP_POSITION.IdXML	:=	'6';
+OP_POSITION.TagXML	:=	1;
+
+OP_ARRET.IdXML		:=	'0';
+OP_ARRET.TagXML		:=	2;
+
+DEF_AUTOR_POS_DOOR.IdXML	:=	'5';
+DEF_AUTOR_POS_DOOR.TagXML	:=	18;
+DEF_AUTOR_ROT_DOOR.IdXML	:=	'5';
+DEF_AUTOR_ROT_DOOR.TagXML	:=	18;
+DEF_AUTOR_ROT_PS.IdXML		:=	'5';
+DEF_AUTOR_ROT_PS.TagXML		:=	20;
+DEF_AUTOR_POS_PS.IdXML		:=	'5';
+DEF_AUTOR_POS_PS.TagXML		:=	20;
+
+DEF_Position.IdXML	:=	'5';
+DEF_Position.TagXML	:=	1;
+DEF_Rotation.IdXML	:=	'5';
+DEF_Rotation.TagXML	:=	4;
+DEF_Capt_C1.IdXML	:=	'5';
+DEF_Capt_C1.TagXML	:=	21;
+DEF_Capt_C1.Groupe	:=	1;
+DEF_Capt_C2.IdXML	:=	'5';
+DEF_Capt_C2.TagXML	:=	22;
+DEF_Capt_C2.Groupe	:=	1;
+
+(*Opération arrêt mvt*)
+ACT_STOP();
+(*Opération marche mvt*)
+ACT_START();
+(*Opération positionnement*)
+ACT_POS();
+(*Fin de bloc*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_POS" Id="{f3794f8b-3aab-4c28-920e-ef3072aff59f}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION MARCHE positionnement PS*)
+
+OP_POSITION(
+	CTRL_PLC:=CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= MANUAL ,
+	ENABLE_INT:= PS.STATE_Ready,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 8,
+	N_STEP_OP_NOK:=9 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_POSITION.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_POSITION.Etape = 0
+		THEN
+				OP_POSITION.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_ARRET.ETAPE.1 OR OP_ROTATION.Etape.2 OR VAR_Door_Open
+		THEN
+				OP_POSITION.Etape := 0;
+				OP_POSITION.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_POSITION.Etape.0 AND OP_POSITION.MARCHE_OP
+		THEN
+				OP_POSITION.Etape.1:=TRUE;
+				OP_POSITION.Etape.0:=FALSE;
+(*étape 1-9*)
+ELSIF	OP_POSITION.Etape.1 AND NOT I_DOOR
+		THEN
+				OP_POSITION.Etape.9:=TRUE;
+				OP_POSITION.Etape.1:=FALSE;
+(*étape 9-0*)
+ELSIF	OP_POSITION.Etape.9
+		THEN
+				OP_POSITION.Etape.0:=TRUE;
+				OP_POSITION.Etape.9:=FALSE;
+(*étape 1-10*)
+ELSIF	OP_POSITION.Etape.1 AND PS.STATE_NOK
+		THEN
+				OP_POSITION.Etape.10:=TRUE;
+				OP_POSITION.Etape.1:=FALSE;
+(*étape 10-0*)
+ELSIF	OP_POSITION.Etape.10
+		THEN
+				OP_POSITION.Etape.0:=TRUE;
+				OP_POSITION.Etape.10:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_POSITION.Etape.1 AND I_DOOR
+		THEN
+				OP_POSITION.Etape.2:=TRUE;
+				OP_POSITION.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF	OP_POSITION.Etape.2 AND OP_ARRET.Etape.0 AND OP_ROTATION.Etape.0
+		THEN
+				OP_POSITION.Etape.3:=TRUE;
+				OP_POSITION.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_POSITION.Etape.3 AND PS.STATE_ON THEN
+				OP_POSITION.Etape.4:=TRUE;
+				OP_POSITION.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_POSITION.Etape.4 AND
+		((FD_CAPT.Q AND conf_pos_capt = 2)
+			OR (FM_CAPT.Q AND conf_pos_capt = 1)
+			OR (((IN_POS_C1 AND CONF_C1) OR (IN_POS_C2 AND CONF_C2)) AND conf_pos_capt = 0)) THEN
+				OP_POSITION.Etape.5:=TRUE;
+				OP_POSITION.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_POSITION.Etape.5 AND (TIMER_AvantSup.Q OR NOT CONF_Pos_AvantSup) THEN
+				OP_POSITION.Etape.6:=TRUE;
+				OP_POSITION.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF	OP_POSITION.Etape.6 AND PS.STATE_OFF AND CONF_Pos_MarcheArriere THEN
+				OP_POSITION.Etape.7:=TRUE;
+				OP_POSITION.Etape.6:=FALSE;
+(*étape 6-8*)
+ELSIF	OP_POSITION.Etape.6 AND PS.STATE_OFF AND NOT CONF_Pos_MarcheArriere THEN
+				OP_POSITION.Etape.8:=TRUE;
+				OP_POSITION.Etape.6:=FALSE;
+(*étape 7-8*)
+ELSIF	OP_POSITION.Etape.7 AND TIMER_Demitour.Q AND PS.STATE_OFF THEN
+				OP_POSITION.Etape.8:=TRUE;
+				OP_POSITION.Etape.7:=FALSE;
+(*étape 8-1*)
+ELSIF	OP_POSITION.Etape.8 AND OP_POSITION.MARCHE_OP THEN
+				OP_POSITION.Etape.1:=TRUE;
+				OP_POSITION.Etape.8:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_POSITION.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_START" Id="{d289a696-5d25-4f59-a556-270cb076b9af}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION MARCHE rotation PS*)
+
+OP_ROTATION(
+	CTRL_PLC:=CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= MANUAL ,
+	ENABLE_INT := TRUE,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 4,
+	N_STEP_OP_NOK:=5 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_ROTATION.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_ROTATION.Etape = 0
+		THEN
+				OP_ROTATION.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_ARRET.ETAPE.1 OR OP_POSITION.Etape.2
+		THEN
+				OP_ROTATION.Etape := 0;
+				OP_ROTATION.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_ROTATION.Etape.0 AND OP_ROTATION.MARCHE_OP
+		THEN
+				OP_ROTATION.Etape.1:=TRUE;
+				OP_ROTATION.Etape.0:=FALSE;
+(*étape 1-5*)
+ELSIF	OP_ROTATION.Etape.1 AND NOT I_DOOR
+		THEN
+				OP_ROTATION.Etape.5:=TRUE;
+				OP_ROTATION.Etape.1:=FALSE;
+(*étape 5-0*)
+ELSIF	OP_ROTATION.Etape.5
+		THEN
+				OP_ROTATION.Etape.0:=TRUE;
+				OP_ROTATION.Etape.5:=FALSE;
+(*étape 1-6*)
+ELSIF	OP_ROTATION.Etape.1 AND PS.STATE_NOK
+		THEN
+				OP_ROTATION.Etape.6:=TRUE;
+				OP_ROTATION.Etape.1:=FALSE;
+(*étape 6-0*)
+ELSIF	OP_ROTATION.Etape.6
+		THEN
+				OP_ROTATION.Etape.0:=TRUE;
+				OP_ROTATION.Etape.6:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_ROTATION.Etape.1 AND I_DOOR
+		THEN
+				OP_ROTATION.Etape.2:=TRUE;
+				OP_ROTATION.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF	OP_ROTATION.Etape.2 AND OP_ARRET.Etape.0 AND OP_POSITION.Etape.0
+		THEN
+				OP_ROTATION.Etape.3:=TRUE;
+				OP_ROTATION.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_ROTATION.Etape.3  THEN
+				OP_ROTATION.Etape.4:=TRUE;
+				OP_ROTATION.Etape.3:=FALSE;
+(*étape 4-3*)
+ELSIF	OP_ROTATION.Etape.4 AND (OP_ROTATION.MARCHE_OP OR FM_CO_Modif.Q) AND PS.STATE_ON THEN
+				OP_ROTATION.Etape.3:=TRUE;
+				OP_ROTATION.Etape.4:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_ROTATION.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{e8f95704-8432-4d4e-92b4-cb7b353f28e7}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION arret rotation PS*)
+
+OP_ARRET(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= MANUAL ,
+	ENABLE_INT:=TRUE,
+	ON_AUTO_INT:= (PS.CO_On AND PS.STATE_NOK) OR (PS.DEF_Variateur.DEF AND PS.CO_On),
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 3,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_ARRET.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_ARRET.Etape = 0
+		THEN
+				OP_ARRET.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_ROTATION.ETAPE.2 OR OP_POSITION.Etape.2 OR VAR_Door_Open
+	
+		THEN
+				OP_ARRET.Etape := 0;
+				OP_ARRET.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_ARRET.Etape.0 AND (OP_ARRET.MARCHE_OP OR DEF_Position.DEF OR DEF_Rotation.DEF OR FD_DOOR.Q)
+		THEN
+				OP_ARRET.Etape.1:=TRUE;
+				OP_ARRET.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_ARRET.Etape.1 AND OP_ROTATION.Etape.0 AND OP_POSITION.Etape.0
+		THEN
+				OP_ARRET.Etape.2:=TRUE;
+				OP_ARRET.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_ARRET.Etape.2
+		THEN
+				OP_ARRET.Etape.3:=TRUE;
+				OP_ARRET.Etape.2:=FALSE;
+(*étape 3-1 : rebouclage sur nouvelle demande*)
+ELSIF 	OP_ARRET.Etape.3
+		AND OP_ARRET.MARCHE_OP
+		THEN
+				OP_ARRET.Etape.1:=TRUE;
+				OP_ARRET.Etape.3:=FALSE;			
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_ARRET.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{95e36bde-769f-4bf9-b8bc-7d4d94402fbe}">
+      <Implementation>
+        <ST><![CDATA[(*Gestion demandes*)
+FM_CO_Modif(clk:=CO_modif);
+RCP_M_On	:=	M_On;
+
+(*front capteur*)
+FD_CAPT(
+	CLK := (IN_POS_C1 AND CONF_C1) OR (IN_POS_C2 AND CONF_C2),
+	);
+FM_CAPT(
+	CLK := (IN_POS_C1 AND CONF_C1) OR (IN_POS_C2 AND CONF_C2),
+	);
+
+(*Vérification consignes*)
+IF	PRM_Vitesse > CONF_VMAX THEN
+	PRM_Vitesse	:=	CONF_VMAX;
+END_IF;
+
+IF PRM_Vitesse < CONF_VMIN THEN
+	PRM_Vitesse := CONF_VMIN;
+END_IF
+
+(*Ouverture porte pour arrêt mouvement*)
+FD_DOOR(CLK := I_DOOR);
+
+(*Rotation porte ouverte*)
+VAR_Door_Open	:=	IN_MVT AND NOT I_DOOR AND NOT RESET AND NOT CTRL_PLC;
+
+(*Rotation en manuel*)
+IF MANUAL AND RCP_M_ON AND I_DOOR AND NOT VAR_On_Manu THEN
+	VAR_On_Manu	:=	TRUE;
+ELSIF NOT MANUAL OR (RCP_M_On AND MANUAL AND VAR_On_Manu) OR NOT I_DOOR OR PS.STATE_NOK THEN
+	VAR_On_Manu	:=	FALSE;
+END_IF
+
+(*Pilotage mouvement*)
+PS.CO_On				:=	OP_ROTATION.Etape.3 OR OP_ROTATION.Etape.4 OR OP_POSITION.Etape.3 OR OP_POSITION.Etape.4 OR OP_POSITION.Etape.5
+							OR (OP_POSITION.Etape.7 AND NOT TIMER_DemiTour.Q) OR VAR_Door_Open OR VAR_On_Manu;
+
+(*Consigne vitesse*)
+IF OP_ROTATION.Etape.3 OR (MANUAL AND VAR_On_Manu) THEN
+	PS.PRM_Vitesse	:=	PRM_vitesse;
+ELSIF OP_POSITION.Etape.3 OR OP_POSITION.Etape.4 OR OP_POSITION.Etape.5 THEN
+	PS.PRM_Vitesse	:=	CONF_V_Pos;
+ELSIF OP_POSITION.Etape.7 THEN
+	PS.PRM_Vitesse	:=	-CONF_V_Pos;
+ELSIF VAR_Door_Open THEN
+	PS.PRM_Vitesse	:=	CONF_V_Door_Open;
+ELSIF RESET OR NOT PS.CO_On THEN
+	PS.PRM_Vitesse	:=	0.0;
+END_IF
+
+STATE_Vitesse	:=	PS.STATE_VIT;
+
+PS(
+	RESET:= RESET,
+	CONF_VMIN:=CONF_VMIN,
+	CONF_VMAX:=CONF_VMAX,
+	);
+	
+(*TIMER*)
+TIMER_DemiTour(
+	IN	:=	OP_POSITION.Etape.7,
+	PT	:=	CONF_Tim_MarcheArriere,
+	);
+	
+TIMER_AvantSup(
+	IN	:=	OP_POSITION.Etape.5,
+	PT	:=	CONF_Tim_AvantSup,
+	);
+	
+(*SIMULATION POSITION*)
+TIMER_Tick();
+TIMER_Tick.IN	:=	PS.STATE_ON;
+TIMER_Tick.PT	:=	T#100MS;
+IF TIMER_Tick.Q THEN
+	STATE_Position	:=	STATE_Position + (STATE_Vitesse * 6 * 0.2); 	(*360/60, tick 0.5s*)
+	IF STATE_Position > 360 THEN
+		STATE_Position	:=	STATE_Position - 360;
+	END_IF
+	TIMER_Tick.IN	:=	FALSE;
+END_IF
+
+(*DEFAUTS*)
+DEF_AUTOR_POS_DOOR.CONDITION	:=	OP_POSITION.Etape.9;
+DEF_AUTOR_POS_DOOR();
+DEF_AUTOR_ROT_DOOR.CONDITION	:=	OP_ROTATION.Etape.5;
+DEF_AUTOR_ROT_DOOR();
+DEF_AUTOR_POS_PS.CONDITION		:=	OP_POSITION.Etape.10;
+DEF_AUTOR_POS_PS();
+DEF_AUTOR_ROT_PS.CONDITION		:=	OP_ROTATION.Etape.6;
+DEF_AUTOR_ROT_PS();
+
+(*Temps de positionnement trop long*)
+DEF_Position.CONDITION			:=	OP_POSITION.Etape.4;
+DEF_Position();
+
+(*Rotation non effective car aucun capteur rencontré*)
+DEF_Rotation.CONDITION			:=	OP_ROTATION.Etape.4 AND (NOT IN_POS_C1 AND CONF_C1) OR (NOT IN_POS_C2 AND CONF_C2);
+DEF_Rotation.DELAY				:=	T#2M;
+DEF_Rotation();
+
+(*défaut capteur C1 non opérationnel*)
+IF NOT IN_POS_C1 AND PS.CO_On AND (PS.PRM_Vitesse>0) AND CONF_C1 THEN
+	DEF_Capt_C1.CONDITION	:=	TRUE;
+ELSIF IN_POS_C1 OR NOT CONF_C1 OR NOT PS.CO_On THEN
+	DEF_Capt_C1.CONDITION	:=	FALSE;
+END_IF
+DEF_Capt_C1.DELAY	:=	T#2M;
+DEF_Capt_C1();
+
+(*défaut capteur C2 non opérationnel*)
+IF NOT IN_POS_C2 AND PS.CO_On AND (PS.PRM_Vitesse>0) AND CONF_C2 THEN
+	DEF_Capt_C2.CONDITION	:=	TRUE;
+ELSIF IN_POS_C2 OR NOT CONF_C2 OR NOT PS.CO_On THEN
+	DEF_Capt_C2.CONDITION	:=	FALSE;
+END_IF
+DEF_Capt_C2.DELAY	:=	T#2M;
+DEF_Capt_C2();
+
+(*ETATS*)
+STATE_AR	:=	NOT PS.CO_On;
+STATE_EC	:=	OP_POSITION.EC OR NOT OP_ROTATION.AR OR VAR_Door_Open;
+STATE_Nok	:=	DEF_AUTOR_POS_DOOR.DEF OR DEF_AUTOR_ROT_DOOR.DEF
+				OR DEF_AUTOR_POS_PS.DEF OR DEF_AUTOR_ROT_PS.DEF
+				OR DEF_Position.DEF OR DEF_Rotation.DEF
+				OR DEF_Capt_C1.DEF OR DEF_Capt_C2.DEF;
+STATE_Ready	:=	PS.STATE_Ready;
+
+(*reset des demandes*)
+CO_Modif	:=	FALSE;
+M_On		:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="ANALOG_INPUT" Id="{8c5a6ce0-b200-4549-bd77-600996bb08ba}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ANALOG_INPUT
+(* Fonction standard AC de mise à l'échelle *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE*)
+
+(*************************************************************************)
+VAR_INPUT  PERSISTENT
+	CONF_Max:	 			REAL;				(* ~ (OPC : 1 : available for OPC-clients) *)			(*valeur min*)
+	CONF_Min: 				REAL:=0.0;			(* ~ (OPC : 1 : available for OPC-clients) *)			(*valeur max*)
+	CONF_Bipolar:			BOOL:= FALSE;													(*option conversion en bipolaire (+/- 10V par ex) ou non (0-10V)*)
+	CONF_Range:				REAL:=1;														(*Facteur de conversion par ex 0.5 pour une entrée ana 5V = pleine echelle*)
+END_VAR
+
+VAR_INPUT
+ 	INPUT:				 	INT;					(* ~ (OPC : 1 : available for OPC-clients) *)			(*entrée analogique*)
+END_VAR
+
+VAR_OUTPUT
+	Value:					REAL;				(* ~ (OPC : 1 : available for OPC-clients) *)			(*value analogique convertie*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF CONF_Range = 0.0 THEN
+	Value	:=	0;
+	RETURN;
+END_IF
+IF CONF_Bipolar THEN
+	Value	:=	(((INT_TO_REAL(INPUT) -32768.0)  * (CONF_Max-CONF_Min) / 65535.0 )  + CONF_Min) / CONF_Range;
+ELSE
+	Value	:=	((INT_TO_REAL(INPUT)   * (CONF_Max-CONF_Min) / 32767.0 )  + CONF_Min) / CONF_Range;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="ANALOG_INPUT">
+      <LineId Id="22" Count="8" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,2114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_AXE_STD1" Id="{ff33c790-bd44-4a42-b44b-2d939bdf1f27}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_AXE_STD1
+(*Fonction de positionnement d'un axe sur variateur beckhoff *)
+(*Rotatif multitour ou linéaire*)
+(*La fonction ne prend pas en charge le rattrapage de jeux qui reste implanter*)
+
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - 	VERSION INIITIALE*)
+(* Version 2-0 - JPC - 	MODIF GESTION frein, esclave*)
+(* Version 3-0 - HG -	COMPILATION des différents blocs moteurs...*)
+(* Version 4-0 - HG -	GESTION position Bias pour codeur absolu - maitien position au redémarrage équipement*)
+(* Version 4-1 - HG - 	GESTION Erreur matériel axe avec acquittement *)
+(* Version 5-1 - HG - 	Défaut liés au couple + pos déploiement en mm + inhibition fin course si utilisation IN_LIMITE_SWITCH*)
+(* Version 6-0 - HG - 	Gestion maitre/esclave pour laisser l'esclave asservi après sa libération suivant CONF_Disable (ajout CO_Devalid_Slave)*)
+(* Version 6-1 - HG -	Modification validation moteur, partie reset, reset ethercat plus utilisé*)
+(* Version 7-0 - HG-	Gestion rattrapage de jeu, gestion prise de ref capteur avec utilisation codeur absolu, position relative, menage variables reset
+						gestion position bias en variable persistante, gestion validation (pas de rebouclage sur reset), positionnement absolu pour moteur rotation
+						gestion ecriture position bias à une position non nulle*)
+(* Version 8-0 - HG-	modification lecture erreur matérielle sur état NOK validation/positionnement
+						touche demande lecture erreur*)
+(* Version 9-0 - AB -	modification de la prise d'origine avec codeur absolu
+						le var_mem_need_ref n'est aps géré (utilité ??)	*)
+(*************************************************************************)
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:		BOOL;		(*paramétrage système ok*)
+(*information générale*)
+	RESET:					BOOL;
+	MANUAL:					BOOL;		 (*mode de fonctionnement de la fonction*)
+	CTRL_PLC:				BOOL;
+
+(*Commande externe*)
+	CO_RESET:				BOOL;		(*Reset du variateur*)
+	CO_CReset:				BOOL;		(*COMPTAGE TOURS - Remise à 0 du compteur de tour sur FM de ce bit - le bit est remis a 0 par la fonction*)
+	CO_CCount:				BOOL;		(*COMPTAGE TOURS - Mise en marche du comptage*)
+	CO_PRM_PS:				BOOL;		(*SPECIAL - Chargement de la valeur de réduction*)
+	CO_Modif:				BOOL;		(*Modification en ligne - Prise en compte nouvelle vitesse de rotation*)
+	CO_Frein:				BOOL;		(*FREIN -  Demande actionnement frein *)
+	CO_Devalid:				BOOL;		(*Demande dévalidation moteur si moteur pas en mouvement*)
+	CO_Write_Param:			BOOL;		(*Demande ecirture des paramètres au démarrage PLC - Position Bias*)
+
+(*sécurité*)
+	DOOR:					BOOL;		(*sécurité de fermeture de porte*)
+	I_Door_Safety_OFF:		BOOL;		(*condition d'inhibition de la sécurité de porte*)
+	IN_REF AT %I*:			BOOL;		(*PRISE REF/COMPTAGE TOURS - retour capteur pour prise de référence et comptage*)
+	IN_LIMITE_SWITCH AT %I*:WORD;		(*FIN DE COURSE - permet d'ihibier le fin de course pour s'en dégager*)
+	IN_MODE AT%I*:			UINT;		(*Mode opération esclave ethercat (attente variateur OP) - Esclave Ethercat /State*)
+	IN_JOG_P:				BOOL;		(*JOG déidé - Entrée TOR pilotage JOG+*)
+	IN_JOG_M:				BOOL;		(*JOG dédié - Entrée TOR pilotage JOG-*)
+
+	I_Pos_Abs_Rotation:		LREAL;		(*Retour position absolue rotation si moteur déploiement pour état position*)
+	I_Pos_Mod_Rotation:		LREAL;		(*Retour position modulo 360 rotation si moteur déploiement pour état position*)
+(*autorisation*)
+	EN_JOG:					BOOL;		(*Condition externe de pilotage du mode JOG*)
+
+(*retour position codeur*)
+	IN_Position_Codeur AT%I*:	DINT;		(*Retour de position du codeur : à linker sur le position feedback value de l'ATx du drive concerné*)
+
+(*paramètre*)
+(* les paramétres de vitesses sont exprimées en tour par minute*)
+	PRM_Position:			LREAL;		(*Paramètre de position du poste sélectionné *)
+	PRM_V_Pos:				LREAL;		(*Vitesse de positionnement*)
+	PRM_V_BalRot:			LREAL;		(*Vitesse de rotation et balayage*)
+	PRM_NPoste:				USINT; 		(*N° du poste à prendre en compte pour le positionnement*)
+	PRM_NRef:				USINT;		(*Index du référentiel de positionnement*)
+	PRM_N_Bal:				INT;		(*Nombre de balayages *)
+	PRM_Angle_Bal:			REAL;		(*Paramètre d'amplitude du balayage - angle total couvert autour de la cathode *)
+	PRM_Tim_Surv_VRot:		TIME;		(*Temps de surveillance de la vitesse de rotation*)
+	PRM_GoToHome:			BOOL;		(*Paramètre de forçage de la prise d'origine avant le positionnement*)
+	PRM_BalPos:				BOOL;		(*0: positionnement au centre cathode, balayage de - amplitude/2 à +amplitude/2
+											1: positionnement sur le côté cathode (- amplitude/2), balayage sur amplitude*)
+	PRM_Pos_Zero:			LREAL:=0.0;	(*Position à affecter lors de la commande M_Zero*)
+
+	M_BIAS:					BOOL;
+
+(*opération*)
+	OP_Position:			BLOCK_OPERATION;		(*opération positionnement*)
+	OP_Rotation:			BLOCK_OPERATION;		(*opération rotation continue*)
+	OP_Stop:				BLOCK_OPERATION;		(*opération arrêt*)
+	OP_Validation:			BLOCK_OPERATION;		(*opération validation*)
+	OP_Jog:					BLOCK_OPERATION;		(*opération mode jog*)
+	OP_Start_Slave:			BLOCK_OPERATION;		(*opération mise en esclavage*)
+	OP_Stop_Slave:			BLOCK_OPERATION;		(*opération libération esclave*)
+	OP_Balayage:			BLOCK_OPERATION;		(*opération balayage*)
+
+(*gestion couple*)
+	IN_TORQUE:				INT;			(* Retour du couple moteur en 1000 pour 100 % *)
+
+(*gestion esclave*)
+	PRM_Master:				BOOL;		(*Variateur maitre d'un autre - pilotage esclave nécessaire*)
+	I_Valid_Slave_ok:		BOOL;		(*Retour esclave validé*)
+	CO_Valid_Slave:			BOOL;		(*Demande validation depuis le maitre*)
+	CO_Devalid_Slave:		BOOL;		(*Demande dévalidation depuis le maitre*)
+
+(*défaut*)
+	DEF_Validation:			PRCDEF;	(*Défaut de validation de l'axe *)
+	DEF_AcqErr:				PRCDEF;	(*Défaut d'acuittement des erreurs*)
+	DEF_Prm_Pos:			PRCDEF;	(*Défaut paramètres de positionnement incorrect*)
+	DEF_Home:				PRCDEF;	(*Défaut de prise de référence*)
+	DEF_Position:			PRCDEF;	(*Défaut de positionnement*)
+	DEF_Rotation:			PRCDEF;	(*Défaut de mise en rotation de l'axe*)
+	DEF_Surv_rotation:		PRCDEF;	(*Défaut de surveillance de la vitesse de rotation*)
+	DEF_Jog:				PRCDEF;	(*Défaut de l'axe en mode JOG*)
+	DEF_Interlock:			PRCDEF;	(*Défaut de rupture de la chaine de sécurité*)
+	DEF_Asserv:				PRCDEF;	(*Défaut d'asservissement moteur esclave *)
+	DEF_Desasserv:			PRCDEF;	(*Défaut de liberation moteur esclave *)
+	DEF_Reset:				PRCDEF;	(*Défaut de reset du variateur *)
+	DEF_Lag_Distance:		PRCDEF;	(*Defaut de collision*)
+	DEF_Limite_Switch:		PRCDEF;	(*Defaut de détection de capteur de fin de course*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*configuration axe*)
+	CONF_Deploiement:		BOOL;		(* Mouvement de déploiement : moteur en deg mais consignes supérieure à 360*)
+	CONF_No_Ref:			BOOL;		(* Moteur sans capteur de prise de référence*)
+	CONF_Abs:				BOOL;		(* Moteur à codeur absolu*)
+										(* /CONF_No_Ref . /CONF_Abs => moteur sans maintien de la position sur redémarrage système avec gestion classique capteur de prise de ref*)
+										(* /CONF_No_Ref . CONF_Abs => moteur avec maintien de la position sur redémarrage système avec gestion capteur de prise de ref (MAJ position bias)*)
+										(* CONF_No_Ref . CONF_Abs => moteur avec maintien de la position sur redémarrage système sans prise de ref*)
+	CONF_Frein:				BOOL;		(* Moteur possédant un frein *)
+	CONF_Mvt_Lineaire:		BOOL;		(* Moteur effectuant un mouvement linéaire *)
+	CONF_Disable:			USINT;		(*	0 : L'axe n'est pas dévalidé
+											1 : L'axe est dévalidé sur demande arrêt
+											2 : L'axe est dévalidé après chaque mouvement*)	
+
+	(*configuration rattrapage de jeu*)
+	CONF_Rattrapage:		BOOL := FALSE;	(* Utilisation rattrapge de jeu*)
+	CONF_Sens_Rattrapage:	BOOL;		(* Sens de rattrapage de jeu*)
+	CONF_Offset_Rattrapage:	REAL;		(* Offset de rattrapage de jeu*)
+	CONF_V_Rattrapage:		REAL;		(* Vitesse de rattrapage de jeu*)
+
+	(*configuration mouvements*)
+	CONF_Homing_Mode:		MC_HomingMode:=MC_AbsSwitch;		(*définit le type de prise d'origine*)
+	CONF_Pos_Direction:		MC_Direction;						(*indique que le mode de positionnement dans le cas d'un axe modulot*)
+
+	(*configuration des positions*)
+	CONF_ID_Poste:			ARRAY[0..8] OF STRING;	(*Tableau des intitulés des postes*)
+	CONF_ID_Ref:			ARRAY[0..8] OF STRING;	(*Tableau des intitulés des références*)
+	CONF_Pos_Poste:			ARRAY[0..8] OF LREAL;	(*Tableau des positions absolues des postes du porte substrat*)
+	CONF_Pos_Ref:			ARRAY[0..8] OF LREAL;	(*Tableau des positions absolues des référentiels de la machine*)
+
+	(*configuration vitesse mode jog interne*)
+	CONF_V_Jog:				LREAL;		(*Vitesse en mode Jog*)
+
+	(*configuration couple max*)
+	CONF_Max_Torque:		REAL;		(* Valeur de limitation du couple en %*)
+
+	(*changement reduction axe*)
+	CONF_Sel_PS0:			REAL:=0.0;	(* Réduction de l'axe si PRM_Sel_PS = false*)
+	CONF_Sel_PS1:			REAL:=0.0;	(* Réduction de l'axe si PRM_Sel_PS = true*)
+
+	(*décalage du zero*)
+	CONF_Pos_Bias:			LREAL;		(*Décalage codeur/résolveur absolu à mémoriser pour conserver le zéro moteur*)
+
+	(*sécurité consignes position min et max*)
+	CONF_Min_Pos:			REAL:=0.0;	(* Position min pour un mouvement linéaire*)
+	CONF_Max_Pos:			REAL:=0.0;	(* Position max pour un mouvement linéaire*)
+
+	(*configuration position bias*)
+	CONF_Gp_PB:				UINT;		(*groupe de la variable position bias,
+											se recupére en positionnant la souris sur le paramétre position bias de l'encodeur de l'axe correspondant*)
+
+	(*longueur segment robot pour affichage deploiement en mm*)
+	CONF_L_Segment:		REAL;		(*Longueur du segment 1 du robot en mm*)
+
+	(*sélection type PS pour changement de réduction*)
+	PRM_Sel_PS:			BOOL;		(*Sélection du type de porte substrat - True = non satellisé - False = satellisé*)
+	PRM_Dec:				LREAL;		(*SPECIAL - Décalage d'origine réglé de manière à avoir la poste 1 sur la référence 1 avec un retour à 0*)
+	PRM_Surv_VRot:			LREAL;		(*Offset de surveillance de la vitesse de rotation*)
+
+	(*Variables utilisés pour le retour de position absolue*)
+	CONF_Scaling_Factor:		LREAL;		(*sacling factor de l'axe tel que renseigné dans la section encodeur de l'axe associé dans le tsm*)
+
+END_VAR
+
+VAR_OUTPUT
+	STATE_Ar:				BOOL;
+	STATE_NOK:				BOOL;		(*Présence d'un défaut sur l'axe*)
+	STATE_Homed:			BOOL;		(*indique que la prise d'origine a été effectuée*)
+	STATE_Move_P:			BOOL;		(*Rotation dans le sens positif (sens horaire)*)
+	STATE_Move_N:			BOOL;		(*Rotation dans le sens négatif (sens anti-horaire)*)
+	STATE_Sync:				BOOL;		(*Synchronisation de position renvoyé aprés une commande de marche comptage
+												des tours pour la réouverture des caches par exemple*)
+	STATE_Type_PS:			BOOL;		(*état de sélection du type de porte substrat*)
+	STATE_Frein:			BOOL;		(* Etat du frein True = Actif *)
+	STATE_Valid_Slave_ok:	BOOL;		(* Retour moteur validé pour maitre/esclave*)
+	STATE_Param_OK:			BOOL;		(*Ecriture du paramétrage au démarrage PLC ok*)
+
+	STATE_Code:				USINT;		(*Code d'état du variateur*)
+										(* 0 = indefinit, 1 = Dévalidé, 2 = Validé en attente, 3 = en défaut, 4 = en cours d'arrêt
+											5 = prise d'origine , 6 = mouvement , 7 = mouvement continu, 8 = synchronisation*)
+	STATE_Err:				UDINT;		(*Code d'erreur*)
+
+	STATE_Vit:				LREAL;		(*Vitesse de rotation instantanée en tr/min ou mm/min*)
+	STATE_Pos360:			LREAL;		(*Position instantanée en deg modulo 360*)
+	STATE_Pos_Dep:			LREAL;		(*Position instantanée en deg pour déploiement*)
+	STATE_Pos_Dep_mm:		LREAL;		(*Position instantanée en deg pour déploiement*)
+	STATE_Pos:				LREAL;		(*Position instantanée en deg ou mm*)
+	STATE_Pos_Rel:			LREAL;		(*Position instantanée relative en deg ou mm*)
+	STATE_Torque:			REAL;		(* Retour du couple pour le moteur en %*)
+	STATE_NTurn:			UDINT;		(*Etat du compteur de tour*)
+	STATE_NBal:				UDINT;		(*Etat du compteur  de balayage*)
+	STATE_Pos_Abs_Codeur:	LREAL;		(*Posittion absolue du codeur, utilisée pour MaJ du Position bias*)
+
+	OUT_Limit_Torque:		UINT;		(* Consigne limite couple pour variateur*)
+
+	RQ_Valid_Slave:			BOOL;		(*Demande validation de l'esclave*)
+	RQ_Devalid_Slave:		BOOL;		(*Demande dévalidation de l'esclave*)
+	RQ_Param_System:		BOOL;		(*Demande écriture des variables persistantes*)
+END_VAR
+
+VAR_IN_OUT
+	Slave_Axis:				AXIS_REF;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:			BOOL;		(*entité : composant*)
+	IdXML:					STRING;		(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:					UINT;		(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:				STRING;		(*MNEMO de l'appelant*)
+	MNEMO:					STRING;		(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT PERSISTENT
+	STATE_Home_Done:		BOOL;		(*pour un moteur absolu, variable indiquant qu'une prise d'origine a déjà été faite
+										et aucun risque d'avoir perdu le position bias puisque on sait que si ce bit est à 1, on a bien chargé les variables persistentes *)
+END_VAR
+
+VAR
+	FD_Manual:				R_TRIG;
+
+	AXE:					AXIS_REF;					(*structure de donnée de l'axe*)
+	AXE_Power:				MC_Power;					(*Fonction de validation de l'axe*)
+	AXE_Move:				MC_MoveModulo;				(*Fonction de positionnement absolu de l'axe*)
+	AXE_Move_Abs:			MC_MoveAbsolute;			(*Fonction de positionnement absolu de l'axe*)
+	AXE_Velocity:			MC_MoveVelocity;			(*Fonction de rotation continue*)
+	AXE_Reset:				MC_Reset;					(*Fonction de reset de l'axe*)
+	AXE_Home:				MC_Home;					(*Fonction de prise d'origine*)
+	AXE_Jog:				MC_Jog;						(*Fonction de rotation en mode jog*)
+	AXE_Halt:				MC_Halt;						(*Fonction d'arrêt de l'axe*)
+	AXE_Status:				MC_ReadStatus;
+	AXE_WriteParameter:		MC_WriteParameter;
+	AXE_ReadParameter:		MC_ReadParameter;
+	AXE_Set_Frein:			FB_SoEAX5000SetMotorCtrlWord;
+	AXE_State_Frein:		FB_SoERead;
+	AXE_Zero:				MC_SetPosition;
+	AXE_Esclave:			MC_GearInDyn;
+	AXE_Liberation:			MC_GearOut;
+	AXE_PosBias:			FB_WritePosBias;
+	AXE_Reset_Error:		FB_SoEReset;
+	AXE_Error:				FB_SoEReadDiagNumber;
+
+	(*gestion zéro position*)
+	M_Zero:					BOOL;						(* Demande remise à zéro position moteur rotation *)
+	RCP_Zero:				BOOL;
+
+	(*gestion position/vitesse*)
+	VAR_Ctrl_Cons_ok:		BOOL;
+	VAR_Ctrl_Cons_ok2:		BOOL;
+	VAR_Pos_Poste:			LREAL;
+	VAR_Pos_Ref:			LREAL;
+	VAR_Cons_Pos:			LREAL;
+	VAR_Cons_Pos2:			LREAL;
+	VAR_V_Pos:				LREAL;
+	VAR_V_BalRot:			LREAL;
+	TIMER_Surv_Vrot:		TON;
+
+	(*gestion frein*)
+	VAR_fbRead: 			FB_SoERead;
+	VAR_Read: 				BOOL;
+	VAR_Idn: 				WORD;
+	VAR_ReadValue: 			UINT;
+
+	(*gestion arrêt*)
+	TIMER_Etape3_Stop:		TON;
+
+	(*gestion positionnement en cours*)
+	FM_Pos:					R_TRIG;
+	VAR_Mem_Pos:			BOOL;
+	VAR_Mem_Pos_Abs:		BOOL;
+	VAR_Move_Abs:			BOOL;
+
+	(*gestion compteur tours*)
+	VAR_Mem_Pos_Inter:		UINT;				(*Mémoire de la position d'interruption du comptage*)
+	VAR_etape_count:		USINT;				(*variable de grafcet de comptage*)
+	VAR_Mem_Count_Inter:	BOOL;				(*Mémorisation del'interrruption du comptage*)
+	FM_etape0_count:		R_TRIG;
+	FD_I_REF:				F_TRIG;				(*Front descendant capteur de prise de référence*)
+	FM_I_REF:				R_TRIG;				(*Front montant capteur de prise de référence*)
+
+	(*gestion esclavage*)
+	FD_Valid_Slave:			F_TRIG;
+	FP_Valid_Slave:			R_TRIG;
+	VAR_Mem_Master:			BOOL;
+	VAR_Mem_Arret:			BOOL;
+
+	(*gestion facteur réduction*)
+	FM_CO_PRM_PS:			R_TRIG;
+	VAR_Mem_Sel_PS:			BOOL;				(*Mémorisation sélection mode rotation PS*)
+	VAR_Mem_Need_Ref:		BOOL;				(*Référence nécessaire si changement de réduction*)
+
+	(*gestion position bias*)
+	RCP_Bias:				BOOL;
+	VAR_Bias:				BOOL;				(*demande manuelle d'écriture posbias en cours*)
+	VAR_Bias2:				BOOL;				(*ecriture posbias au démarrage système en cours*)
+	VAR_Bias3:				BOOL;				(*ecriture posbias après prise ref en cours*)
+	VAR_Bias4:				BOOL;				(*écriture du posbias à 0 juste avant prise origine machine*)
+	VAR_Pos_Bias:			LREAL;
+
+	(*gestion lecture/reset erreur matérielle*)
+	TIMER_Err_Mat:			TON;
+	VAR_Read_Error_Mat:		BOOL;
+	VAR_Read_Error_Mat2:	BOOL;
+	VAR_Reset_Error_Mat:	BOOL;
+	VAR_Reset_Error_Mat_Ok:	BOOL;
+	M_Read_Error_Mat:		BOOL;
+	RCP_Read_Error_Mat:		BOOL;
+	FD_Read_Error_Mat:		F_TRIG;
+	FD_Reset_Err:			F_TRIG;
+	FM_Reset_Err:			R_TRIG;
+
+	(*gestion rattrapage de jeu*)
+	VAR_Rattrapage:			BOOL;
+	VAR_Sens_Mvt:			BOOL;
+	VAR_Pos:				REAL;
+	VAR_V_Rattrapage:		REAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+ACT_VALIDATION();
+ACT_POSITION();
+ACT_JOG();
+ACT_ROTATION();
+ACT_STOP();
+ACT_BALAYAGE();
+ACT_START_SLAVE();
+ACT_STOP_SLAVE();
+ACT_COMPTAGE();
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_BALAYAGE" Id="{5e82ae66-49f4-4ba1-8fca-139a805c1889}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION de mise en balayage*)
+(* Gestion du balayage*)
+
+(*initialisation de l'opération*)
+OP_Balayage(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=(DOOR OR I_Door_Safety_OFF) AND OP_Rotation.Etape.0 AND OP_Jog.Etape.0 AND NOT CO_Valid_Slave,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=14,
+	N_STEP_OP_NOK:=26);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Balayage.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Balayage.Etape = 0
+		THEN
+				OP_Balayage.Etape.0 := TRUE;
+
+(*repositionnement sur étape 0*)
+ELSIF	RESET OR OP_Stop.ETAPE.1 OR OP_Jog.Etape.1 OR OP_Rotation.Etape.1 OR (OP_Position.Etape.1 AND NOT OP_Balayage.Etape.2)
+		THEN
+				OP_Balayage.Etape := 0;			(*RAZ grafcet*)
+				OP_Balayage.Etape.0  := TRUE;
+(* Etape 0 -> Etape 1 *)
+ELSIF 	OP_Balayage.Etape.0
+		AND OP_Balayage.MARCHE_OP
+		THEN
+				OP_Balayage.Etape.1:=TRUE;
+				OP_Balayage.Etape.0:=FALSE;
+(* Etape 1 -> Etape 2 *)
+ELSIF 	OP_Balayage.Etape.1
+		AND OP_Rotation.Etape.0 AND (OP_Stop.Etape.0 OR OP_Stop.Etape.4) AND OP_POSITION.Etape.0
+		THEN
+				OP_Balayage.Etape.2:=TRUE;
+				OP_Balayage.Etape.1:=FALSE;
+(* Etape 2 -> Etape 3 *)
+ELSIF 	OP_Balayage.Etape.2
+		AND OP_Position.OK
+		THEN
+				OP_Balayage.Etape.3:=TRUE;
+				OP_Balayage.Etape.2:=FALSE;
+(* Etape 2 -> Etape 12 *)
+ELSIF 	OP_Balayage.Etape.2
+		AND (AXE_Move.Error OR AXE_Move_Abs.Error)
+		THEN
+				OP_Balayage.Etape.12:=TRUE;
+				OP_Balayage.Etape.2:=FALSE;
+(* Etape 3 -> Etape 7 *)
+ELSIF 	OP_Balayage.Etape.3
+		THEN
+				OP_Balayage.Etape.7:=TRUE;
+				OP_Balayage.Etape.3:=FALSE;
+(* Etape 7 -> Etape 8 *)
+ELSIF 	OP_Balayage.Etape.7 AND VAR_Ctrl_Cons_ok2
+		THEN
+				OP_Balayage.Etape.8:=TRUE;
+				OP_Balayage.Etape.7:=FALSE;
+(* Etape 7 -> Etape 26 *)
+ELSIF 	OP_Balayage.Etape.7 AND NOT VAR_Ctrl_Cons_ok2
+		THEN
+				OP_Balayage.Etape.26:=TRUE;
+				OP_Balayage.Etape.7:=FALSE;
+(* Etape 8 -> Etape 17 *)
+ELSIF 	OP_Balayage.Etape.8
+		AND ((AXE_Move.Done AND NOT VAR_Move_Abs)
+			OR (AXE_Move_Abs.Done AND VAR_Move_Abs))
+		THEN
+				OP_Balayage.Etape.17:=TRUE;
+				OP_Balayage.Etape.8:=FALSE;
+(* Etape 8 -> Etape 10 *)
+ELSIF 	OP_Balayage.Etape.8
+		AND (AXE_Move.Error OR AXE_Move_Abs.Error)
+		THEN
+				OP_Balayage.Etape.10:=TRUE;
+				OP_Balayage.Etape.8:=FALSE;
+(* Etape 17 -> Etape 9 *)
+ELSIF 	OP_Balayage.Etape.17
+		THEN
+				OP_Balayage.Etape.9:=TRUE;
+				OP_Balayage.Etape.17:=FALSE;
+(* Etape 9 -> Etape 11 *)
+ELSIF 	OP_Balayage.Etape.9 AND VAR_Ctrl_Cons_ok2
+		THEN
+				OP_Balayage.Etape.11:=TRUE;
+				OP_Balayage.Etape.9:=FALSE;
+(* Etape 9 -> Etape 26 *)
+ELSIF 	OP_Balayage.Etape.9 AND NOT VAR_Ctrl_Cons_ok2
+		THEN
+				OP_Balayage.Etape.26:=TRUE;
+				OP_Balayage.Etape.9:=FALSE;
+(* Etape 11 -> Etape 12 *)
+ELSIF 	OP_Balayage.Etape.11
+		AND ((AXE_Move.Done AND NOT VAR_Move_Abs)
+			OR (AXE_Move_Abs.Done AND VAR_Move_Abs))
+		THEN
+				OP_Balayage.Etape.12:=TRUE;
+				OP_Balayage.Etape.11:=FALSE;
+(* Etape 11 -> Etape 16 *)
+ELSIF 	OP_Balayage.Etape.11
+		AND (AXE_Move.Error OR AXE_Move_Abs.Error)
+		THEN
+				OP_Balayage.Etape.16:=TRUE;
+				OP_Balayage.Etape.11:=FALSE;
+(* Etape 12 -> Etape 13 *)
+ELSIF 	OP_Balayage.Etape.12
+		THEN
+				OP_Balayage.Etape.13:=TRUE;
+				OP_Balayage.Etape.12:=FALSE;
+(* Etape 13 -> Etape 14 *)
+ELSIF 	OP_Balayage.Etape.13
+		AND (STATE_NBal >= PRM_N_Bal) AND (PRM_N_Bal > 0)
+		THEN
+				OP_Balayage.Etape.14:=TRUE;
+				OP_Balayage.Etape.13:=FALSE;
+(* Etape 13 -> Etape 7 *)
+ELSIF 	OP_Balayage.Etape.13
+		AND ((STATE_NBal < PRM_N_Bal) OR (PRM_N_Bal = 0))
+		THEN
+				OP_Balayage.Etape.7:=TRUE;
+				OP_Balayage.Etape.13:=FALSE;
+(* Etape 10, Etape 16 -> Etape 14 *)
+ELSIF 	OP_Balayage.Etape.16 OR OP_Balayage.Etape.10
+		THEN
+				OP_Balayage.Etape.14:=TRUE;
+				OP_Balayage.Etape.16:=FALSE;
+				OP_Balayage.Etape.10:=FALSE;
+(* Etape 14 -> Etape 0 *)
+ELSIF 	OP_Balayage.Etape.14
+		THEN
+				OP_Balayage.Etape.0:=TRUE;
+				OP_Balayage.Etape.14:=FALSE;
+END_IF
+
+(*cloture du traitement de l'opération*)
+OP_Balayage.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_COMPTAGE" Id="{d085f59b-8d4d-40c1-8d32-c683803c2381}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET DE COMPTAGE*)
+(*traitement des FM*)
+FM_I_Ref(CLK:=IN_REF);
+FD_I_Ref(CLK:=IN_REF);
+FM_Etape0_count(CLK:=VAR_etape_count.0);
+
+(* initialisation du grafcet*)
+IF 		VAR_etape_count = 0
+		THEN
+				VAR_etape_count.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	NOT CO_CCount OR CO_CReset
+		THEN
+				VAR_etape_count := 0;			(*RAZ grafcet*)
+				VAR_etape_count.0:= TRUE;
+(*étape 0-1*)
+ELSIF 	VAR_etape_count.0
+		AND CO_CCount AND NOT VAR_Mem_Count_Inter
+		THEN
+				VAR_etape_count.1:= TRUE;
+				VAR_etape_count.0:= FALSE;
+(*étape 0-2*)
+ELSIF 	VAR_etape_count.0
+		AND CO_CCount AND VAR_Mem_Count_Inter
+		THEN
+				VAR_etape_count.2:= TRUE;
+				VAR_etape_count.0:= FALSE;
+(*étape 2-3*)
+ELSIF 	VAR_etape_count.2
+		AND (LREAL_TO_UINT(AXE.NcToPlc.ModuloActPos) = VAR_Mem_Pos_Inter)
+		THEN
+				VAR_etape_count.3:= TRUE;
+				VAR_etape_count.2:= FALSE;
+(*étape 3-4*)
+ELSIF 	VAR_etape_count.3
+		THEN
+				VAR_etape_count.4:= TRUE;
+				VAR_etape_count.3:= FALSE;
+(*étape 1-4*)
+ELSIF 	VAR_etape_count.1 AND FD_I_REF.Q
+		THEN
+				VAR_etape_count.4:= TRUE;
+				VAR_etape_count.1:= FALSE;
+END_IF;
+
+(*Traitement en sortie*)
+IF FM_etape0_count.Q AND NOT CO_CReset THEN
+	VAR_Mem_Pos_Inter := LREAL_TO_USINT(AXE.NcToPlc.ModuloActPos);
+	VAR_MEM_Count_inter:=TRUE;
+END_IF
+
+IF CO_CReset THEN
+	VAR_Mem_Count_Inter := FALSE;
+	STATE_NTurn	:=	0;
+END_IF;
+IF  FM_I_REF.Q AND VAR_etape_count.4  THEN
+	STATE_NTurn	:= STATE_NTurn + 1;
+END_IF;
+STATE_SYNC:= (VAR_etape_count.1AND IN_REF)  OR VAR_etape_count.3;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_JOG" Id="{cdd881af-8afe-4f98-a5bd-fea33777ce63}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION mise ne mode JOG*)
+(* Gestion du mode JOG*)
+
+(*initialisation de l'opération*)
+OP_Jog(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=3,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Jog.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Jog.Etape = 0
+		THEN
+				OP_Jog.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	NOT ((IN_JOG_P OR IN_JOG_M) AND EN_JOG)
+		THEN
+				OP_Jog.Etape := 0;			(*RAZ grafcet*)
+				OP_Jog.Etape.0 := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Jog.Etape.0
+		AND ((IN_JOG_P OR IN_JOG_M) AND EN_JOG) AND (OP_Position.etape.0 OR OP_Position.Etape.10 ) AND
+		(OP_Stop.ar OR OP_Stop.ok) AND OP_Rotation.Etape.0 AND NOT CO_Valid_Slave
+		THEN
+				OP_Jog.Etape.1:=TRUE;
+				OP_Jog.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Jog.Etape.1
+		AND OP_Position.Etape.0 AND OP_Stop.Etape.0
+		THEN
+				OP_Jog.Etape.2:=TRUE;
+				OP_Jog.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Jog.Etape.2
+		AND OP_Validation.OK
+		THEN
+				OP_Jog.Etape.3:=TRUE;
+				OP_Jog.Etape.2:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Jog.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_POSITION" Id="{038bcc5f-b9ef-4ae9-b6f8-e3d586fb2a6c}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION POSITIONNEMENT*)
+(* Mise à une position donnée de l'axe*)
+
+(*initialisation de l'opération*)
+OP_Position(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=(DOOR OR I_Door_Safety_OFF) AND OP_Rotation.Etape.0 AND OP_Jog.Etape.0 AND OP_Balayage.Etape.0
+					AND NOT CO_Valid_Slave,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=10,
+	N_STEP_OP_NOK:=15);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Position.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Position.Etape = 0
+		THEN
+				OP_Position.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	RESET OR OP_Stop.ETAPE.1 OR OP_Jog.Etape.1 OR OP_rotation.Etape.1 OR OP_Balayage.Etape.1 OR OP_Balayage.Etape.3 OR CO_Valid_Slave
+		THEN
+				OP_Position.Etape := 0;			(*RAZ grafcet*)
+				OP_Position.Etape.0  := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Position.Etape.0
+		AND (OP_Position.MARCHE_OP OR OP_Balayage.Etape.2)
+		THEN
+				OP_Position.Etape.1:=TRUE;
+				OP_Position.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Position.Etape.1
+		AND OP_Rotation.Etape.0 AND OP_Stop.Etape.0 AND (OP_Balayage.Etape.0 OR OP_Balayage.Etape.2)
+		THEN
+				OP_Position.Etape.2:=TRUE;
+				OP_Position.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Position.Etape.2
+		AND VAR_Ctrl_Cons_ok AND VAR_Ctrl_Cons_ok2
+		THEN
+				OP_Position.Etape.3:=TRUE;
+				OP_Position.Etape.2:=FALSE;
+(*étape 2-7*)
+ELSIF 	OP_Position.Etape.2
+		AND  (NOT VAR_Ctrl_Cons_ok OR NOT VAR_Ctrl_Cons_ok2)
+		THEN
+				OP_Position.Etape.7:=TRUE;
+				OP_Position.Etape.2:=FALSE;
+(*étape 3-16*)
+ELSIF	OP_Position.Etape.3
+		AND OP_Validation.OK
+		THEN
+				OP_Position.Etape.16:=TRUE;
+				OP_Position.Etape.3:=FALSE;
+(*étape 16-4*)
+ELSIF	OP_Position.Etape.16
+		AND (OP_Start_Slave.OK OR NOT PRM_Master)
+		THEN
+				OP_Position.Etape.4:=TRUE;
+				OP_Position.Etape.16:=FALSE;
+(*étape 3-15*)
+ELSIF	OP_Position.Etape.3
+		AND OP_Validation.NOK
+		THEN
+				OP_Position.Etape.15:=TRUE;
+				OP_Position.Etape.3:=FALSE;
+
+(*étape 4-27 ==> demande de dévalidation si besoin de prise d'origine*)
+(*remarque : un not conf_abs a forcément conf_no_ref à 0, et un conf_abs avec conf_no_ref ne doit jamais tenter une PO (ex: robot)
+remarque 2 : le axe.status.homed ne doit pas etre utilisé pour un moteur absolu, car on peut etre bien référencé niveau drive, et la tache peut avoir ce bit à 0 : ueless*)
+ELSIF OP_Position.Etape.4
+		AND	(
+					(NOT CONF_Abs AND NOT AXE.Status.Homed)						(*axe non absolu non référencé*)
+				OR	(NOT CONF_Abs AND AXE.Status.Homed AND PRM_GoToHome)		(*axe non absolu référencé mais forcée par utilisateur*)
+				OR	(CONF_Abs AND NOT CONF_No_Ref AND (NOT STATE_Home_Done OR NOT STATE_Charg_Persistentes_Ok))	(*axe absolu, avec capteur PO, mais pas flagé homé d'avant ou pas bon chargment des variables persistentes*)
+				OR (CONF_Abs AND NOT CONF_No_Ref AND STATE_Home_Done AND PRM_GoToHome)	(*axe absolu, avec capteur PO, flagé homé d'avant, mais forçage par user*)
+				)
+		THEN
+				OP_Position.Etape.27 := TRUE;
+				OP_Position.Etape.4 := FALSE;
+
+(*étape 27- 28 ==> effacement du position bias une fois dévalidé*)
+ELSIF OP_Position.Etape.27
+		AND OP_Validation.AR
+		THEN
+				OP_Position.Etape.28 := TRUE;
+				OP_Position.Etape.27 := FALSE;
+
+(*étape 28 - 29 ==>revalidation une fois le position bias effacé*)
+ELSIF OP_Position.Etape.28
+		AND NOT VAR_Bias4
+		THEN
+				OP_Position.Etape.29 := TRUE;
+				OP_Position.Etape.28 := FALSE;
+
+(*étape 29-30 ==> fin de la prise d'origine une fois la revalidation effectuée, avec mise à 0 de la position axe pour cas de reprise de prise d'origine*)
+ELSIF OP_Position.Etape.29
+		AND OP_Validation.OK
+		THEN
+				OP_Position.Etape.30 := TRUE;
+				OP_Position.Etape.29 := FALSE;
+(*étape 30-5 ==> debut effective du homing après raz du retour de position axe*)
+ELSIF OP_Position.Etape.30
+		AND AXE_Zero.Done
+		THEN
+				OP_Position.Etape.5 := TRUE;
+				OP_Position.Etape.30 := FALSE;
+
+(*étape 4-6 ==> pas de prise d'origine nécessaire, exact contraire de la transition 4-27*)
+ELSIF	OP_Position.Etape.4
+		AND	(
+				NOT	(
+							(NOT CONF_Abs AND NOT AXE.Status.Homed)						(*axe non absolu non référencé*)
+							OR	(NOT CONF_Abs AND AXE.Status.Homed AND PRM_GoToHome)		(*axe non absolu référencé mais forcée par utilisateur*)
+							OR	(CONF_Abs AND NOT CONF_No_Ref AND (NOT STATE_Home_Done OR NOT STATE_Charg_Persistentes_Ok))	(*axe absolu, avec capteur PO, mais pas flagé homé d'avant ou pas bon chargment des variables persistentes*)
+							OR (CONF_Abs AND NOT CONF_No_Ref AND STATE_Home_Done AND PRM_GoToHome)	(*axe absolu, avec capteur PO, flagé homé d'avant, mais forçage par user*)
+						)
+				)
+		THEN
+				OP_Position.Etape.6:=TRUE;
+				OP_Position.Etape.4:=FALSE;
+(*étape 4-18*)
+ELSIF	OP_Position.Etape.4 AND AXE.Status.Error
+		THEN
+				OP_Position.Etape.18:=TRUE;
+				OP_Position.Etape.4:=FALSE;
+
+(*étape 5-6, suite du mouvement pour un moteur non absolu*)
+ELSIF	OP_Position.Etape.5
+		AND AXE_Home.Done
+		AND AXE.Status.Homed
+		AND NOT CONF_Abs
+		THEN
+				OP_Position.Etape.6:=TRUE;
+				OP_Position.Etape.5:=FALSE;
+
+(*étape 5-20, pour un moteur absolu, passage par les étapes de MaJ du position bias*)
+ELSIF	OP_Position.Etape.5
+		AND AXE_Home.Done
+		AND AXE.Status.Homed			(*pas sur que ce soit nécessaire dans le cas d'un moteur absolu*)
+		AND CONF_Abs
+		THEN
+				OP_Position.Etape.20:=TRUE;
+				OP_Position.Etape.5:=FALSE;
+
+(*étape 20-19*)
+ELSIF	OP_Position.Etape.20
+		AND OP_Validation.AR
+		THEN
+				OP_Position.Etape.19:=TRUE;
+				OP_Position.Etape.20:=FALSE;
+
+(*étape 19-21*)
+ELSIF	OP_Position.Etape.19
+		AND AXE_Zero.Done
+		THEN
+				OP_Position.Etape.21:=TRUE;
+				OP_Position.Etape.19:=FALSE;
+
+(*étape 21-22*)
+ELSIF	OP_Position.Etape.21 AND NOT VAR_Bias3 THEN
+				OP_Position.Etape.22:=TRUE;
+				OP_Position.Etape.21:=FALSE;
+				VAR_Mem_Need_Ref	:= FALSE;
+(*étape 22-6*)
+ELSIF	OP_Position.Etape.22 AND OP_Validation.OK THEN
+				OP_Position.Etape.6:=TRUE;
+				OP_Position.Etape.22:=FALSE;
+(*étape 5-11*)
+ELSIF	OP_Position.Etape.5
+		AND AXE_Home.Error THEN
+				OP_Position.Etape.11:=TRUE;
+				OP_Position.Etape.5:=FALSE;
+(*étape 6-8*)
+ELSIF	OP_Position.Etape.6
+		AND (NOT CONF_Rattrapage OR (CONF_Rattrapage AND NOT VAR_Rattrapage))
+		THEN
+				OP_Position.Etape.8:=TRUE;
+				OP_Position.Etape.6:=FALSE;
+(*étape 6-23*)
+ELSIF	OP_Position.Etape.6
+		AND CONF_Rattrapage AND VAR_Rattrapage
+		THEN
+				OP_Position.Etape.23:=TRUE;
+				OP_Position.Etape.6:=FALSE;
+(*étape 23-24*)
+ELSIF	OP_Position.Etape.23
+		AND ((AXE_Move.Done AND NOT VAR_Move_Abs)
+			OR (AXE_Move_Abs.Done AND VAR_Move_Abs))
+		THEN
+				OP_Position.Etape.24:=TRUE;
+				OP_Position.Etape.23:=FALSE;
+(*étape 24-25*)
+ELSIF	OP_Position.Etape.24
+		THEN
+				OP_Position.Etape.25:=TRUE;
+				OP_Position.Etape.24:=FALSE;
+(*étape 25-26*)
+ELSIF	OP_Position.Etape.25
+		AND ((AXE_Move.Done AND NOT VAR_Move_Abs)
+			OR (AXE_Move_Abs.Done AND VAR_Move_Abs))
+		THEN
+				OP_Position.Etape.26:=TRUE;
+				OP_Position.Etape.25:=FALSE;
+(*étape 26-17*)
+ELSIF	OP_Position.Etape.26
+		THEN
+				OP_Position.Etape.17:=TRUE;
+				OP_Position.Etape.26:=FALSE;
+(*étape 7-15*)
+ELSIF	OP_Position.Etape.7
+		THEN
+				OP_Position.Etape.15:=TRUE;
+				OP_Position.Etape.7:=FALSE;
+(*étape 8-17*)
+ELSIF	OP_Position.Etape.8
+		AND ((AXE_Move.Done AND NOT VAR_Move_Abs)
+			OR (AXE_Move_Abs.Done AND VAR_Move_Abs))
+		THEN
+				OP_Position.Etape.17:=TRUE;
+				OP_Position.Etape.8:=FALSE;
+(*étape 17-9*)
+ELSIF	OP_Position.Etape.17
+		AND (OP_Stop_Slave.OK OR NOT VAR_Mem_Master)
+		THEN
+				OP_Position.Etape.9:=TRUE;
+				OP_Position.Etape.17:=FALSE;
+(*étape 8-12*)
+ELSIF	OP_Position.Etape.8
+		AND (AXE_Move.Error OR AXE_Move_Abs.Error)
+		THEN
+				OP_Position.Etape.12:=TRUE;
+				OP_Position.Etape.8:=FALSE;
+(*étape 8-18*)
+ELSIF	OP_Position.Etape.8
+		AND AXE.Status.Error
+		THEN
+				OP_Position.Etape.18:=TRUE;
+				OP_Position.Etape.8:=FALSE;
+(*étape 9-10*)
+ELSIF	OP_Position.Etape.9
+		AND (OP_Validation.Etape.0 OR (CONF_Disable <> 2))
+		THEN
+				OP_Position.Etape.10:=TRUE;
+				OP_Position.Etape.9:=FALSE;
+(*étape 10-2*)
+ELSIF	OP_Position.Etape.10
+		AND OP_Position.MARCHE_OP
+		THEN
+				OP_Position.Etape.2:=TRUE;
+				OP_Position.Etape.10:=FALSE;
+(*étape 10-0*)
+ELSIF	OP_Position.Etape.10
+		AND OP_Validation.AR
+		THEN
+				OP_Position.Etape.0:=TRUE;
+				OP_Position.Etape.10:=FALSE;
+(*étape 11-18*)
+ELSIF	OP_Position.Etape.11
+		THEN
+				OP_Position.Etape.18:=TRUE;
+				OP_Position.Etape.11:=FALSE;
+(*étape 18-15*)
+ELSIF	OP_Position.Etape.18
+		AND (OP_Stop_Slave.OK OR NOT VAR_Mem_Master)
+		THEN
+				OP_Position.Etape.15:=TRUE;
+				OP_Position.Etape.18:=FALSE;
+(*étape 12-18*)
+ELSIF	OP_Position.Etape.12
+		THEN
+				OP_Position.Etape.18:=TRUE;
+				OP_Position.Etape.12:=FALSE;
+(*étape 15-0*)
+ELSIF	OP_Position.Etape.15
+		THEN
+				OP_Position.Etape.0:=TRUE;
+				OP_Position.Etape.15:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Position.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_ROTATION" Id="{7759ab4b-142f-493a-9eb9-66d4249538bc}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION rotation*)
+(* Rotation continue du porte substrat*)
+
+(*initialisation de l'opération*)
+OP_Rotation(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=(DOOR OR I_Door_Safety_OFF) AND (OP_Position.AR OR OP_Position.OK ) AND OP_Balayage.AR AND OP_Jog.Etape.0 AND NOT CO_Valid_Slave,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=5,
+	N_STEP_OP_NOK:=7);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Rotation.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Rotation.Etape = 0
+		THEN
+				OP_Rotation.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	RESET OR OP_Stop.ETAPE.1 OR AXE.Status.Error
+		THEN
+				OP_Rotation.Etape := 0;			(*RAZ grafcet*)
+				OP_Rotation.Etape.0  := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Rotation.Etape.0
+		AND OP_Rotation.MARCHE_OP
+		THEN
+				OP_Rotation.Etape.1:=TRUE;
+				OP_Rotation.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Rotation.Etape.1
+		AND OP_Position.Etape.0  AND OP_Stop.Etape.0
+		THEN
+				OP_Rotation.Etape.2:=TRUE;
+				OP_Rotation.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Rotation.Etape.2
+		THEN
+				OP_Rotation.Etape.3:=TRUE;
+				OP_Rotation.Etape.2:=FALSE;
+(*étape 3-8*)
+ELSIF	OP_Rotation.Etape.3
+		AND OP_Validation.OK
+		THEN
+				OP_Rotation.Etape.8:=TRUE;
+				OP_Rotation.Etape.3:=FALSE;
+(*étape 8-4*)
+ELSIF	OP_Rotation.Etape.8
+		AND (OP_Start_Slave.OK OR NOT PRM_Master)
+		THEN
+				OP_Rotation.Etape.4:=TRUE;
+				OP_Rotation.Etape.8:=FALSE;
+(*étape 3-7*)
+ELSIF	OP_Rotation.Etape.3
+		AND OP_Validation.NOK
+		THEN
+				OP_Rotation.Etape.3:=TRUE;
+				OP_Rotation.Etape.7:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Rotation.Etape.4
+		AND AXE_Velocity.InVelocity
+		THEN
+				OP_Rotation.Etape.5:=TRUE;
+				OP_Rotation.Etape.4:=FALSE;
+(*étape 4-6*)
+ELSIF	OP_Rotation.Etape.4
+		AND AXE_Velocity.Error
+		THEN
+				OP_Rotation.Etape.6:=TRUE;
+				OP_Rotation.Etape.4:=FALSE;
+(*étape 5-2*)
+ELSIF	OP_Rotation.Etape.5
+		AND  (OP_Rotation.MARCHE_OP OR CO_Modif)
+		THEN
+				OP_Rotation.Etape.2:=TRUE;
+				OP_Rotation.Etape.5:=FALSE;
+(*étape 6-9*)
+ELSIF	OP_Rotation.Etape.6
+		THEN
+				OP_Rotation.Etape.9:=TRUE;
+				OP_Rotation.Etape.6:=FALSE;
+(*étape 9-7*)
+ELSIF	OP_Rotation.Etape.9
+		AND (OP_Stop_Slave.OK OR NOT VAR_Mem_Master)
+		THEN
+				OP_Rotation.Etape.7:=TRUE;
+				OP_Rotation.Etape.9:=FALSE;
+(*étape 7-0*)
+ELSIF	OP_Rotation.Etape.7
+		THEN
+				OP_Rotation.Etape.0:=TRUE;
+				OP_Rotation.Etape.7:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Rotation.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_START_SLAVE" Id="{4d4ac81c-4d13-4c81-879c-368894af5718}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION mise en esclavage*)
+
+(*initialisation de l'opération*)
+OP_Start_Slave(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=4,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Start_Slave.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Start_Slave.Etape = 0
+		THEN
+				OP_Start_Slave.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	OP_Stop_Slave.Etape.1
+		THEN
+				OP_Start_Slave.Etape := 0;			(*RAZ grafcet*)
+				OP_Start_Slave.Etape.0 := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Start_Slave.Etape.0 AND PRM_Master
+		AND (OP_Position.Etape.16 OR OP_Rotation.Etape.18 OR (OP_Validation.Etape.8 AND CO_Valid_Slave))
+		THEN
+				OP_Start_Slave.Etape.1:=TRUE;
+				OP_Start_Slave.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_Start_Slave.Etape.1 AND OP_Stop_Slave.Etape.0
+		THEN
+				OP_Start_Slave.Etape.2:=TRUE;
+				OP_Start_Slave.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Start_Slave.Etape.2 AND I_Valid_Slave_ok
+		THEN
+				OP_Start_Slave.Etape.3:=TRUE;
+				OP_Start_Slave.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Start_Slave.Etape.3 AND AXE_Esclave.InGear AND Slave_Axis.Status.Coupled
+		THEN
+				OP_Start_Slave.Etape.4:=TRUE;
+				OP_Start_Slave.Etape.3:=FALSE;
+END_IF
+(*cloture du traitement de l'opération*)
+OP_Start_Slave.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{4ea0b941-2945-4693-86f4-362fcbdf3e35}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION arrêt mouvement*)
+(* Arrêt des mouvement de l'axe*)
+
+(*initialisation de l'opération*)
+OP_Stop(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=  OP_jog.Etape.0 AND NOT CO_Valid_Slave ,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=DEF_Interlock.APP OR DEF_Reset.APP,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=4,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Stop.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Stop.Etape = 0
+		THEN
+				OP_Stop.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	OP_Position.Etape.1 OR OP_Rotation.Etape.1 OR OP_jog.Etape.1 OR OP_Balayage.Etape.1 OR RESET OR CO_Valid_Slave
+		THEN
+				OP_Stop.Etape := 0;			(*RAZ grafcet*)
+				OP_Stop.Etape.0 := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Stop.Etape.0
+		AND (OP_Stop.MARCHE_OP OR FD_Manual.Q)
+		THEN
+				OP_Stop.Etape.1:=TRUE;
+				OP_Stop.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Stop.Etape.1
+		AND OP_Position.Etape.0 AND OP_Rotation.Etape.0 AND OP_Balayage.Etape.0
+		THEN
+				OP_Stop.Etape.2:=TRUE;
+				OP_Stop.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Stop.Etape.2
+		AND (AXE_Halt.Done OR NOT AXE_Power.Enable)
+		THEN
+				OP_Stop.Etape.3:=TRUE;
+				OP_Stop.Etape.2:=FALSE;
+(*étape 3-5*)
+ELSIF	OP_Stop.Etape.3
+		AND TIMER_Etape3_Stop.Q
+		THEN
+				OP_Stop.Etape.5:=TRUE;
+				OP_Stop.Etape.3:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_Stop.Etape.5
+		AND (OP_Stop_Slave.OK OR (NOT VAR_Mem_Master AND NOT OP_Stop_Slave.EC))
+		THEN
+				OP_Stop.Etape.6:=TRUE;
+				OP_Stop.Etape.5:=FALSE;
+(*étape 6-4*)
+ELSIF	OP_Stop.Etape.6
+		AND ((OP_Validation.AR AND NOT I_Valid_Slave_ok) OR (CONF_Disable = 0))
+		THEN
+				OP_Stop.Etape.4:=TRUE;
+				OP_Stop.Etape.6:=FALSE;
+(*étape 4-1*)
+ELSIF	OP_Stop.Etape.4
+		AND (OP_Stop.MARCHE_OP OR FD_Manual.Q)
+		THEN
+				OP_Stop.Etape.1:=TRUE;
+				OP_Stop.Etape.4:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Stop.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP_SLAVE" Id="{8603658f-f56d-4a48-982c-f4675ce1c8ea}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION libération esclavage*)
+
+(*initialisation de l'opération*)
+OP_Stop_Slave(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=5,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Stop_Slave.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Stop_Slave.Etape = 0
+		THEN
+				OP_Stop_Slave.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	OP_Start_Slave.Etape.1
+		THEN
+				OP_Stop_Slave.Etape := 0;			(*RAZ grafcet*)
+				OP_Stop_Slave.Etape.0 := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Stop_Slave.Etape.0 AND VAR_Mem_Master
+		AND (OP_Position.Etape.17 OR OP_Position.Etape.18 OR OP_Rotation.Etape.9
+			OR OP_Stop.Etape.5 OR OP_Validation.Etape.9 OR OP_Validation.Etape.11)
+		THEN
+				OP_Stop_Slave.Etape.1:=TRUE;
+				OP_Stop_Slave.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_Stop_Slave.Etape.1 AND OP_Start_Slave.Etape.0
+		THEN
+				OP_Stop_Slave.Etape.2:=TRUE;
+				OP_Stop_Slave.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Stop_Slave.Etape.2 AND AXE_Liberation.Done AND NOT Slave_Axis.Status.Coupled
+		THEN
+				OP_Stop_Slave.Etape.3:=TRUE;
+				OP_Stop_Slave.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Stop_Slave.Etape.3
+		THEN
+				OP_Stop_Slave.Etape.4:=TRUE;
+				OP_Stop_Slave.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Stop_Slave.Etape.4
+		THEN
+				OP_Stop_Slave.Etape.5:=TRUE;
+				OP_Stop_Slave.Etape.4:=FALSE;
+END_IF
+(*cloture du traitement de l'opération*)
+OP_Stop_Slave.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_VALIDATION" Id="{c6f26dea-dd80-4a7b-a5a1-13b4aa73eb26}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION Validation*)
+(* Acquittement des défauts et validation de l'axe*)
+
+(*initialisation de l'opération*)
+OP_Validation(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=(DOOR OR I_Door_Safety_OFF) AND NOT CO_Valid_Slave,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=3,
+	N_STEP_OP_NOK:=5);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Validation.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Validation.Etape = 0
+		THEN
+				OP_Validation.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	RESET OR DEF_Reset.DEF
+		OR (NOT DOOR AND NOT I_Door_Safety_OFF AND NOT IN_JOG_M AND NOT IN_JOG_P)
+		OR ((CONF_Disable = 2) AND (OP_Stop.Etape.3 OR OP_Position.Etape.9 OR OP_Position.Etape.15))
+		OR (OP_Stop.Etape.6 AND (CONF_DISABLE <> 0))
+		OR ((CO_Devalid OR CO_Devalid_Slave)
+			AND (OP_Position.AR AND OP_Rotation.AR AND OP_Balayage.AR AND OP_Jog.AR AND NOT VAR_Mem_Master AND NOT CO_Valid_Slave))
+		OR (FD_Valid_Slave.Q AND NOT VAR_Mem_Master AND (CONF_Disable = 2))
+		OR OP_Position.Etape.20
+		OR OP_Position.Etape.27
+		THEN
+				OP_validation.Etape := 0;			(*RAZ grafcet*)
+				OP_validation.Etape.0 := TRUE;
+(*étape 0-10*)
+ELSIF 	OP_Validation.Etape.0
+		AND(	OP_Validation.MARCHE_OP
+				OR OP_Position.Etape.3
+				OR OP_Position.Etape.22
+				OR OP_Rotation.Etape.3
+				OR OP_Jog.Etape.2
+				OR CO_Valid_Slave
+				OR OP_Position.Etape.29
+			)
+		THEN
+				OP_Validation.Etape.10:=TRUE;
+				OP_Validation.Etape.0:=FALSE;
+(*étape 10-1*)
+ELSIF	OP_Validation.Etape.10
+		AND VAR_Reset_Error_Mat_Ok
+		THEN
+				OP_Validation.Etape.1:=TRUE;
+				OP_Validation.Etape.10:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Validation.Etape.1
+		AND AXE_Reset.Done AND NOT AXE_Reset.Error
+		THEN
+				OP_Validation.Etape.2:=TRUE;
+				OP_Validation.Etape.1:=FALSE;
+(*étape 1-6*)
+ELSIF	OP_Validation.Etape.1AND AXE_Reset.Error
+		THEN
+				OP_Validation.Etape.6:=TRUE;
+				OP_Validation.Etape.1:=FALSE;
+(*étape 6-5*)
+ELSIF	OP_Validation.Etape.6
+		THEN
+				OP_Validation.Etape.5:=TRUE;
+				OP_Validation.Etape.6:=FALSE;
+(*étape 2-8*)
+ELSIF 	OP_Validation.Etape.2 	AND AXE_Power.Status
+		THEN
+				OP_Validation.Etape.8:=TRUE;
+				OP_Validation.Etape.2:=FALSE;
+(*étape 8-3*)
+ELSIF	OP_Validation.Etape.8
+		AND (OP_Start_Slave.OK OR NOT (CO_Valid_Slave AND PRM_Master))
+		THEN
+				OP_Validation.Etape.3:=TRUE;
+				OP_Validation.Etape.8:=FALSE;
+(*étape 2-4*)
+ELSIF 	OP_Validation.Etape.2
+		AND  AXE_Power.Error
+		THEN
+				OP_Validation.Etape.4:=TRUE;
+				OP_Validation.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Validation.Etape.3
+		AND NOT AXE_Power.Status AND NOT VAR_Mem_Master
+		THEN
+				OP_Validation.Etape.4:=TRUE;
+				OP_Validation.Etape.3:=FALSE;
+(*étape 3-11*)
+ELSIF	OP_Validation.Etape.3
+		AND NOT AXE_Power.Status AND VAR_Mem_Master
+		THEN
+				OP_Validation.Etape.11:=TRUE;
+				OP_Validation.Etape.3:=FALSE;
+(*étape 11-0*)
+ELSIF	OP_Validation.Etape.11
+		AND OP_Stop_Slave.OK
+		THEN
+				OP_Validation.Etape.0:=TRUE;
+				OP_Validation.Etape.11:=FALSE;
+(*étape 3-1*)
+(*ELSIF	OP_Validation.Etape.3
+		AND (OP_Validation.MARCHE_OP OR OP_Position.Etape.3 OR OP_Rotation.Etape.3 OR OP_Jog.Etape.2)
+		THEN
+				OP_Validation.Etape.1:=TRUE;
+				OP_Validation.Etape.3:=FALSE;*)
+(*étape 3-8*)
+ELSIF	OP_Validation.Etape.3
+		AND FP_Valid_Slave.Q AND PRM_Master
+		THEN
+				OP_Validation.Etape.8:=TRUE;
+				OP_Validation.Etape.3:=FALSE;
+(*étape 3-9*)
+ELSIF	OP_Validation.Etape.3
+		AND ((FD_Valid_Slave.Q AND VAR_Mem_Master)
+			OR (CO_Devalid AND OP_Position.AR AND OP_Rotation.AR AND OP_Balayage.AR
+				AND OP_Jog.AR AND VAR_Mem_Master AND NOT CO_Valid_Slave))
+		THEN
+				OP_Validation.Etape.9:=TRUE;
+				OP_Validation.Etape.3:=FALSE;
+(*étape 9-3*)
+ELSIF	OP_Validation.Etape.9
+		AND (OP_Stop_Slave.OK OR (NOT VAR_Mem_Master AND NOT OP_Stop_Slave.EC))
+		AND (CONF_Disable <> 2)
+		THEN
+				OP_Validation.Etape.3:=TRUE;
+				OP_Validation.Etape.9:=FALSE;
+(*étape 9-0*)
+ELSIF	OP_Validation.Etape.9
+		AND (OP_Stop_Slave.OK OR (NOT VAR_Mem_Master AND NOT OP_Stop_Slave.EC))
+		AND (CONF_Disable = 2)
+		THEN
+				OP_Validation.Etape.0:=TRUE;
+				OP_Validation.Etape.9:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Validation.Etape.4
+		THEN
+				OP_Validation.Etape.5:=TRUE;
+				OP_Validation.Etape.4:=FALSE;
+(*étape 5-0*)
+ELSIF	OP_Validation.Etape.5
+		THEN
+				OP_Validation.Etape.0:=TRUE;
+				OP_Validation.Etape.5:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Validation.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{ca54c25a-f8a4-455b-8e4f-b2631662cd8b}">
+      <Implementation>
+        <ST><![CDATA[(*Gestion des mémorisations*)
+IF OP_Stop_Slave.Etape.4 THEN
+	VAR_Mem_Master	:=	FALSE;
+ELSIF OP_Start_Slave.Etape.1 THEN
+	VAR_Mem_Master	:=	TRUE;
+END_IF
+
+(*Gestion type de mouvement absolu/relatif*)
+VAR_Move_Abs	:=	CONF_Mvt_Lineaire OR (NOT CONF_Mvt_Lineaire AND NOT CONF_Deploiement);
+
+(*Gestion front montant positionnement*)
+FM_Pos(clk:=OP_Position.Etape.8 OR OP_Position.Etape.23 OR OP_Position.Etape.25
+			OR OP_Balayage.Etape.8 OR OP_Balayage.Etape.11);
+IF FM_Pos.Q AND NOT VAR_Move_Abs THEN
+	VAR_Mem_Pos := TRUE;
+ELSIF FM_Pos.Q AND VAR_Move_Abs THEN
+	VAR_Mem_Pos_Abs := TRUE;
+ELSIF NOT OP_Position.Etape.8 AND NOT AXE_Move.Busy AND NOT VAR_Move_Abs THEN
+	VAR_Mem_Pos := FALSE;
+ELSIF NOT OP_Position.Etape.8 AND NOT AXE_Move_Abs.Busy AND VAR_Move_Abs THEN
+	VAR_Mem_Pos_Abs := FALSE;
+END_IF
+
+
+(*Sortie limite couple*)
+OUT_Limit_Torque	:=	REAL_TO_UINT(CONF_Max_Torque) * 10;
+
+
+(*GESTION CHANGEMENT REDUCTION*)
+FM_CO_PRM_PS(CLK := CO_PRM_PS);
+IF  PRM_Sel_PS AND FM_CO_PRM_PS.Q THEN
+	AXE_WriteParameter.Value := CONF_Sel_PS1;
+END_IF;
+IF NOT PRM_Sel_PS AND FM_CO_PRM_PS.Q THEN
+	AXE_WriteParameter.Value := CONF_Sel_PS0;
+END_IF;
+AXE_WriteParameter(
+	Execute:=   FM_CO_PRM_PS.Q,
+	ParameterNumber:= AxisEncoderScalingFactor,
+	Axis:=AXE);
+AXE_ReadParameter(
+	ENABLE:=  NOT AXE_WriteParameter.Busy AND (CONF_Sel_PS0 <> 0) AND (CONF_Sel_PS1 <>0),
+	ParameterNumber:= AxisEncoderScalingFactor,
+	Axis:=AXE);
+VAR_Mem_sel_PS	:=	PRM_Sel_PS;
+IF	(AXE_ReadParameter.Value = CONF_Sel_PS1) AND AXE_ReadParameter.Valid THEN
+		PRM_sel_PS := TRUE;
+ELSIF (AXE_ReadParameter.Value =CONF_Sel_PS0) AND AXE_ReadParameter.Valid THEN
+		PRM_sel_PS := FALSE;
+END_IF;
+IF	(VAR_Mem_Sel_PS <> PRM_Sel_PS) AND (CONF_Sel_PS0 <> 0) AND (CONF_Sel_PS1 <>0) THEN
+	VAR_Mem_Need_Ref	:=	TRUE;
+END_IF
+
+
+(*GESTION LECTURE ETAT*)
+AXE_Status(
+	Enable := 	NOT CO_RESET,
+	Axis := 		AXE);
+
+(*TEST INHIBITION FIN COURSE*)
+IF (IN_LIMITE_SWITCH = 1) OR (IN_LIMITE_SWITCH = 4) THEN
+	AXE.PlcToNc.ControlDWord := AxisSetAcceptBlockedDriveSignal(23, TRUE);
+ELSE
+	AXE.PlcToNc.ControlDWord := AxisSetAcceptBlockedDriveSignal(7, FALSE);
+END_IF
+
+(*GESTION RESET AXE MATERIEL*)
+FM_Reset_Err.CLK	:=	OP_Validation.Etape.10;
+FM_Reset_Err();
+IF FM_Reset_Err.Q  THEN
+	VAR_Reset_Error_Mat		:=	TRUE;
+END_IF
+AXE_Reset_Error(
+	Execute:= VAR_Reset_Error_Mat,
+	Timeout:= t#10s,
+	Axis:= AXE,
+);
+FD_Reset_Err.CLK	:=	AXE_Reset_Error.Busy;
+FD_Reset_Err();
+
+
+(*GESTION LECTURE ERREUR MATERIELLE*)
+IF FD_Reset_Err.Q THEN
+	VAR_Read_Error_Mat		:=	TRUE;
+	VAR_Reset_Error_Mat		:=	FALSE;
+ELSIF OP_Validation.NOK OR OP_Position.NOK OR (RCP_Read_Error_Mat AND NOT OP_Validation.EC) THEN
+	VAR_Read_Error_Mat2	:=	TRUE;
+END_IF
+AXE_Error(
+	Execute:= VAR_Read_Error_Mat OR VAR_Read_Error_Mat2,
+	Timeout:= t#10s,
+	Axis:= AXE,
+);
+FD_Read_Error_Mat.CLK	:=	AXE_Error.Busy;
+FD_Read_Error_Mat();
+IF FD_Read_Error_Mat.Q THEN
+	IF VAR_Read_Error_Mat THEN
+		VAR_Read_Error_Mat	:=	FALSE;
+		IF (AXE_Error.DiagNumber <> 53266) AND (AXE_Error.DiagNumber <> 53267) THEN
+			VAR_Reset_Error_Mat		:=	TRUE;
+		ELSE
+			VAR_Reset_Error_Mat_Ok	:=	TRUE;
+		END_IF
+	ELSIF VAR_Read_Error_Mat2 THEN
+		VAR_Read_Error_Mat2	:=	FALSE;
+	END_IF
+END_IF
+
+IF NOT OP_Validation.Etape.10 THEN
+	VAR_Reset_Error_Mat		:=	FALSE;
+	VAR_Reset_Error_Mat_Ok	:=	FALSE;
+	VAR_Read_Error_Mat		:=	FALSE;
+END_IF
+
+
+(*GESTION FREIN*)
+IF CONF_Frein THEN
+   VAR_Idn := P_0_IDN + 97;
+    VAR_fbRead(
+        	Axis    := 		AXE,
+        	Idn     := 		VAR_Idn,
+        	Element := 	16#40,
+        	pDstBuf := 	ADR(VAR_ReadValue),
+       	BufLen  := 	SIZEOF(VAR_ReadValue),
+        	Execute := 	TRUE,
+        	Timeout := 	DEFAULT_ADS_TIMEOUT);
+    	IF NOT VAR_fbRead.Busy THEN
+		State_Frein	:=	NOT UINT_TO_BOOL(VAR_ReadValue);
+        		VAR_fbRead(Axis := Axe, Execute := FALSE);
+       		VAR_Read 	:=	 FALSE;
+    	END_IF
+END_IF
+IF STATE_Frein THEN
+	AXE_Set_Frein.ForceLock		:=	FALSE;
+	AXE_Set_Frein.ForceUnlock	:=	TRUE;
+ELSE
+	AXE_Set_Frein.ForceLock		:=	TRUE;
+	AXE_Set_Frein.ForceUnlock	:=	FALSE;
+END_IF
+AXE_Set_Frein(
+	Execute		:=	CO_Frein AND NOT OP_Validation.OK,
+	Axis			:=	Axe,
+	Timeout		:= 	DEFAULT_ADS_TIMEOUT
+	);
+
+
+(*GESTION VALIDATION AXE*)
+IF OP_Validation.Etape.0 THEN
+	AXE_Power.Enable := FALSE;
+ELSIF OP_Validation.Etape.2 THEN
+	AXE_Power.Enable := TRUE;
+END_IF;
+AXE_Power(
+	Enable_Negative	:=	TRUE,
+	Enable_Positive	:=	TRUE,
+	Override:=100.0 ,
+	BufferMode:=  MC_Aborting ,	(*arrêt du mouvement immédiat à la dévalidation logicielle de l'axe*)
+	Axis:=AXE );
+
+
+(*GESTION RESET AXE*)
+AXE_Reset(
+	Execute:=OP_Validation.Etape.1 OR CO_RESET,
+	Axis:=AXE );
+
+
+(*GESTION PRISE D'ORIGINE*)
+(*moteur sans codeur absolu*)
+IF OP_Position.Etape.5 AND NOT CONF_Abs THEN
+	AXE_Home.Position	:=	PRM_Dec;
+(*moteur avec codeur absolu*)
+ELSIF OP_Position.Etape.5 AND CONF_Abs THEN
+	AXE_Home.Position	:=	AXE.NcToPlc.ActPos;
+(*	(*prise de ref nécessaire tant que pas MAJ du position bias si codeur abs*)
+	VAR_Mem_Need_Ref	:= 	TRUE; *)
+END_IF
+
+AXE_Home(
+	Execute:=OP_Position.Etape.5 ,
+	HomingMode:= CONF_Homing_Mode ,
+	BufferMode:= MC_Aborting,
+	bCalibrationCam:=IN_REF,
+	Axis:= AXE );
+
+
+(*GESTION POSITIONNEMENT*)
+(*gestion échelle vitesse si rotation*)
+IF OP_Balayage.Etape.8 OR OP_Balayage.Etape.11 THEN
+	AXE_Move.Velocity := VAR_V_BalRot ;
+	AXE_Move_Abs.Velocity := VAR_V_BalRot;
+ELSIF OP_Position.Etape.23 OR OP_Position.Etape.25 THEN
+	AXE_Move.Velocity := VAR_V_Rattrapage;
+	AXE_Move_Abs.Velocity := VAR_V_Rattrapage;
+ELSE
+	AXE_Move.Velocity := VAR_V_Pos;
+	AXE_Move_Abs.Velocity := VAR_V_Pos;
+END_IF
+(*gestion sens déploiement*)
+IF CONF_Deploiement THEN
+	IF VAR_Mem_Pos THEN
+		IF (STATE_Pos_Dep < VAR_Cons_Pos2) THEN
+			AXE_Move.Direction := MC_Positive_Direction;
+		ELSE
+			AXE_Move.Direction := MC_Negative_Direction;
+		END_IF
+	ELSE
+		AXE_Move.Direction	:=	CONF_Pos_Direction;
+	END_IF
+(*gestion balayage sens + : pr éviter pb balayage entre 0 et 360deg*)
+ELSIF OP_Balayage.Etape.8 THEN
+	AXE_Move.Direction := MC_Positive_Direction;
+ELSIF OP_Balayage.Etape.11 THEN
+	AXE_Move.Direction := MC_Negative_Direction;
+END_IF
+(*gestion consigne position*)
+IF OP_position.Etape.23 THEN
+	IF CONF_Sens_Rattrapage THEN
+		AXE_Move.Position		:=	VAR_Cons_Pos2 + CONF_Offset_Rattrapage;
+		AXE_Move_Abs.Position	:=	VAR_Cons_Pos2 + CONF_Offset_Rattrapage;
+	ELSE
+		AXE_Move.Position		:=	VAR_Cons_Pos2 - CONF_Offset_Rattrapage;
+		AXE_Move_Abs.Position	:=	VAR_Cons_Pos2 - CONF_Offset_Rattrapage;
+	END_IF
+ELSE
+	AXE_Move.Position		:=	VAR_Cons_Pos2;
+	AXE_Move_Abs.Position	:=	VAR_Cons_Pos2;
+END_IF
+AXE_Move(
+	Execute:=VAR_Mem_Pos,
+	Acceleration:= 0,
+	Deceleration:= 0,
+	Jerk:= 0,
+	Direction:=CONF_Pos_Direction ,
+	BufferMode:=MC_Aborting,
+	Axis:= AXE );
+AXE_Move_Abs(
+	Execute:= VAR_Mem_Pos_Abs,
+	Acceleration:= 0,
+	Deceleration:= 0,
+	Jerk:= 0,
+	BufferMode:= MC_Aborting,
+	Axis:= AXE);
+
+
+(*GESTION ROTATION CONTINUE*)
+AXE_Velocity(
+	Execute:=OP_Rotation.Etape.4,
+	Velocity:= VAR_V_BalRot,
+	Acceleration:= 0,
+	Deceleration:= 0,
+	Jerk:= 0,
+	Direction:=MC_Positive_Direction ,
+	BufferMode:=MC_Aborting ,
+	Axis:= AXE );
+
+
+(*GESTION ARRET*)
+AXE_Halt(
+	Execute:=OP_Stop.Etape.2,
+	Deceleration:= 0,
+	Jerk:= 0,
+	Axis:= AXE );
+
+
+(*GESTION JOG*)
+(*gestion vitesse si rotation*)
+IF CONF_Mvt_Lineaire THEN
+	AXE_Jog.Velocity := CONF_V_Jog ;
+ELSE
+	AXE_Jog.Velocity := (CONF_V_Jog * 360) / 60;
+END_IF
+AXE_Jog(
+	JogForward:=IN_jOG_P AND OP_Jog.Etape.3 ,
+	JogBackwards:= IN_JOG_M AND OP_Jog.Etape.3,
+	Mode:= MC_JOGMODE_CONTINOUS     ,
+	Position:= 0,
+	Acceleration:= 0,
+	Deceleration:= 0,
+	Jerk:= 0,
+	Axis:= AXE );
+
+
+
+
+(*GESTION ZERO POSITION*)
+IF RCP_Zero THEN
+	AXE_Zero.Position	:=	PRM_Pos_Zero;
+ELSIF OP_Position.Etape.19 THEN
+	AXE_Zero.Position	:=	STATE_Pos_Abs_Codeur;
+ELSIF OP_Position.Etape.30 THEN				(*mise à 0 de la position de l'axe en début de prise d'origine pour contrer le fait que si on a interrompu avant, on est à taquet de retour de position*)
+	AXE_Zero.Position	:=	0;
+END_IF
+AXE_Zero(
+	Execute		:=	RCP_Zero OR OP_Position.Etape.19 OR OP_Position.Etape.30,
+	Axis			:=	AXE
+);
+
+(*GESTION MAJ POSITION BIAS POUR RESET POSITION*)
+(*demande ecriture manuellement : zero*)
+IF RCP_Bias AND CONF_No_Ref AND OP_Validation.Etape.0 THEN
+	VAR_Bias			:=	TRUE;
+	VAR_Pos_Bias		:=	AXE.NcToPlc.ActPos;
+(*demande application paramètre au redémarrage équipement - variateur en OP*)
+ELSIF CO_Write_Param AND (IN_MODE = 8) AND NOT VAR_Bias2 AND CONF_Abs THEN		(*v9.0*)
+	VAR_Bias2			:=	TRUE;
+	VAR_Pos_Bias		:=	CONF_Pos_Bias;
+(*demande écriture après prise de ref*)
+ELSIF OP_Position.Etape.21 AND NOT VAR_Bias3 THEN
+	VAR_Pos_Bias		:=	STATE_Pos_Abs_Codeur;
+	VAR_Bias3			:=	TRUE;
+(*demande écriture du position bias à 0 avant prise d'origine*)
+ELSIF OP_Position.Etape.28 AND NOT VAR_Bias4 THEN
+	VAR_Pos_Bias		:=	0;
+	VAR_Bias4			:=	TRUE;
+END_IF
+(*fonction ecriture position bias*)
+AXE_PosBias(
+	bExecute:= VAR_Bias OR VAR_Bias3,
+	bApply := VAR_Bias2 OR VAR_Bias4,
+	id:= CONF_Gp_PB,
+	lPosBias:= VAR_Pos_Bias,
+	IPosZero:=PRM_Dec
+ );
+(*enregistrement variables persistantes après zero moteur*)
+IF AXE_PosBias.bDone AND (VAR_Bias OR VAR_Bias3) THEN
+	CONF_Pos_Bias		:=	AXE_PosBias.STATE_PosBias;
+	STATE_Home_Done	:=	TRUE;
+	RQ_Param_System	:=	TRUE;
+ELSIF OP_Position.Etape.27 THEN				(*on fait retomber le flag (avec ecriture persistente) en debut de branche de prise d'origine*)
+	STATE_Home_Done	:=	FALSE;
+	RQ_Param_System	:=	TRUE;
+ELSE
+	RQ_Param_System	:=	FALSE;
+END_IF
+(*etat ecriture position bias ok depuis variables persistantes*)
+IF ((AXE_PosBias.bDone AND VAR_Bias2) OR NOT CONF_Abs) AND CO_Write_Param THEN
+	STATE_Param_Ok	:=	TRUE;
+ELSIF NOT CO_Write_Param THEN
+	STATE_Param_Ok	:=	FALSE;
+END_IF
+(*RAZ demande*)
+IF (AXE_PosBias.bErr OR AXE_PosBias.bDone) AND VAR_Bias THEN
+	VAR_Bias			:=	FALSE;
+ELSIF (AXE_PosBias.bErr OR AXE_PosBias.bDone) AND VAR_Bias3 THEN
+	VAR_Bias3			:=	FALSE;
+ELSIF (AXE_PosBias.bErr OR AXE_PosBias.bDone) AND VAR_Bias4 THEN
+	VAR_Bias4			:=	FALSE;
+END_IF
+IF NOT CO_Write_Param THEN
+	VAR_Bias2			:=	FALSE;
+END_IF
+
+
+(*GESTION START ESCLAVAGE*)
+AXE_Esclave(
+	GearRatio	:=	1,
+	Enable		:=	OP_Start_Slave.Etape.3,
+	Master		:= 	AXE,
+	Slave		:= 	Slave_Axis
+);
+
+
+(*GESTION STOP ESCLAVAGE*)
+AXE_Liberation(
+	Execute	:=	OP_Stop_Slave.Etape.2,
+	Slave	:=	Slave_Axis
+);
+
+
+(*Demande validation esclave*)
+IF OP_Start_Slave.Etape.2 THEN
+	RQ_Valid_Slave	:=	TRUE;
+ELSIF OP_Stop_Slave.Etape.3 OR OP_Validation.AR THEN
+	RQ_Valid_Slave	:=	FALSE;
+END_IF
+
+IF OP_Stop.Etape.6 AND (CONF_Disable <> 0) THEN
+	RQ_Devalid_Slave	:=	TRUE;
+ELSIF OP_Stop.Etape.4 OR OP_Stop.AR THEN
+	RQ_Devalid_Slave	:=	FALSE;
+END_IF
+
+
+(*Gestion des défaut*)
+(*Défaut de validation de l'axe*)
+DEF_Validation.CONDITION 		:=	OP_Validation.Etape.4;
+DEF_Validation.DELAY			:=	T#0ms;
+DEF_Validation();
+(*Défaut d'acquittement des erreurs*)
+DEF_AcqErr.CONDITION 			:=	OP_Validation.Etape.6;
+DEF_AcqErr.DELAY				:=	T#0ms;
+DEF_AcqErr();
+(*Défaut paramètre de positionnement incorrects*)
+DEF_prm_pos.CONDITION			:=	OP_Position.Etape.7;
+DEF_prm_pos.DELAY				:=	T#0ms;
+DEF_prm_pos();
+(*Défaut de prise de référence*)
+DEF_Home.CONDITION				:=	OP_Position.Etape.11;
+DEF_Home.DELAY					:=	T#0ms;
+DEF_Home();
+(*Défaut de positionnement*)
+DEF_Position.CONDITION			:=	OP_Position.Etape.12;
+DEF_Position.DELAY				:=	T#0ms;
+DEF_Position();
+(*Défaut de rotation*)
+DEF_Rotation.CONDITION			:=	OP_Rotation.Etape.6;
+DEF_Rotation.DELAY				:=	T#0ms;
+DEF_Rotation();
+(*Défaut de jog*)
+DEF_JoG.CONDITION				:=	OP_Jog.Etape.3 AND AXE.Status.Error;
+DEF_Jog.DELAY					:=	T#200ms;
+DEF_Jog();
+(*Défaut interlock*)
+DEF_Interlock.CONDITION			:=	(NOT OP_Rotation.AR OR NOT OP_Position.AR) AND (NOT DOOR AND NOT I_Door_Safety_OFF);
+DEF_Interlock.DELAY				:=	t#0ms;
+DEF_Interlock();
+(*Défaut de surveillance de la rotation*)
+TIMER_Surv_Vrot.PT				:=	PRM_Tim_Surv_VRot;
+TIMER_Surv_VRot.IN				:= 	(ABS(VAR_V_BalRot - AXE.NcToPlc.ActVelo) > PRM_Surv_VRot) AND OP_Rotation.Etape.5 AND (PRM_Surv_VRot <> 0);
+TIMER_Surv_Vrot();
+DEF_Surv_rotation.CONDITION		:=	(OP_Rotation.Etape.5 AND AXE.Status.Error AND (DOOR OR I_Door_Safety_OFF)) OR TIMER_Surv_Vrot.Q;
+DEF_Surv_rotation.DELAY			:=	T#0ms;
+DEF_Surv_rotation();
+(* Défaut d'asservissement des moteurs robots *)
+DEF_Asserv.CONDITION			:=	AXE_Esclave.Error;
+DEF_Asserv.DELAY				:=	T#0ms;
+DEF_Asserv();
+(* Défaut de liberation des moteurs robots *)
+DEF_Desasserv.CONDITION			:=	AXE_Liberation.Error;
+DEF_Desasserv.DELAY				:=	T#0MS;
+DEF_Desasserv();
+(* Défaut de reset du variateur *)
+DEF_Reset.CONDITION				:=	OP_Validation.Etape.10; (*RQ_Ethercat_Reset;*)
+DEF_Reset.DELAY					:=	T#30S;
+DEF_Reset();
+(* Défaut poursuite*)
+DEF_Lag_Distance.CONDITION		:=	(STATE_Err = 17744);
+DEF_Lag_Distance.DELAY			:=	t#0s;
+DEF_Lag_Distance();
+(*Défaut capteur fin de course*)
+DEF_Limite_Switch.CONDITION	:=	(IN_LIMITE_SWITCH = 1) OR (IN_LIMITE_SWITCH = 4);
+DEF_Limite_Switch.DELAY		:=	t#0s;
+DEF_Limite_Switch();
+
+
+(*Tempo*)
+TIMER_Etape3_Stop(IN:=OP_Stop.Etape.3,PT:=T#3s);
+
+
+(*Compteur balayage*)
+IF OP_Balayage.Etape.1 THEN
+	STATE_NBal := 0;
+ELSIF OP_Balayage.Etape.12 OR OP_Balayage.Etape.17 THEN
+	 STATE_NBal := STATE_NBal + 1;
+END_IF;
+
+(*Codage des états*)
+STATE_Ar		:=	OP_Jog.AR AND (OP_Position.AR OR OP_Position.OK) AND OP_Rotation.AR;
+STATE_Nok		:=	DEF_AcqErr.DEF OR DEF_Home.DEF OR DEF_Jog.DEF OR DEF_Position.DEF OR
+					DEF_Prm_Pos.DEF OR DEF_Rotation.DEF OR DEF_Validation.DEF OR DEF_Surv_rotation.DEF
+					OR DEF_Reset.DEF OR DEF_Lag_Distance.APP
+					OR OP_Position.DEF_ON_REJECTED.DEF OR OP_Balayage.DEF_ON_REJECTED.DEF
+					OR OP_Rotation.DEF_ON_REJECTED.DEF OR OP_Start_Slave.DEF_ON_REJECTED.DEF
+					OR  OP_Stop.DEF_AUTO_ON.DEF OR OP_Stop.DEF_ON_REJECTED.DEF
+					OR OP_Stop_Slave.DEF_ON_REJECTED.DEF OR OP_Validation.DEF_ON_REJECTED.DEF; (*OR AXE.Status.Error;*)
+STATE_Err		:=	AXE.NcToPlc.ErrorCode;
+IF CONF_Mvt_Lineaire THEN
+	STATE_Vit		:=	AXE.NcToPlc.ActVelo;
+ELSE
+	STATE_Vit		:=	(AXE.NcToPlc.ActVelo / 360) * 60;
+END_IF
+STATE_Pos_Rel		:=	AXE.NcToPlc.ActPos - CONF_Pos_Ref[PRM_NRef] + CONF_Pos_Poste[PRM_NPoste];
+STATE_Pos			:=	AXE.NcToPlc.ActPos;
+STATE_Pos360		:=	AXE.NcToPlc.ModuloActPos;
+IF CONF_Deploiement THEN
+	STATE_Pos_Dep		:=	STATE_Pos - I_Pos_Abs_Rotation + I_Pos_Mod_Rotation;
+	STATE_Pos_Dep_mm 	:= 	2 * CONF_L_Segment * SIN((STATE_Pos_Dep - I_Pos_Mod_Rotation) * pi / 180 );
+ELSE
+	STATE_Pos_Dep			:=	0.0;
+	STATE_Pos_Dep_mm 	:=	0.0;
+END_IF
+STATE_Valid_Slave_ok	:=	OP_Validation.OK AND (OP_Start_Slave.OK OR NOT PRM_Master);
+STATE_Homed				:=	(NOT CONF_Abs AND AXE.Status.Homed)
+							OR (CONF_Abs AND STATE_Home_Done AND STATE_Charg_Persistentes_Ok);
+(*STATE_Homed			:=	AXE.Status.Homed AND NOT VAR_Mem_Need_Ref;*)
+STATE_Move_P			:=	AXE.Status.PositiveDirection;
+STATE_Move_N			:=	AXE.Status.NegativeDirection;
+CASE AXE.Status.MotionState OF		(*code d'état du variateur*)
+	MC_AXISSTATE_UNDEFINED:
+		STATE_Code 	:= 	0;
+	MC_AXISSTATE_DISABLED:
+		STATE_Code	:=	1;
+	MC_AXISSTATE_STANDSTILL:
+		STATE_Code	:=	2;
+	MC_AXISSTATE_ERRORSTOP:
+		STATE_Code	:=	3;
+	MC_AXISSTATE_STOPPING:
+		STATE_Code	:=	4;
+	MC_AXISSTATE_HOMING:
+		STATE_Code	:=	5;
+	MC_AXISSTATE_DISCRETEMOTION:
+		STATE_Code	:=	6;
+	MC_AXISSTATE_CONTINOUSMOTION:
+		STATE_Code	:=	7;
+	MC_AXISSTATE_SYNCHRONIZEDMOTION:
+		STATE_Code	:=	8;
+END_CASE;
+
+(*reset des ordres*)
+CO_Modif 		:= 	FALSE;
+CO_Frein		:=	FALSE;
+CO_RESET		:=	FALSE;
+CO_PRM_PS		:= 	FALSE;
+CO_Devalid		:= 	FALSE;
+IF M_Zero AND RCP_Zero THEN
+	M_Zero	:=	FALSE;
+END_IF
+IF M_Bias AND RCP_Bias THEN
+	M_Bias	:=	FALSE;
+END_IF
+IF M_Read_Error_Mat AND RCP_Read_Error_Mat THEN
+	M_Read_Error_Mat	:=	FALSE;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{02b7ab6f-b020-4f98-863a-9a3b0f3080ce}">
+      <Implementation>
+        <ST><![CDATA[IdXML					:=	'5';
+TagXML					:=	2;
+
+OP_Position.IdXML		:=	'6';
+OP_Position.TagXML		:=	1;
+
+OP_Rotation.IdXML		:=	'6';
+OP_Rotation.TagXML		:=	2;
+
+OP_Stop.IdXML			:=	'0';
+OP_Stop.TagXML			:=	2;
+
+OP_Validation.IdXML		:=	'6';
+OP_Validation.TagXML	:=	3;
+
+OP_Jog.IdXML			:=	'6';
+OP_Jog.TagXML			:=	4;
+
+OP_Balayage.IdXML		:=	'6';
+OP_Balayage.TagXML		:=	5;
+
+OP_Start_Slave.IdXML	:=	'6';
+OP_Start_Slave.TagXML	:=	9;
+
+OP_Stop_Slave.IdXML		:=	'6';
+OP_Stop_Slave.TagXML	:=	10;
+
+DEF_Validation.IdXML	:=	'5';
+DEF_Validation.TagXML	:=	6;
+
+DEF_AcqErr.IdXML		:=	'5';
+DEF_AcqErr.TagXML		:=	7;
+
+DEF_Prm_Pos.IdXML		:=	'5';
+DEF_Prm_Pos.TagXML		:=	8;
+
+DEF_Position.IdXML		:=	'5';
+DEF_Position.TagXML		:=	1;
+
+DEF_Rotation.IdXML		:=	'5';
+DEF_Rotation.TagXML		:=	4;
+
+DEF_Surv_rotation.IdXML	:=	'5';
+DEF_Surv_rotation.TagXML:=	5;
+
+DEF_Jog.IdXML			:=	'5';
+DEF_Jog.TagXML			:=	9;
+
+DEF_Home.IdXML			:=	'5';
+DEF_Home.TagXML			:=	2;
+
+DEF_Interlock.IdXML		:=	'0';
+DEF_Interlock.TagXML		:=	5;
+
+DEF_Asserv.IdXML		:=	'5';
+DEF_Asserv.TagXML		:=	10;
+
+DEF_Desasserv.IdXML		:=	'5';
+DEF_Desasserv.TagXML	:=	11;
+
+DEF_Reset.IdXML			:=	'5';
+DEF_Reset.TagXML		:=	12;
+
+DEF_Lag_Distance.IdXML	:=	'5';
+DEF_Lag_Distance.TagXML:=	13;
+
+DEF_Limite_Switch.IdXML	:=	'5';
+DEF_Limite_Switch.TagXML:=	14;
+
+(* réception ordres externes*)
+RCP_Zero	:=	M_Zero;
+RCP_Bias	:=	M_Bias;
+RCP_Read_Error_Mat	:=	M_Read_Error_Mat;
+
+(*calcul de position absolue du codeur*)
+STATE_Pos_Abs_Codeur := F_ReadMotorAbsPosition(fScalingFactor := CONF_Scaling_Factor, dPositionFeedback := IN_Position_Codeur);
+
+(*Calcul position relative + controle cohérence*)
+IF OP_Position.Etape.2 OR OP_Balayage.Etape.2 OR OP_Balayage.Etape.7 OR OP_Balayage.Etape.9 THEN
+	VAR_Ctrl_Cons_Ok := FALSE;
+	IF ( PRM_NPoste < 0) OR (PRM_NPoste > 8) OR ( PRM_NRef < 0) OR (PRM_NRef > 8) THEN
+		VAR_Ctrl_Cons_Ok := FALSE;
+	ELSE
+		IF (PRM_NPoste =	0) THEN
+			VAR_pos_poste	:= 	0.0;
+		ELSE
+			VAR_pos_poste 	:= 	CONF_Pos_Poste[PRM_NPoste];
+		END_IF
+		IF (PRM_NRef = 0) THEN
+			VAR_Pos_ref		:= 	0.0;
+		ELSE
+			VAR_Pos_ref		:=	CONF_Pos_Ref[PRM_Nref];
+		END_IF
+		VAR_cons_pos		:=	PRM_Position - Var_Pos_Poste + Var_Pos_Ref ;
+		IF NOT CONF_Mvt_Lineaire THEN
+			WHILE VAR_Cons_Pos > 360.0 DO
+				VAR_cons_pos := VAR_cons_pos - 360;
+			END_WHILE
+			WHILE VAR_Cons_Pos < 0.0 DO
+				VAR_cons_pos := VAR_cons_pos + 360;
+			END_WHILE
+			VAR_Ctrl_Cons_Ok		:=	TRUE;
+		ELSE
+			IF ((VAR_Cons_Pos >= CONF_Min_Pos) AND (VAR_Cons_Pos <= CONF_Max_Pos))
+					OR ((CONF_Min_Pos = 0.0) AND (CONF_Max_Pos = 0.0)) THEN
+				VAR_Ctrl_Cons_Ok		:=	TRUE;
+			END_IF
+		END_IF
+	END_IF;
+END_IF;
+
+(*Calcul position par rapport au balayage*)
+IF OP_Balayage.Etape.7 THEN
+	VAR_Cons_Pos2 := VAR_cons_pos + PRM_Angle_Bal/2;
+ELSIF OP_Balayage.Etape.9 THEN
+	VAR_Cons_Pos2 := VAR_cons_pos - PRM_Angle_Bal/2;
+ELSIF OP_Balayage.Etape.2 THEN
+	IF NOT PRM_BalPos THEN
+		VAR_Cons_Pos2 := VAR_cons_pos;
+	ELSE
+		VAR_Cons_Pos2 := VAR_cons_pos - PRM_Angle_Bal/2;
+	END_IF
+ELSIF  OP_Balayage.Etape.0 THEN
+	VAR_Cons_Pos2 := VAR_cons_pos;
+END_IF
+IF OP_Balayage.Etape.7 OR OP_Balayage.Etape.9 OR OP_Balayage.Etape.2 OR OP_Balayage.Etape.0 THEN
+	VAR_Ctrl_Cons_ok2		:=	FALSE;
+	IF NOT CONF_Mvt_Lineaire THEN
+		WHILE VAR_Cons_Pos2 > 360.0 DO
+			VAR_Cons_Pos2 := VAR_Cons_Pos2 - 360;
+		END_WHILE
+		WHILE VAR_Cons_Pos2 < 0.0 DO
+			VAR_Cons_Pos2 := VAR_Cons_Pos2 + 360;
+		END_WHILE
+		VAR_Ctrl_Cons_ok2		:=	TRUE;
+	ELSE
+		IF ((VAR_Cons_Pos2 >= CONF_Min_Pos) AND (VAR_Cons_Pos2 <= CONF_Max_Pos))
+				OR ((CONF_Min_Pos = 0.0) AND (CONF_Max_Pos = 0.0)) THEN
+			VAR_Ctrl_Cons_ok2		:=	TRUE;
+		END_IF
+	END_IF
+END_IF
+
+(*memorisation consigne de vitesse et conversion en deg/s si nécessaire*)
+IF OP_Rotation.Etape.2 OR OP_Balayage.Etape.2 THEN
+	IF CONF_Mvt_Lineaire THEN
+		VAR_V_BalRot	:=	PRM_V_BalRot;
+	ELSE
+		VAR_V_BalRot	:=	(PRM_V_BalRot * 360) / 60;
+	END_IF
+END_IF;
+IF CONF_Mvt_Lineaire THEN
+	VAR_V_Pos			:=	PRM_V_Pos;
+	VAR_V_Rattrapage	:=	CONF_V_Rattrapage;
+ELSE
+	VAR_V_Pos			:=	(PRM_V_Pos * 360) / 60;
+	VAR_V_Rattrapage	:=	(CONF_V_Rattrapage * 360) / 60;
+END_IF
+
+(*analyse besoin rattrapage de jeu*)
+IF OP_Position.Etape.6 AND CONF_Rattrapage THEN
+	IF CONF_Mvt_Lineaire THEN
+		VAR_Pos	:=	STATE_Pos;
+	ELSIF CONF_Deploiement THEN
+		VAR_Pos	:=	STATE_Pos_Dep;
+	ELSE
+		VAR_Pos	:=	STATE_Pos360;
+	END_IF
+	IF CONF_Mvt_Lineaire OR CONF_Deploiement THEN
+		VAR_Rattrapage	:=	((VAR_Cons_Pos2 > VAR_Pos) AND CONF_Sens_Rattrapage)
+							OR ((VAR_Cons_Pos2 < VAR_Pos) AND NOT CONF_Sens_Rattrapage);
+	ELSE
+		VAR_Pos		:=	VAR_Cons_Pos2 - VAR_Pos;
+		WHILE VAR_Pos > 360.0 DO
+			VAR_Pos := VAR_Pos - 360;
+		END_WHILE
+		WHILE VAR_Pos < 0.0 DO
+			VAR_Pos := VAR_Pos + 360;
+		END_WHILE
+		VAR_Sens_Mvt	:=	(VAR_Pos < 180.0);
+		VAR_Rattrapage	:=	(VAR_Sens_Mvt AND CONF_Sens_Rattrapage)
+							OR (NOT VAR_Sens_Mvt AND NOT CONF_Sens_Rattrapage);
+	END_IF
+END_IF
+
+(*Front montant et descendant du mode manuel*)
+FD_Manual.CLK	:=	MANUAL;
+FD_Manual();
+
+(*Front  validation esclave*)
+FD_Valid_Slave.CLK	:=	CO_Valid_Slave;
+FD_Valid_Slave();
+FP_Valid_Slave.CLK	:=	CO_Valid_Slave;
+FP_Valid_Slave();
+
+(*Couple - Mise à l'échelle*)
+STATE_Torque	:=	IN_Torque / 10;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_AXE_STD1">
+      <LineId Id="329" Count="10" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_BALAYAGE">
+      <LineId Id="0" Count="140" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_COMPTAGE">
+      <LineId Id="0" Count="58" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_JOG">
+      <LineId Id="0" Count="48" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_POSITION">
+      <LineId Id="0" Count="285" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_ROTATION">
+      <LineId Id="0" Count="99" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_START_SLAVE">
+      <LineId Id="0" Count="48" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_STOP">
+      <LineId Id="0" Count="72" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_STOP_SLAVE">
+      <LineId Id="0" Count="54" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.ACT_VALIDATION">
+      <LineId Id="0" Count="153" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.POST">
+      <LineId Id="0" Count="523" />
+    </LineIds>
+    <LineIds Name="BLOCK_AXE_STD1.PRL">
+      <LineId Id="0" Count="196" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

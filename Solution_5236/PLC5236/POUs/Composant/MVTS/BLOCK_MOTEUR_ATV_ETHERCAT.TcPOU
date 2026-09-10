@@ -1,0 +1,448 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="BLOCK_MOTEUR_ATV_ETHERCAT" Id="{6615aba7-3475-4a4a-9693-e77d0cc8aab3}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'call_after_init'}
+FUNCTION_BLOCK BLOCK_MOTEUR_ATV_ETHERCAT
+
+(* Element rotatif consigne ana *)
+
+(****************historique des versions*****************************)
+(* Version 0-0 - HG - VERSION INIITIALE - basée sur BLOCK_MOTEUR_ATV*)
+(* Version 0-1 - HG - Corrections suite débug HC*)
+(*************************************************************************)
+
+VAR_INPUT
+	RESET:							BOOL;		(* Condition de réinitialisation de la fonction *)
+
+	I_Valid_INPUT:					BOOL;		(*INPUT valide - données exploitables*)
+	
+	IN_WcState	 		AT %I*:		BOOL;		(*INPUT IO-link Data process*)
+	IN_InfoDataState 	AT %I*:		UINT;		(*INPUT Device Slave State*)
+
+	IN_Status			AT %I*:		UINT;		(* INPUT - Entrée statut variateur*)
+	IN_Error			AT %I*:		UINT;		(* INPUT - Erreur*)
+	
+	OP_MVT:							BLOCK_G7;
+	
+	DEF_WcState:					PRCDEF;		(* Défaut données invalides - communication figée*)
+	DEF_Slave:						PRCDEF;		(* Défaut esclave EtherCAT*)
+	DEF_off_auto:					PRCDEF;		(* Défaut de rupture de la chaîne de sécurité*)
+	DEF_Variateur:					PRCDEF;		(* Défaut indiquant que le variateur n'est pas ok*)
+
+	PRM_Vitesse:					REAL;		(* Consigne vitesse moteur*)
+	PRM_Rapport:					REAL;		(* Rapport chaine cinématique*)
+	
+	CO_On:							BOOL;		(* Marche moteur en automatique*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_Control		AT %Q*:			UINT;		(* OUTPUT - Sortie mode de controle*)
+	OUT_Velocity	AT %Q*:			INT;		(* OUTPUT - Sortie consigne vitesse, attention sortie en rpm ex: moteur a Vnom 1500 rpm*)
+
+	STATE_Ready:					BOOL; 		(* Moteur pret*)
+	STATE_OFF:						BOOL;		(* Moteur à l'arrêt *)
+	STATE_EC:						BOOL;		(* Asservissement en cours *)
+	STATE_ON:						BOOL;		(* Moteur en marche  *)
+	STATE_NOK:						BOOL;		(* Moteur en defaut  *)
+	STATE_VIT:						REAL;		(* Vitesse appliquée *)
+END_VAR
+
+VAR
+	VAR_Valid_Elmt:					BOOL;		(*données EtherCAT exploitables*)
+
+	VAR_On:							BOOL;		(* variable intermédiaire de marche moteur*)
+	
+	VAR_IN_ReadyToSwitchOn:			BOOL;		(* En attente de l'alimentation de puissance=1*)
+	VAR_IN_SwitchedOn:				BOOL;		(*Ready*)
+	VAR_IN_OperationEnabled:		BOOL;		(*En fonctionnement*)
+	VAR_IN_Fault:					BOOL;		(* error*)
+	VAR_IN_VoltageEnabled:			BOOL;		(*Alim puissance présente *)
+	VAR_IN_QuickStop:				BOOL;		(* Arret rapide =0*)		
+	VAR_IN_SwitchOnDisabled:		BOOL;		(* Absence Alim puissance *)
+	VAR_IN_Warning:					BOOL;		(* Alarme présente*)
+	VAR_IN_Reserve1:				BOOL;
+	VAR_IN_Remote:					BOOL;		(* Commande via bus de terrain*)
+	VAR_IN_TargetReached:			BOOL;		(* Référence atteinte*)
+	VAR_IN_InternalLimitActive:		BOOL;		(* Déppassement réf*)
+	VAR_IN_Reserve2:				BOOL;
+	VAR_IN_Reserve3:				BOOL;
+	VAR_IN_Conf1:					BOOL;		(* Stop button*)
+	VAR_IN_Conf2:					BOOL;		(*Sens de rotations*)
+	VAR_Status_Code:				USINT;		(*1: not ready to switch on, 2: switch on disabled, 3: ready to switch on,
+												4: switched on, 5: operation enabled, 6: quick stop active,
+												7: fault reaction active, 8: fault*)														
+	VAR_OUT_SwitchOn:				BOOL;		(*Contrôle du switch principal*)
+	VAR_OUT_EnableVoltage:			BOOL;		(*Mise en puissance*)
+	VAR_OUT_QuickStop:				BOOL;		(*Quick stop activé =0*)
+	VAR_OUT_EnableOperation:		BOOL;		(*Commande activée =1*)
+	VAR_OUT_Reserve1:				BOOL;
+	VAR_OUT_Reserve2:				BOOL;
+	VAR_OUT_Reserve3:				BOOL;
+	VAR_OUT_FaultReset:				BOOL;		(*0 à 1 pour reset erreur si l'erreur n'est plus active*)
+	VAR_OUT_Halt:					BOOL;		(*0= run demandé, 1=arrêt demandé*)
+	VAR_OUT_Reserve4:				BOOL;
+	VAR_OUT_Reserve5:				BOOL;
+	VAR_OUT_Conf1:					BOOL;		(*C311 - Marche avant par défaut*)  (*0= Marche avant demandée, 1= marche arrière demandée*)
+	VAR_OUT_Conf2:					BOOL;		(*C312 - Marche arrière par défaut*)
+	VAR_OUT_Conf3:					BOOL;		(*C313*)
+	VAR_OUT_Conf4:					BOOL;		(*C314*)
+	VAR_OUT_Conf5:					BOOL;		(*C315*)
+	
+	TIMER_Reset:					TON;
+	TIMER_Timeout_Fault:			TON;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_VMAX:					REAL;			(*Consigne vitesse max*)
+	CONF_VMIN:					REAL;			(*Consigne vitesse min*)
+	CONF_No_Safety_Auto:		BOOL:=FALSE;	(*Option de desactivation des conditions d'autorisation en mode automatique*)
+	
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : assembly*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML:= '5';
+TagXML:= 2;
+
+DEF_OFF_AUTO.IdXML := '3';
+DEF_OFF_AUTO.TagXML :=10;
+DEF_Variateur.IdXML	:= '5';
+DEF_Variateur.TagXML:= 15;
+DEF_Slave.IdXML := '19';
+DEF_Slave.TagXML := 2;
+DEF_WcState.IdXML := '19';
+DEF_WcState.TagXML := 1;
+
+(*DEFAUTS ESCLAVE ETHERCAT*)
+(*Défaut données invalides*)
+DEF_WcState.CONDITION	:=	IN_WcState AND NOT I_Valid_INPUT;
+DEF_WcState();
+(*Défaut esclave etherCAT*)
+DEF_Slave.CONDITION		:=	(IN_InfoDataState<>8) AND NOT I_Valid_INPUT;
+DEF_Slave.VAL1			:=	UINT_TO_STRING(IN_InfoDataState);
+DEF_Slave();
+
+(*Données E/S valables*)
+VAR_Valid_Elmt			:=	I_Valid_INPUT AND NOT DEF_WcState.DEF AND NOT DEF_Slave.DEF;
+
+(*Réception status*)
+VAR_IN_ReadyToSwitchOn		:=	IN_Status.0;
+VAR_IN_SwitchedOn			:=	IN_Status.1;
+VAR_IN_OperationEnabled		:=	IN_Status.2;
+VAR_IN_Fault				:=	IN_Status.3;
+VAR_IN_VoltageEnabled		:=	IN_Status.4;
+VAR_IN_QuickStop			:=	IN_Status.5;
+VAR_IN_SwitchOnDisabled		:=	IN_Status.6;
+VAR_IN_Warning				:=	IN_Status.7;
+VAR_IN_Reserve1				:=	IN_Status.8;
+VAR_IN_Remote				:=	IN_Status.9;
+VAR_IN_TargetReached		:=	IN_Status.10;
+VAR_IN_InternalLimitActive	:=	IN_Status.11;
+VAR_IN_Reserve2				:=	IN_Status.12;
+VAR_IN_Reserve3				:=	IN_Status.13;
+VAR_IN_Conf1				:=	IN_Status.14;
+VAR_IN_Conf2				:=	IN_Status.15;
+
+(*CODE STATUS*)
+IF NOT VAR_IN_ReadyToSwitchOn AND NOT VAR_IN_SwitchedOn AND NOT VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	1;	(*Not ready to switch on*)
+ELSIF NOT VAR_IN_ReadyToSwitchOn AND NOT VAR_IN_SwitchedOn AND NOT VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	2;	(*Switch on disabled*)
+ELSIF VAR_IN_ReadyToSwitchOn AND NOT VAR_IN_SwitchedOn AND NOT VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND VAR_IN_QuickStop AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	3;	(*Ready to switch on*)
+ELSIF VAR_IN_ReadyToSwitchOn AND VAR_IN_SwitchedOn AND NOT VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND VAR_IN_VoltageEnabled AND VAR_IN_QuickStop AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	4;	(*Switched on*)
+ELSIF VAR_IN_ReadyToSwitchOn AND VAR_IN_SwitchedOn AND VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND VAR_IN_VoltageEnabled AND VAR_IN_QuickStop AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	5;	(*Operation enabled*)
+ELSIF VAR_IN_ReadyToSwitchOn AND VAR_IN_SwitchedOn AND VAR_IN_OperationEnabled AND NOT VAR_IN_Fault AND VAR_IN_VoltageEnabled AND NOT VAR_IN_QuickStop AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	6;	(*Quick stop active*)
+ELSIF VAR_IN_ReadyToSwitchOn AND VAR_IN_SwitchedOn AND VAR_IN_OperationEnabled AND VAR_IN_Fault AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	7;	(*Fault reaction active*)
+ELSIF NOT VAR_IN_ReadyToSwitchOn AND NOT VAR_IN_SwitchedOn AND NOT VAR_IN_OperationEnabled AND VAR_IN_Fault AND NOT VAR_IN_SwitchOnDisabled THEN
+	VAR_Status_Code	:=	8;	(*Fault*)
+END_IF
+
+
+(*Vérification consignes*)
+IF	PRM_Vitesse > CONF_VMAX THEN
+	PRM_Vitesse	:=	CONF_VMAX;
+END_IF;
+
+IF PRM_Vitesse < CONF_VMIN THEN
+	PRM_Vitesse := CONF_VMIN;
+END_IF
+
+
+(*défaut desactivation automatique*)
+DEF_off_auto.CONDITION	:=	(DEF_Variateur.DEF AND NOT OP_MVT.Etape.1 AND NOT OP_MVT.Etape.2 AND NOT OP_MVT.Etape.0)
+							OR TIMER_Timeout_Fault.Q;
+DEF_off_auto.DELAY		:=	T#0MS;
+DEF_off_auto();
+
+(*défaut du variateur*)
+DEF_Variateur.CONDITION		:= 	VAR_IN_Fault OR VAR_IN_Warning;
+DEF_Variateur.VAL1			:=	UINT_TO_STRING(IN_Error);
+DEF_Variateur.DELAY			:= 	T#5MS;
+DEF_Variateur();
+
+(*Indicateur prêt*)
+STATE_Ready		:=	VAR_Valid_Elmt;
+
+(*gestion des sorties*)
+VAR_On		:= 	CO_ON AND NOT RESET;
+
+(*appel G7*)
+ACT_MVT();
+
+
+(*consigne vitesse*)
+IF	STATE_ON AND (PRM_VITESSE<>STATE_VIT) THEN
+	OUT_Velocity	:=	REAL_TO_INT(PRM_Vitesse*PRM_Rapport);
+	STATE_VIT		:=	PRM_Vitesse;
+ELSIF STATE_OFF THEN
+	OUT_Velocity	:=	0;
+	STATE_VIT		:=	0;
+END_IF;
+
+(*PILOTAGE MODE DE CONTROLE*)
+VAR_OUT_Conf1		:=	FALSE;
+VAR_OUT_Conf2		:=	FALSE;
+VAR_OUT_Conf3		:=	FALSE;
+VAR_OUT_Conf4		:=	FALSE;
+VAR_OUT_Conf5		:=	FALSE;
+VAR_OUT_Reserve1	:=	FALSE;
+VAR_OUT_Reserve2	:=	FALSE;
+VAR_OUT_Reserve3	:=	FALSE;
+VAR_OUT_Reserve4	:=	FALSE;
+VAR_OUT_Reserve5	:=	FALSE;
+
+VAR_OUT_Halt		:=	FALSE;
+
+VAR_OUT_FaultReset		:=	OP_MVT.Etape.2;
+VAR_OUT_EnableVoltage	:=	OP_MVT.Etape.3 OR OP_MVT.Etape.4 OR OP_MVT.Etape.5 OR OP_MVT.Etape.6 OR OP_MVT.Etape.7;
+VAR_OUT_SwitchOn		:=	OP_MVT.Etape.4 OR OP_MVT.Etape.5 OR OP_MVT.Etape.6 OR OP_MVT.Etape.7;
+VAR_OUT_QuickStop		:=	OP_MVT.Etape.3 OR OP_MVT.Etape.4 OR OP_MVT.Etape.5 OR OP_MVT.Etape.6 OR OP_MVT.Etape.7;
+VAR_OUT_EnableOperation	:=	OP_MVT.Etape.5 OR OP_MVT.Etape.6;
+//VAR_OUT_Conf1			:=	OP_MVT.Etape.6 AND (PRM_Vitesse > 0.0);
+
+//MEMCPY(ADR(OUT_Control),ADR(VAR_OUT_SwitchOn),16);
+OUT_CONTROL.0:=VAR_OUT_SwitchOn;
+OUT_CONTROL.1:=VAR_OUT_EnableVoltage;
+OUT_CONTROL.2:=VAR_OUT_QuickStop;
+IdXML:= '5';
+TagXML:= 2;
+
+DEF_OFF_AUTO.IdXML := '3';
+DEF_OFF_AUTO.TagXML :=10;
+(*DEF_MARCHE.IdXML := '3';
+DEF_MARCHE.TagXML:=1;*)
+DEF_Variateur.IdXML	:= '5';
+DEF_Variateur.TagXML:= 15;
+	
+	
+OUT_CONTROL.3:=VAR_OUT_EnableOperation;
+OUT_CONTROL.4:=VAR_OUT_Reserve1;
+OUT_CONTROL.5:=VAR_OUT_Reserve2;
+OUT_CONTROL.6:=VAR_OUT_Reserve3;
+OUT_CONTROL.7:=VAR_OUT_FaultReset;
+OUT_CONTROL.8:=VAR_OUT_Halt;
+OUT_CONTROL.9:=VAR_OUT_Reserve4;
+OUT_CONTROL.10:=VAR_OUT_Reserve5;
+OUT_CONTROL.11:=VAR_OUT_Conf1;
+OUT_CONTROL.12:=VAR_OUT_Conf2;
+OUT_CONTROL.13:=VAR_OUT_Conf3;
+OUT_CONTROL.14:=VAR_OUT_Conf4;
+OUT_CONTROL.15:=VAR_OUT_Conf5;
+
+
+(*Gestion du TIMER RESET*)
+Timer_reset.IN:=OP_MVT.Etape.2;
+Timer_reset.PT:= T#2S;
+Timer_reset();
+
+(*Gestion du TIMER Timout reset*)
+TIMER_Timeout_Fault.IN:=OP_MVT.Etape.1 OR OP_MVT.Etape.2;
+TIMER_Timeout_Fault.PT:=T#7S;
+TIMER_Timeout_Fault();
+
+(*Indicateur defaut*)
+STATE_NOK	:=	DEF_off_auto.DEF OR DEF_Variateur.DEF OR DEF_WcState.DEF OR DEF_Slave.DEF;
+STATE_ON	:=	OP_MVT.Etape.6;
+STATE_OFF	:=	OP_MVT.Etape.0;
+STATE_EC	:=	NOT STATE_ON AND NOT STATE_OFF;
+]]></ST>
+    </Implementation>
+    <Action Name="ACT_MVT" Id="{e439dd3b-2812-4921-9815-0870978ad266}">
+      <Implementation>
+        <ST><![CDATA[OP_MVT(
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:= 0);
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_MVT.ETAPE = 0
+		THEN
+				OP_MVT.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	(NOT VAR_On OR DEF_off_auto.DEF)
+		AND NOT OP_MVT.Etape.6 AND NOT OP_MVT.Etape.7
+		THEN
+				OP_MVT.ETAPE := 0;			(*RAZ grafcet*)
+				OP_MVT.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_MVT.ETAPE.0
+		AND VAR_On
+		THEN
+				OP_MVT.ETAPE.1:=TRUE;
+				OP_MVT.ETAPE.0:=FALSE;
+(*étape 1-2 : Fault*)
+ELSIF	OP_MVT.Etape.1
+		AND (VAR_Status_Code = 8)
+		THEN
+				OP_MVT.ETAPE.2:=TRUE;
+				OP_MVT.ETAPE.1:=FALSE;
+(*étape 2-1 : reset fault*)
+ELSIF	OP_MVT.Etape.2
+		AND TIMER_Reset.Q
+		THEN
+				OP_MVT.ETAPE.1:=TRUE;
+				OP_MVT.ETAPE.2:=FALSE;				
+(*étape 1-3*)
+ELSIF	OP_MVT.Etape.1
+		AND (VAR_Status_Code >= 2)
+		THEN
+				OP_MVT.ETAPE.3:=TRUE;
+				OP_MVT.ETAPE.1:=FALSE;		
+(*étape 3-4*)
+ELSIF	OP_MVT.Etape.3
+		AND (VAR_Status_Code >= 3)
+		THEN
+				OP_MVT.ETAPE.4:=TRUE;
+				OP_MVT.ETAPE.3:=FALSE;	
+(*étape 4-5*)
+ELSIF	OP_MVT.Etape.4
+		AND (VAR_Status_Code = 4)
+		THEN
+				OP_MVT.ETAPE.5:=TRUE;
+				OP_MVT.ETAPE.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_MVT.Etape.5
+		AND (VAR_Status_Code = 5)
+		THEN
+				OP_MVT.ETAPE.6:=TRUE;
+				OP_MVT.ETAPE.5:=FALSE;
+(*étape 6-7*)
+ELSIF	OP_MVT.Etape.6
+		AND (NOT VAR_On OR DEF_off_auto.DEF)
+		THEN
+				OP_MVT.ETAPE.7:=TRUE;
+				OP_MVT.ETAPE.6:=FALSE;
+(*étape 7-0*)
+ELSIF	OP_MVT.Etape.7
+		AND (VAR_Status_Code <> 5)
+		THEN
+				OP_MVT.ETAPE.0:=TRUE;
+				OP_MVT.ETAPE.7:=FALSE;
+END_IF
+
+OP_MVT.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_MOTEUR_ATV_ETHERCAT">
+      <LineId Id="1339" Count="0" />
+      <LineId Id="1330" Count="0" />
+      <LineId Id="1333" Count="1" />
+      <LineId Id="1337" Count="1" />
+      <LineId Id="1331" Count="0" />
+      <LineId Id="1340" Count="0" />
+      <LineId Id="1342" Count="1" />
+      <LineId Id="1341" Count="0" />
+      <LineId Id="1332" Count="0" />
+      <LineId Id="1214" Count="0" />
+      <LineId Id="647" Count="8" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="254" Count="17" />
+      <LineId Id="274" Count="0" />
+      <LineId Id="348" Count="0" />
+      <LineId Id="275" Count="1" />
+      <LineId Id="278" Count="0" />
+      <LineId Id="280" Count="5" />
+      <LineId Id="288" Count="1" />
+      <LineId Id="286" Count="1" />
+      <LineId Id="290" Count="1" />
+      <LineId Id="279" Count="0" />
+      <LineId Id="277" Count="0" />
+      <LineId Id="273" Count="0" />
+      <LineId Id="16" Count="8" />
+      <LineId Id="35" Count="2" />
+      <LineId Id="955" Count="0" />
+      <LineId Id="1200" Count="0" />
+      <LineId Id="40" Count="4" />
+      <LineId Id="623" Count="0" />
+      <LineId Id="45" Count="5" />
+      <LineId Id="61" Count="0" />
+      <LineId Id="1201" Count="0" />
+      <LineId Id="625" Count="0" />
+      <LineId Id="624" Count="0" />
+      <LineId Id="626" Count="0" />
+      <LineId Id="946" Count="0" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="71" Count="6" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="327" Count="0" />
+      <LineId Id="326" Count="0" />
+      <LineId Id="337" Count="3" />
+      <LineId Id="614" Count="0" />
+      <LineId Id="341" Count="1" />
+      <LineId Id="345" Count="2" />
+      <LineId Id="329" Count="0" />
+      <LineId Id="378" Count="0" />
+      <LineId Id="503" Count="0" />
+      <LineId Id="492" Count="0" />
+      <LineId Id="495" Count="0" />
+      <LineId Id="491" Count="0" />
+      <LineId Id="497" Count="1" />
+      <LineId Id="627" Count="0" />
+      <LineId Id="909" Count="0" />
+      <LineId Id="902" Count="0" />
+      <LineId Id="927" Count="2" />
+      <LineId Id="1319" Count="1" />
+      <LineId Id="1324" Count="5" />
+      <LineId Id="1323" Count="0" />
+      <LineId Id="1321" Count="1" />
+      <LineId Id="930" Count="12" />
+      <LineId Id="926" Count="0" />
+      <LineId Id="781" Count="0" />
+      <LineId Id="775" Count="0" />
+      <LineId Id="777" Count="0" />
+      <LineId Id="779" Count="0" />
+      <LineId Id="81" Count="0" />
+      <LineId Id="1196" Count="3" />
+      <LineId Id="944" Count="0" />
+      <LineId Id="780" Count="0" />
+      <LineId Id="82" Count="3" />
+      <LineId Id="621" Count="0" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="BLOCK_MOTEUR_ATV_ETHERCAT.ACT_MVT">
+      <LineId Id="2" Count="10" />
+      <LineId Id="149" Count="0" />
+      <LineId Id="13" Count="13" />
+      <LineId Id="78" Count="2" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="82" Count="1" />
+      <LineId Id="71" Count="5" />
+      <LineId Id="85" Count="17" />
+      <LineId Id="133" Count="8" />
+      <LineId Id="145" Count="0" />
+      <LineId Id="143" Count="1" />
+      <LineId Id="68" Count="2" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

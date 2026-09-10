@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="BLOCK_SOURCE_JOULE" Id="{52b00eed-7e9f-4769-9e7c-f0e7cb9461fa}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_SOURCE_JOULE
+VAR_INPUT
+	DOOR:						BOOL;		(*porte fermée*)
+	VAC:						BOOL;		(*sécurité vide*)
+	WATER:						BOOL;		(*refroidissement source ok*)
+	MANUAL:					BOOL;		(*demande mode manuel*)
+	I_CR_OK:					BOOL;		(*Positionnement creuset ok*)
+	RESET:						BOOL;		(*reset*)
+
+	AI_UEJ:						ANALOG_INPUT;
+	AI_IEJ:						ANALOG_INPUT;
+
+	IN_IEJQ			AT%I*:		INT;			(* Entrée analogique courant*)
+	IN_UEJQ			AT%I*:		INT;			(* Entrée analogique tension*)
+
+	EJ:							BLOCK_ACTUATOR2;		(*Source Effet Joule*)
+
+	I_POWER:					REAL;		(*consigne de puissance appliquée en mode automatique*)
+	PRM_POWER:				REAL;		(*Consigne de puissance appliquée en mode manuel*)
+	CO_SRC:					BOOL;		(*Commande externe de marche de la source en automatique*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_MEJ			AT%Q*:		BOOL;		(*Marche Effet joule*)
+
+	AO_QEJ:				ANALOG_OUTPUT;		(*Sortie analogique consigne effet joule*)
+	OUT_QEJ			AT%Q*:		INT;			(*Consigne effet joule*)
+
+	STATE_UEJ:			REAL;			
+	STATE_IEJ:			REAL;			
+	
+	
+	STATE_EJ_ON:		BOOL;			(*Etat effet joule en marche*)
+
+	STATE_POWER:		REAL;			(*Puissance appliquée en %*)
+
+	STATE_NOK:			BOOL;			(*Alimentation en défaut*)
+	STATE_READY:		BOOL;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[EJ.IdParent := MNEMO;
+EJ.IdXML := '16';
+EJ.TagXML := 11;
+EJ.MNEMO := 	CONCAT(MNEMO,'_EJ');
+
+(*Défaut*)
+EJ.DEF_Off_Auto.IdXml			:=	'3';
+EJ.DEF_Off_Auto.TagXml		:=	10;
+EJ.DEF_On_imposs.IdXml		:=	'3';
+EJ.DEF_On_imposs.TagXml	:=	5;
+EJ.DEF_Off_imposs.IdXml		:=	'3';
+EJ.DEF_Off_imposs.TagXml	:=	8;
+
+
+EJ(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	CO_On:=CO_SRC ,
+	EN_On_INT:=DOOR AND WATER AND VAC AND (I_CR_OK OR (STATE_POWER = 0)),
+	EN_Off_INT:= TRUE,
+	CONF_No_Safety_Auto:=FALSE ,
+	CONF_EN_On:= ,
+	CONF_Tim_Valid_On:= T#5s,
+	CONF_Tim_Valid_Off:= T#50ms,
+	OUT_On=>,
+	STATE_On=> ,
+	STATE_Nok=> );
+
+(*Demande marche Effet Joule*)
+OUT_MEJ:= EJ.OUT_On;
+STATE_EJ_ON:= OUT_MEJ;
+
+
+(*Gestion de la sortie analogique*)
+IF NOT STATE_EJ_ON OR RESET THEN
+	AO_QEJ.Value := 0.0;
+ELSIF MANUAL THEN
+	AO_QEJ.Value := PRM_POWER;
+ELSE
+	AO_QEJ.Value := I_POWER;
+END_IF;
+
+AO_QEJ(
+	CONF_Max:=100 ,	(*%*)
+	CONF_Min:= 0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:=1 );
+OUT_QEJ:= AO_QEJ.OUTPUT;
+
+STATE_POWER:= AO_QEJ.Value;
+
+(*Retour Source en défaut*)
+STATE_NOK:= EJ.STATE_Nok;
+STATE_READY:= WATER AND DOOR AND VAC AND I_CR_OK;
+
+(*Gestion de la sortie analogique source effet joule *)
+
+AI_UEJ(
+	CONF_Max:= 30.0,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:= 1,
+	INPUT:= IN_UEJQ ,
+	Value=> STATE_UEJ );
+
+AI_IEJ(
+	CONF_Max:= 500.0,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:= 1,
+	INPUT:= IN_IEJQ ,
+	Value=> STATE_IEJ );
+	
+]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_SOURCE_JOULE">
+      <LineId Id="41" Count="53" />
+      <LineId Id="174" Count="1" />
+      <LineId Id="200" Count="0" />
+      <LineId Id="176" Count="6" />
+      <LineId Id="201" Count="0" />
+      <LineId Id="204" Count="5" />
+      <LineId Id="202" Count="0" />
+      <LineId Id="210" Count="0" />
+      <LineId Id="212" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

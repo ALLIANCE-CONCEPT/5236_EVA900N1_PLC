@@ -1,0 +1,532 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_XTAL6" Id="{e73bfc7e-6f48-4270-907b-d4a5f7bc97f6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_XTAL6
+
+(* Gestion d'une d'une tête multiquartz *)
+(* Version 0 - SD- affaire 8152 *)
+(* Version 1 - GV - 05/2015 - Correction Reset des G7 sur passage en manu - 8950*)
+
+VAR_INPUT
+	I_APPLY_PARAMETER:	BOOL;
+	RESET:				BOOL;
+	MANUAL:				BOOL;
+	CTRL_PLC:			BOOL;
+
+	IN_QF:				BOOL;		(*Quartz actif en panne*)
+	IN_RATE:			REAL;		(*Vitesse de dépot mesurée sur le quartz acitf*)
+	IN_FREQ:			REAL;		(*Frequence du quartz actif*)
+	IN_THICKNESS:		REAL;		(*Epaisseur mesurée sur le quartz acitf*)
+	IN_LIFE:			REAL;		(*Vie du quartz actif*)
+	IN_ACTIVITY:		REAL;		(*Activité du quartz actif*)
+	CO_SWITCH_CRYSTAL:	BOOL;		(*Pilotage Switch Crystal provenant de l'IC6*)
+
+	CO_Positionnement:	BOOL;		(*Commande de positionnement de la tête MultiQuartz*)
+	CO_Scan_Quartz:		BOOL;		(*Commande de scan des Quartz*)
+
+	(*Consigne*)
+	CONS_MATERIAL:	 	STRING;		(*Materiau*)
+	CONS_POID:			REAL;		(*Poids du quartz pour la calcul du quartz*)
+	CONS_ZRATIO:		REAL;		(*Valeur du Zratio*)
+	CONS_DENSITE:		REAL;		(*Valeur de densité*)
+	CONS_TOOLING:		REAL;		(*Facteur de correction de chaque quartz*)
+
+
+	QZ11T		AT%I*:		BOOL;		(*Position sur Quartz n°1*)
+	QZ12T		AT%I*:		BOOL;		(*Position sur Quartz n°2*)
+	QZ13T		AT%I*:		BOOL;		(*Position sur Quartz n°3*)
+	QZ14T		AT%I*:		BOOL;		(*Position sur Quartz n°4*)
+	QZ15T		AT%I*:		BOOL;		(*Position sur Quartz n°5*)
+	QZ16T		AT%I*:		BOOL;		(*Position sur Quartz n°6*)
+
+(*Composant de la fonction*)
+	QZ1_SWITCH:				BLOCK_ACTUATOR2;
+
+(*défaut*)
+	DEF_QZ:					PRCDEF;	(*Défaut quartz utilisé*)
+	DEF_Positionnement:		PRCDEF;	(*Défaut de positionnement*)
+
+(*Alarme*)
+	ALM_SURV_ACTIVITY_QZ1:		PRCDEF;			(*Alarme surveillance activité du Quartz n°1*)
+	ALM_SURV_ACTIVITY_QZ2:		PRCDEF;			(*Alarme surveillance activité du Quartz n°2*)
+	ALM_SURV_ACTIVITY_QZ3:		PRCDEF;			(*Alarme surveillance activité du Quartz n°3*)
+	ALM_SURV_ACTIVITY_QZ4:		PRCDEF;			(*Alarme surveillance activité du Quartz n°4*)
+	ALM_SURV_ACTIVITY_QZ5:		PRCDEF;			(*Alarme surveillance activité du Quartz n°5*)
+	ALM_SURV_ACTIVITY_QZ6:		PRCDEF;			(*Alarme surveillance activité du Quartz n°6*)
+
+	ALM_SURV_LIFE_QZ1:			PRCDEF;			(*Alarme surveillance vie du Quartz n°1*)
+	ALM_SURV_LIFE_QZ2:			PRCDEF;			(*Alarme surveillance vie du Quartz n°2*)
+	ALM_SURV_LIFE_QZ3:			PRCDEF;			(*Alarme surveillance vie du Quartz n°3*)
+	ALM_SURV_LIFE_QZ4:			PRCDEF;			(*Alarme surveillance vie du Quartz n°4*)
+	ALM_SURV_LIFE_QZ5:			PRCDEF;			(*Alarme surveillance vie du Quartz n°5*)
+	ALM_SURV_LIFE_QZ6:			PRCDEF;			(*Alarme surveillance vie du Quartz n°6*)
+
+(*Opérations*)
+	OP_Scan_Quartz:				BLOCK_OPERATION;	(* G7 de scan de l'état des quartz*)
+	OP_Positionnement:			BLOCK_OPERATION;	(*G7 de positionnement du Quartz*)
+
+(*Paramètres*)
+	PRM_CONS_POSITION_QZ:		INT;		(*Consigne de position du Quartz*)
+
+END_VAR
+VAR_OUTPUT
+
+	STATE_FREQUENCY:		ARRAY[0..6] OF REAL;	 (*Fréquence des quartz*)
+	STATE_LIFE:				ARRAY[0..6] OF REAL; 	(*Vie des quartz*)
+	STATE_ACTIVITY:			ARRAY[0..6] OF REAL;	(*Actvité des Quartz*)
+
+	STATE_QF1:			BOOL;			(*Etat du Crystal 1*)
+	STATE_QF2:			BOOL;			(*Etat du Crystal 2*)
+	STATE_QF3:			BOOL;			(*Etat du Crystal 3*)
+	STATE_QF4:			BOOL;			(*Etat du Crystal 4*)
+	STATE_QF5:			BOOL;			(*Etat du Crystal 5*)
+	STATE_QF6:			BOOL;			(*Etat du Crystal 6*)
+
+	STATE_POSITION:		INT;				(*Position actuel du Quartz*)
+
+	STATE_SCAN_QZ_AR:			BOOL;			(*Scan OK*)
+	STATE_SCAN_QZ_EC:			BOOL;			(*Scan en cours*)
+	STATE_POS_QZ_AR:			BOOL;			(*Positionnement OK*)
+	STATE_POS_QZ_EC:			BOOL;			(*Positionnement en cours*)
+	STATE_SELECT_QZ_OK:			BOOL;			(*Indique que la selection du Quartz est OK*)
+
+	STATE_THICKNESS:			REAL;
+	STATE_RATE:					REAL;
+	STATE_MATERIAL:				STRING;
+	STATE_NOK:					BOOL;
+
+	STATE_ACTUAL_CRYS_FREQ:		REAL;
+	STATE_ACTUAL_CRYS_LIFE:		REAL;
+	STATE_ACTUAL_CRYS_ACTIVITY:	REAL;
+
+	OUT_MATERIAL:				STRING;
+	OUT_POIDS:					REAL;
+	OUT_ZRATIO:					REAL;
+	OUT_DENSITE:				REAL;
+	OUT_TOOLING:				REAL;
+
+	RQ_SWITCH_CRYSTAL:			BOOL;			(*Demande de Switch à une position donnée de la tête multiquartz*)
+	OUT_CONS_POS_QUARTZ:		INT;				(*Consigne de position *)
+
+	OUT_QZ1	AT %Q*:				BOOL;			(*Sortie Switch Crystal*)
+END_VAR
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+
+	PRM_Seuil_Life:			REAL;	(*Seuil d'alarme pour la vie du quartz*)
+	PRM_Seuil_Activity:		REAL;	(*Seuil d'alarme pour l'activité du quartz*)
+
+END_VAR
+VAR
+	VAR_Compteur:			INT;		(*Variable d'itération pour tête 6 Quartz*)
+	MEM_POSITION_SCAN:		INT;		(*Variable mémoire position tête quartz*)
+	MEM_POSITION:			INT;
+	TIMER_Acq_Scan:			TON;	(*Timer d'acquisition du scan*)
+	TIMER_Positionnement:	TON;	(*Timer de positionnement*)
+
+	FM_Scan:				R_TRIG;
+	FM_Etape_1_Position:	R_TRIG;
+	VAR_Dmde_Scan:			BOOL;
+	I:						INT;		(*Variable d'incrementation*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+ACT_POSITIONNEMENT();
+ACT_SCAN_QUARTZ();
+
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_POSITIONNEMENT" Id="{0e9655b9-38b3-4acf-a055-851314cd75ba}">
+      <Implementation>
+        <ST><![CDATA[(*Opération de Scan de l'état des Quartz*)
+OP_Positionnement(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= OP_Scan_Quartz.Etape.0,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:= 3,
+	N_STEP_OP_NOK:=0 );
+
+OP_Positionnement.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Positionnement.Etape = 0 THEN
+				OP_Positionnement.Etape.0:=TRUE;
+
+(*repositionnement sur étape 0*)
+ELSIF MANUAL OR RESET
+		THEN
+				OP_Positionnement.Etape := 0;
+				OP_Positionnement.Etape.0 := TRUE;
+
+(*Etape 0-1*)
+ELSIF	OP_Positionnement.Etape.0
+		AND OP_Positionnement.MARCHE_OP
+		AND OP_Scan_Quartz.Etape.0
+		AND (PRM_CONS_POSITION_QZ>0)  THEN
+				MEM_POSITION:= STATE_POSITION;
+				OP_Positionnement.Etape.1:= TRUE;
+				OP_Positionnement.Etape.0:= FALSE;
+
+(*Etape 1-3*)
+ELSIF	OP_Positionnement.Etape.1
+		AND (STATE_POSITION = PRM_CONS_POSITION_QZ)  THEN
+				OP_Positionnement.Etape.3:= TRUE;
+				OP_Positionnement.Etape.1:= FALSE;
+
+(*Rotation séquentielle*)
+(*Etape 1-2*)
+ELSIF	OP_Positionnement.Etape.1
+		AND (STATE_POSITION <> MEM_POSITION) THEN
+				MEM_POSITION:= STATE_POSITION;
+				OP_Positionnement.Etape.2:= TRUE;
+				OP_Positionnement.Etape.1:= FALSE;
+
+(*Etape 2-3*)
+ELSIF	OP_Positionnement.Etape.2
+		AND (STATE_POSITION = PRM_CONS_POSITION_QZ)  THEN
+				OP_Positionnement.Etape.3:= TRUE;
+				OP_Positionnement.Etape.2:= FALSE;
+
+
+(*Etape 2-1*)
+ELSIF	OP_Positionnement.Etape.2
+		AND (STATE_POSITION <> PRM_CONS_POSITION_QZ)
+		AND TIMER_Positionnement.Q
+		 THEN
+				OP_Positionnement.Etape.1:= TRUE;
+				OP_Positionnement.Etape.2:= FALSE;
+
+
+ELSIF	OP_Positionnement.Etape.3
+		AND (STATE_POSITION = PRM_CONS_POSITION_QZ)  THEN
+				OP_Positionnement.Etape.0:= TRUE;
+				OP_Positionnement.Etape.3:= FALSE;
+
+END_IF
+
+OP_Positionnement.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_SCAN_QUARTZ" Id="{c24464e6-680e-4353-9ec0-6bf42776e374}">
+      <Implementation>
+        <ST><![CDATA[(*Opération de Scan de l'état des Quartz*)
+OP_Scan_Quartz(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=OP_Positionnement.Etape.0,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:= 4,
+	N_STEP_OP_NOK:=0 );
+
+OP_Scan_Quartz.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Scan_Quartz.Etape = 0 THEN
+				OP_Scan_Quartz.Etape.0:=TRUE;
+
+(*repositionnement sur étape 0*)
+ELSIF MANUAL OR RESET
+		THEN
+				OP_Scan_Quartz.Etape := 0;
+				OP_Scan_Quartz.Etape.0 := TRUE;
+
+(*Etape 0-1*)
+ELSIF	OP_Scan_Quartz.Etape.0
+		AND OP_Scan_Quartz.MARCHE_OP AND OP_Positionnement.Etape.0 THEN
+				(*Mémorisation de la position du Quartz*)
+				MEM_POSITION:= STATE_POSITION;
+				VAR_Compteur:= 1;
+				OP_Scan_Quartz.Etape.1:= TRUE;
+				OP_Scan_Quartz.Etape.0:= FALSE;
+
+(*Etape 1-2*)
+ELSIF	OP_Scan_Quartz.Etape.1
+		AND (STATE_POSITION<> MEM_POSITION) THEN
+				MEM_POSITION:= STATE_POSITION;
+				OP_Scan_Quartz.Etape.2:= TRUE;
+				OP_Scan_Quartz.Etape.1:= FALSE;
+
+(*Attente avant stablisation de la mesure*)
+(*étape 2-3*)
+ELSIF	OP_Scan_Quartz.Etape.2
+		AND TIMER_Acq_Scan.Q THEN
+				OP_Scan_Quartz.Etape.3:= TRUE;
+				OP_Scan_Quartz.Etape.2:= FALSE;
+
+(*étape 3-1*)
+ELSIF	OP_Scan_Quartz.Etape.3
+		AND VAR_Compteur<6 THEN
+				VAR_Compteur:= VAR_Compteur + 1;
+				OP_Scan_Quartz.Etape.1:= TRUE;
+				OP_Scan_Quartz.Etape.3:= FALSE;
+
+(*étape 3-4*)
+ELSIF	OP_Scan_Quartz.Etape.3
+		AND VAR_Compteur>=6 THEN
+				VAR_Dmde_Scan:= FALSE;
+				OP_Scan_Quartz.Etape.4:= TRUE;
+				OP_Scan_Quartz.Etape.3:= FALSE;
+
+ELSIF OP_Scan_Quartz.Etape.4 THEN
+				OP_Scan_Quartz.Etape.0:= TRUE;
+				OP_Scan_Quartz.Etape.4:= FALSE;
+
+
+END_IF
+
+OP_Scan_Quartz.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{3f6a9aa7-115b-4d37-8feb-57ed79592beb}">
+      <Implementation>
+        <ST><![CDATA[(*Position de la tête MultiQuartz*)
+IF QZ11T THEN
+	STATE_POSITION:=1;
+ELSIF QZ12T THEN
+	STATE_POSITION:=2;
+ELSIF QZ13T THEN
+	STATE_POSITION:=3;
+ELSIF QZ14T THEN
+	STATE_POSITION:=4;
+ELSIF QZ15T THEN
+	STATE_POSITION:=5;
+ELSIF QZ16T THEN
+	STATE_POSITION:=6;
+END_IF
+
+(*Gestion du changement de position du crystal*)
+QZ1_SWITCH(
+	RESET:= RESET,
+	MANUAL:=MANUAL ,
+	CO_On:=   CO_SWITCH_CRYSTAL ,
+	EN_On_INT:= TRUE,
+	EN_Off_INT:= TRUE,
+	EN_On_EXT:= TRUE,			(*TOCHECK*)
+	EN_Off_EXT:= TRUE,
+	OUT_On=> OUT_QZ1,);
+
+OUT_QZ1:=CO_SWITCH_CRYSTAL;
+(*Demande de switch*)
+RQ_SWITCH_CRYSTAL:= (OP_Positionnement.Etape.1 AND STATE_POSITION <> PRM_CONS_POSITION_QZ) OR OP_Scan_Quartz.Etape.1;
+
+(*Acquisition des données du scan*)
+IF OP_Scan_Quartz.Etape.3 OR OP_Positionnement.Etape.0 THEN
+	CASE STATE_POSITION OF
+		1:
+			STATE_FREQUENCY[1]:= IN_FREQ;
+			STATE_LIFE[1]:= IN_LIFE;
+			STATE_ACTIVITY[1]:= IN_ACTIVITY;
+			STATE_QF1:= IN_QF ;
+		2:
+			STATE_FREQUENCY[2]:= IN_FREQ;
+			STATE_LIFE[2]:= IN_LIFE;
+			STATE_ACTIVITY[2]:= IN_ACTIVITY;
+			STATE_QF2:= IN_QF ;
+		3:
+			STATE_FREQUENCY[3]:= IN_FREQ;
+			STATE_LIFE[3]:= IN_LIFE;
+			STATE_ACTIVITY[3]:= IN_ACTIVITY;
+			STATE_QF3:= IN_QF;
+		4:
+			STATE_FREQUENCY[4]:= IN_FREQ;
+			STATE_LIFE[4]:= IN_LIFE;
+			STATE_ACTIVITY[4]:= IN_ACTIVITY;
+			STATE_QF4:= IN_QF;
+		5:
+			STATE_FREQUENCY[5]:= IN_FREQ;
+			STATE_LIFE[5]:= IN_LIFE;
+			STATE_ACTIVITY[5]:= IN_ACTIVITY;
+			STATE_QF5:= IN_QF ;
+		6:
+			STATE_FREQUENCY[6]:= IN_FREQ;
+			STATE_LIFE[6]:= IN_LIFE;
+			STATE_ACTIVITY[6]:= IN_ACTIVITY;
+			STATE_QF6:= IN_QF ;
+	END_CASE
+END_IF
+
+(*Timer acquisition état des quartz*)
+TIMER_Acq_Scan(
+	IN := OP_Scan_Quartz.Etape.2,
+	PT := T#10s
+	 );
+
+
+(*Timer acquisition état des quartz*)
+TIMER_Positionnement(
+	IN := OP_Positionnement.Etape.2,
+	PT := T#10s
+	 );
+
+IF I_APPLY_PARAMETER THEN
+	OUT_DENSITE 		:=		CONS_DENSITE;
+	OUT_POIDS			:=		CONS_POID;
+	OUT_ZRATIO		:=		CONS_ZRATIO;
+	OUT_MATERIAL 		:= 		CONS_MATERIAL;
+	OUT_TOOLING		:=		CONS_TOOLING;
+END_IF
+
+STATE_RATE:= 			IN_RATE;
+STATE_THICKNESS:= 	IN_THICKNESS;
+STATE_MATERIAL:=		OUT_MATERIAL;
+STATE_NOK	:=			DEF_QZ.DEF;
+
+(*Rotation séquentielle de la position*)
+OUT_CONS_POS_QUARTZ:=0;
+
+
+STATE_POS_QZ_AR:= NOT OP_Positionnement.Etape.1;
+STATE_POS_QZ_EC:= OP_Positionnement.Etape.1;
+STATE_SCAN_QZ_AR:= NOT OP_Scan_Quartz.Etape.1;
+STATE_SCAN_QZ_EC:= OP_Scan_Quartz.Etape.1;
+
+STATE_ACTUAL_CRYS_FREQ:= IN_FREQ;
+STATE_ACTUAL_CRYS_LIFE:= IN_LIFE;
+STATE_ACTUAL_CRYS_ACTIVITY:= IN_ACTIVITY;
+
+(*Indique si la selection du quartz est ok*)
+IF (STATE_POSITION = PRM_CONS_POSITION_QZ) AND STATE_POS_QZ_AR THEN
+	STATE_SELECT_QZ_OK:=TRUE;
+ELSE
+	STATE_SELECT_QZ_OK:=FALSE;
+END_IF
+
+
+(*Alarme activité des quartz*)
+ALM_SURV_ACTIVITY_QZ1(CONDITION := STATE_ACTIVITY[1] < PRM_Seuil_Activity, VAL1:= '1');
+ALM_SURV_ACTIVITY_QZ2(CONDITION := STATE_ACTIVITY[2] < PRM_Seuil_Activity, VAL1:= '2');
+ALM_SURV_ACTIVITY_QZ3(CONDITION := STATE_ACTIVITY[3] < PRM_Seuil_Activity, VAL1:= '3');
+ALM_SURV_ACTIVITY_QZ4(CONDITION := STATE_ACTIVITY[4] < PRM_Seuil_Activity, VAL1:= '4');
+ALM_SURV_ACTIVITY_QZ5(CONDITION := STATE_ACTIVITY[5] < PRM_Seuil_Activity, VAL1:= '5');
+ALM_SURV_ACTIVITY_QZ6(CONDITION := STATE_ACTIVITY[6] < PRM_Seuil_Activity, VAL1:= '6');
+
+(*Alarme vie des quartz*)
+ALM_SURV_LIFE_QZ1(CONDITION:=STATE_LIFE[1] > PRM_Seuil_Life, VAL1:= '1');
+ALM_SURV_LIFE_QZ2(CONDITION:=STATE_LIFE[2] > PRM_Seuil_Life, VAL1:= '2');
+ALM_SURV_LIFE_QZ3(CONDITION:=STATE_LIFE[3] > PRM_Seuil_Life, VAL1:= '3');
+ALM_SURV_LIFE_QZ4(CONDITION:=STATE_LIFE[4] > PRM_Seuil_Life, VAL1:= '4');
+ALM_SURV_LIFE_QZ5(CONDITION:=STATE_LIFE[5] > PRM_Seuil_Life, VAL1:= '5');
+ALM_SURV_LIFE_QZ6(CONDITION:=STATE_LIFE[6] > PRM_Seuil_Life, VAL1:= '6');
+
+
+
+(*Défaut du Quartz utilisé, on vérifie que le positionnement n'est pas en cours et que c'est bien le Quartz utilisé qui est en défaut*)
+DEF_QZ(
+		CONDITION:=	IN_QF AND (STATE_POSITION = PRM_CONS_POSITION_QZ) AND STATE_POS_QZ_AR ,
+		DELAY:=			T#10s);
+
+(*Défaut de positionnement de la tête multiquartz*)
+DEF_Positionnement(
+		CONDITION:= OP_Positionnement.Etape.1 OR OP_Scan_Quartz.Etape.1,
+		DELAY:=			T#30s);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{0849b58e-acd1-4598-932c-352e23dc477c}">
+      <Implementation>
+        <ST><![CDATA[TagXML:= 9;
+IdXML:=	'16';
+
+(*Défaut*)
+DEF_QZ.IdXML := '14';
+DEF_QZ.TagXML := 3;
+
+DEF_Positionnement.IdXML := '14';
+DEF_Positionnement.TagXML := 2;
+
+(*Alarme*)
+ALM_SURV_ACTIVITY_QZ1.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ1.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ1.Groupe := 1;
+
+ALM_SURV_ACTIVITY_QZ2.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ2.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ2.Groupe := 1;
+
+ALM_SURV_ACTIVITY_QZ3.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ3.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ3.Groupe := 1;
+
+ALM_SURV_ACTIVITY_QZ4.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ4.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ4.Groupe := 1;
+
+ALM_SURV_ACTIVITY_QZ5.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ5.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ5.Groupe := 1;
+
+ALM_SURV_ACTIVITY_QZ6.IdXML:= '14';
+ALM_SURV_ACTIVITY_QZ6.TagXML:= 15;
+ALM_SURV_ACTIVITY_QZ6.Groupe := 1;
+
+ALM_SURV_LIFE_QZ1.IdXML := '14';
+ALM_SURV_LIFE_QZ1.TagXML := 16;
+ALM_SURV_LIFE_QZ1.Groupe := 1;
+
+ALM_SURV_LIFE_QZ2.IdXML := '14';
+ALM_SURV_LIFE_QZ2.TagXML := 16;
+ALM_SURV_LIFE_QZ2.Groupe := 1;
+
+ALM_SURV_LIFE_QZ3.IdXML := '14';
+ALM_SURV_LIFE_QZ3.TagXML := 16;
+ALM_SURV_LIFE_QZ3.Groupe := 1;
+
+ALM_SURV_LIFE_QZ4.IdXML := '14';
+ALM_SURV_LIFE_QZ4.TagXML := 16;
+ALM_SURV_LIFE_QZ4.Groupe := 1;
+
+ALM_SURV_LIFE_QZ5.IdXML := '14';
+ALM_SURV_LIFE_QZ5.TagXML := 16;
+ALM_SURV_LIFE_QZ5.Groupe := 1;
+
+ALM_SURV_LIFE_QZ6.IdXML := '14';
+ALM_SURV_LIFE_QZ6.TagXML := 16;
+ALM_SURV_LIFE_QZ6.Groupe := 1;
+
+
+(*Switch Crystal QZ1*)
+QZ1_SWITCH.CONF_Tim_Valid_Off		:=	T#0ms;
+QZ1_SWITCH.CONF_Tim_Valid_On		:=	T#0ms;
+QZ1_SWITCH.MNEMO					:=	'SQZ1';
+QZ1_SWITCH.CONF_EN_On				:=	0;
+QZ1_SWITCH.CONF_No_Safety_Auto		:=	FALSE;
+QZ1_SWITCH.IdXML					:=	'4';
+QZ1_SWITCH.TagXML					:=	1;
+QZ1_SWITCH.IdParent					:=	MNEMO;
+QZ1_SWITCH.DEF_Off_auto.IdXML		:=	'3';
+QZ1_SWITCH.DEF_Off_auto.TagXML		:=	11;
+QZ1_SWITCH.DEF_Off_Imposs.IdXML		:=	'3';
+QZ1_SWITCH.DEF_Off_Imposs.TagXML	:=	9;
+QZ1_SWITCH.DEF_On_Imposs.IdXML		:=	'3';
+QZ1_SWITCH.DEF_On_Imposs.TagXML		:=	6;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_XTAL6">
+      <LineId Id="133" Count="5" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTAL6.ACT_POSITIONNEMENT">
+      <LineId Id="0" Count="70" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTAL6.ACT_SCAN_QUARTZ">
+      <LineId Id="0" Count="68" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTAL6.POST">
+      <LineId Id="0" Count="139" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTAL6.PRL">
+      <LineId Id="0" Count="74" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

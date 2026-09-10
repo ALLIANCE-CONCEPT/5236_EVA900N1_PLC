@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <DUT Name="STRUCT_JEV" Id="{04095e91-a24d-4705-9730-1339d0537b96}">
+    <Declaration><![CDATA[TYPE STRUCT_JEV :
+STRUCT
+	STATE_dt:		DT;
+	STATE_App:		STRING;
+	STATE_Path:		STRING;
+	STATE_Title:	STRING(200);
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

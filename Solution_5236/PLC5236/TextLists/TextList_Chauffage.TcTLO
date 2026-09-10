@@ -1,0 +1,152 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Chauffage" Id="{c932722d-81af-4fb1-be90-aea2e1a8088b}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"chauffage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>CHAUFFAGE</v>
+                <v>HEATING</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"puissance"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Puissance</v>
+                <v>Power</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"temp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température</v>
+                <v>Temperature</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"cons temp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne
+température</v>
+                <v>Temperature
+setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"cons puiss"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne
+puissance</v>
+                <v>Power
+setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"cons temp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne temp.</v>
+                <v>Temp. setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"maintien"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée de maintien</v>
+                <v>Hold time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"delta"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Variation de temp.</v>
+                <v>Temp. variation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"max stab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée max. de stabilisation</v>
+                <v>Max. stabilization time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"cons temp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne température</v>
+                <v>Temperature setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"delta"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Variation de température</v>
+                <v>Temperature variation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"puissance bords"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Puissance bords</v>
+                <v>Borders power</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"Tc Ctrl"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Thermocouples de régulation</v>
+                <v>Regulation thermocouples</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"Tc Disp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Thermocouples de sécurité</v>
+                <v>Security thermocouples</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{63583aa7-c37d-4b19-902a-e0f3c0efd98b}</v>
+          <v n="GuidReInit">{d82b41ec-10de-4521-a661-ab936a9f5b07}</v>
+          <v n="GuidExitX">{58c2447c-e454-4122-a0b8-7e1faafeec33}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

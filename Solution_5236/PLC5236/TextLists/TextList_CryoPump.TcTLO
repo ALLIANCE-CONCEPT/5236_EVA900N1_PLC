@@ -1,0 +1,836 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <TextList Name="TextList_CryoPump" Id="{224b41d9-2649-4cbc-982e-7290163048b1}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"54"</v>
+              <v n="TextDefault">"Trame Manuelle"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Trame Manuelle</v>
+                <v>Manual Frame</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"55"</v>
+              <v n="TextDefault">"paramètres de régénération"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Paramètres de régénération</v>
+                <v>Regeneration settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"56"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompe Cryo</v>
+                <v>Cryo pump</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Forçage</v>
+                <v>Forcing</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etat de la pompe</v>
+                <v>Pump Status</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température du 1er étage (°K)</v>
+                <v>1st stage temperature (°K)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température du 2ème étage (°K)</v>
+                <v>2nd stage temperature (°K)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Activé"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompe activée</v>
+                <v>Pump activated</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Désactivé"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompe désactivée</v>
+                <v>Pump disabled</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Retour</v>
+                <v>Back</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de balayage long (min)</v>
+                <v>Extended purge time (min)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Délai de redémarrage (h)</v>
+                <v>Delay restart (h)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nombre de cycles de balayage</v>
+                <v>Repurge cycles</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de cycle du balayage (min)</v>
+                <v>Repurge time (min)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nombre de cycles de remontée en pression</v>
+                <v>Rate of rise cycles</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sous pression</v>
+                <v>Rough to pressure</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Verrouillage de la vanne d'arrêt</v>
+                <v>Rough Valve Interlock</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température de démarrage (°K)</v>
+                <v>Start Up Temperature (°K)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Lecture des paramètres enregistrés dans la pompe</v>
+                <v>Reading parameters stored in the pump</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ecriture des paramètres dans la pompe</v>
+                <v>Writing parameters to the pump</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Lancer la régénération </v>
+                <v>Launch regeneration </v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Stopper la régénération </v>
+                <v>Stop regeneration </v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Commande :</v>
+                <v>Command :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réponse :</v>
+                <v>Response :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Envoie Trame </v>
+                <v>Send Frame</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompe Cryo On-Board</v>
+                <v>CryoPump On-Board</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ÉCHAUFFEMENT</v>
+                <v>WARM-UP</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"27"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>DÉFAILLANCE DU GAZ DE PURGE</v>
+                <v>PURGE GAS FAILURE</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"28"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Balayage long</v>
+                <v>Extended purge</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"29"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression de pompage primaire (μ)</v>
+                <v>Rough to base pressure (μ)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"30"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Remontée en pression ROR (μ/min)</v>
+                <v>Rate of rise ROR (μ/min)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"31"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>REFROIDISSEMENT</v>
+                <v>COOLDOWN</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"32"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>DÉLAI DE REDÉMARRAGE</v>
+                <v>DELAY RESTART</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"33"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>DÉLAI DE DÉMARRAGE</v>
+                <v>DELAY START</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"34"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>RÉGÉNÉRATION TERMINÉE</v>
+                <v>REGEN COMPLETED</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"35"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>RÉGÉNÉRATION ARRÊTÉE</v>
+                <v>REGEN ABORTED</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"36"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Retour aux paramètres d'usine</v>
+                <v>Return to factory settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"38"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ouverte</v>
+                <v>Open</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"37"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fermé</v>
+                <v>Close</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"39"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etat de la vanne primaire</v>
+                <v>Rough Valve Status</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"40"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etat de la vanne de balayage</v>
+                <v>Purge Valve Status</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"41"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vanne primaire</v>
+                <v>Rough Valve</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"42"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vanne de balayage</v>
+                <v>Purge Valve</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"43"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etapes de la régénération en cours :</v>
+                <v>Stages of regeneration in progress :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"44"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Cryo éteinte</v>
+                <v>Cryo Off</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"45"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Rétablissement après coupure</v>
+                <v>Power Fail Recovery</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"46"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Informations de la pompe</v>
+                <v>Pump Infos</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"47"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Numéro de série de la pompe</v>
+                <v>Pump Serial Number</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"48"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nombre de cycles de régénération completés</v>
+                <v>Number of complete regeneration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"49"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps depuis la dernière régénération (h)</v>
+                <v>Time since last regeneration (h)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"50"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Niveau de révision du logiciel</v>
+                <v>Software revision level</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"51"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de fonctionnement de la pompe (h)</v>
+                <v>Pump operating time (h)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"52"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réinitialiser </v>
+                <v>RESET</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"53"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression (μ)</v>
+                <v>Pressure (μ)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>OFF</v>
+                <v>OFF</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ON</v>
+                <v>ON</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>COOL</v>
+                <v>COOL</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"57"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Délai de démarrage (h)</v>
+                <v>Delay start (h)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"58"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>TEMPS D'ÉCHAUFFEMENT</v>
+                <v>WARMUP TIMEOUT</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"59"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>AUCUNE ERREUR</v>
+                <v>NO ERROR</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"60"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>DÉLAI DE REFROIDISSEMENT</v>
+                <v>COOLDOWN TIMEOUT</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"61"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ERREUR DANS LE ROR</v>
+                <v>ERROR IN ROR</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"62"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>LA LIMITE DE CYCLES ROR A ÉTÉ ATTEINTE</v>
+                <v>ROR CYCLE LIMIT WAS REACHED</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"63"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ARRÊT MANUEL</v>
+                <v>MANUAL ABORT</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"64"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>DÉLAI D'ATTENTE DE LA VANNE PRIMAIRE</v>
+                <v>ROUGH VALVE TIMEOUT</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"65"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>BOGUE DU SYSTÈME</v>
+                <v>SYSTEM BUG</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"66"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Numero du relais :</v>
+                <v>Relay number :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"67"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Commande du paramètre :</v>
+                <v>Settings command :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"68"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Valeur :</v>
+                <v>Value :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"69"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Appliquer ces paramètres</v>
+                <v>Apply this settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"70"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température du 1er étage</v>
+                <v>1st stage temperature</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"71"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température de 2ème étage</v>
+                <v>2nd stage temperature</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"72"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression Cryo TC</v>
+                <v>Cryo TC pressure</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"73"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression TC auxiliaire</v>
+                <v>Aux TC pressure</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"74"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Délai d'attente (passage ON/OFF)</v>
+                <v>Time delay (switch ON/OFF)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"75"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fonction manuelle = ON</v>
+                <v>Manual Function = ON</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"76"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fonction manuelle = OFF</v>
+                <v>Manual Function = OFF</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"77"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Suivi de l'état de régénération</v>
+                <v>Regen track</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"78"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Suivi de l'état de vanne primaire</v>
+                <v>Rough valve track</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"79"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Suivi de l'état de la pompe cryo</v>
+                <v>Cryopump track</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"80"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Paramétrages des relais</v>
+                <v>Relay settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"81"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mode manuel</v>
+                <v>Manual mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"82"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mode automatique</v>
+                <v>Automatic mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"84"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Relais actif (ON)</v>
+                <v>Enable relay (ON)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"83"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Relais inactif (OFF)</v>
+                <v>Disable relay (OFF)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"85"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Restaure les paramètres automatiques</v>
+                <v>Restores automatic settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"86"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Cycle de rebalayage</v>
+                <v>Repurge cycle</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1000"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pas de données</v>
+                <v>No data</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"87"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Informations supplémentaires</v>
+                <v>Further information</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"88"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Lecture </v>
+                <v>Read</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"89"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Attention !</v>
+                <v>Warning !</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"90"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Cette action peut altérer le bon fonctionnement de la machine. Voulez-vous continuer ?</v>
+                <v>This action may affect the machine's operation. Do you want to continue?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"91"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Êtes-vous sûr de retourner aux paramètres d'usine ?</v>
+                <v>Are you sure you want to return to factory settings ?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"92"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Confirmer</v>
+                <v>Confirm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"93"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Annuler</v>
+                <v>Cancel</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"94"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etats</v>
+                <v>States</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"95"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fermé</v>
+                <v>Closed</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"96"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Régulation de la température du 1er étage</v>
+                <v>1st floor temperature control</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"97"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>maintenance alliance concept</v>
+                <v>alliance concept maintenance</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"98"</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Configuration de la pompe cryo</v>
+                <v>Cryo pump settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{536faf01-54c5-4ec9-bcb8-286fac7cdb7e}</v>
+          <v n="GuidReInit">{d1b7a14c-84ac-4812-8c2d-632f4e489acc}</v>
+          <v n="GuidExitX">{049a9538-e769-4328-8eeb-7278ef15896d}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

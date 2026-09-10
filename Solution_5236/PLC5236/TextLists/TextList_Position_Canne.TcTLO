@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Position_Canne" Id="{45116f64-6890-4492-8159-5d37dda89870}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"sas"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sas (0)</v>
+                <v>Loadlock (0)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"egun1"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Canon 1</v>
+                <v>E-gun 1</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"evap"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Source Joule</v>
+                <v>Thermal source</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"egun2"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Canon 2</v>
+                <v>E-gun 2</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"255"</v>
+              <v n="TextDefault">"undefined"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Indéfinie</v>
+                <v>Undefined</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{56f5ed01-631c-4219-a9b1-e79269f403bb}</v>
+          <v n="GuidReInit">{9c5b7841-837b-4738-97fc-45913f287499}</v>
+          <v n="GuidExitX">{0b6db7ac-c1fa-4ebf-949e-8aa302961372}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

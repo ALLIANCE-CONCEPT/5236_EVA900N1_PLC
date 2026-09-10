@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_PRG_EFFLUVAGE" Id="{4b2f2010-9ffd-4043-a272-6ba360a39ea1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_EFFLUVAGE
+VAR
+END_VAR
+VAR_INPUT PERSISTENT
+(* Entité*)
+	IsAssembly:			 	BOOL;					(*entité de type fonction*)
+	TagXml:					UINT;
+	IdXml: 					STRING;
+	IdParent: 				STRING;					(*MNEMO du pére*)
+	MNEMO:					STRING;					(*MNEMO de cette entité *)
+END_VAR
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	STATE_AR:				BOOL;
+	STATE_Def_IProc:		BOOL;		(*I_STANDARD -indique la présence d'un défaut entrainant l'arrêt du procédé*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Parametre statique *)
+(*General*)
+IdParent			:= 	'';
+MNEMO				:=	'EFFLUV';
+IdXML				:=	'15';
+TagXML				:=	0;
+
+
+STATE_AR := TRUE;
+STATE_Def_IProc := FALSE;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PRG_EFFLUVAGE">
+      <LineId Id="22" Count="6" />
+      <LineId Id="78" Count="1" />
+      <LineId Id="81" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

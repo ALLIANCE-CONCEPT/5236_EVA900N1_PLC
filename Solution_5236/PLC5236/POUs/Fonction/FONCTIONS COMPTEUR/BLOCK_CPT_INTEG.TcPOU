@@ -1,0 +1,96 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CPT_INTEG" Id="{d41bf39a-12d6-4e02-9d73-401025e41681}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CPT_INTEG
+(* fonction permettant d'integrer une variable par rapport au temps*)
+(* le comptage s'effectue lorsque l'entrée I_on est à true*)
+(* on mesure les tick du processeur (1tick = 100ns) entre 2 appel du block = DeltaT*)
+(* on ajoute au compteur la valeur mesurée en unité U sur I_value * DeltaT (en seconde) *)
+(* le compteur VAR_CPT est exprimé en U*s ou U*min ou U*heure en fonction de la valeur du paramètres CONF_time_Unit *)
+(* on peut convertir la valeur dans une unite (Wh en kWh par exemple) en fixant le paramètre CONF_coef (à 0.001 dans le cas de l'exémple)*)
+
+(* Version 2.0 - SP - BA8 - 7326*)
+
+VAR_INPUT
+	I_On:						BOOL;			(*donne si la fonction appelante est dans l'état marche (true) ou arret (false) *)
+	I_Value:					REAL;
+
+END_VAR
+
+VAR
+	MEM_PREVIOUS_ON:			BOOL;		(*mémorise l'état antérieur*)
+	VAR_Date_Off:				T_ULARGE_INTEGER;
+	VAR_Date_On:				T_ULARGE_INTEGER;
+	_GetCpuCounter:				FW_GetCpuCounter;
+
+END_VAR
+
+VAR_OUTPUT
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	TagXML:				UINT;
+	DISABLE:			BOOL;					(*indique que le compteur est desactivé*)
+	CONF_Coeff:			REAL;					(*Coefficient de correction pour conversion des unités d'affichage*)
+	CONF_TimeUnit:				USINT;			(*unité de temps pour le compteur
+												0 = seconde
+												1 = minute
+												2 = heure
+												*)
+	CONF_UNIT:					STRING;
+END_VAR
+
+VAR_TEMP
+
+	_TIM1:						T_ULARGE_INTEGER;
+	_TIM2:						LREAL;
+	VAR1:						UDINT;
+	VAR2:						UDINT;
+
+END_VAR
+VAR PERSISTENT
+	VAR_CPT:					LREAL;
+	STATE_CPT:					REAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF DISABLE THEN
+	RETURN;
+END_IF
+
+
+(*sur le front descendant ou cycliquement, on met à jour la valeur de temps toutes les minutes*)
+IF I_On THEN
+	(*Lecture de l'horloge courant*)
+	_GetCpuCounter(
+						dwCpuCntLo=>	VAR1  ,
+						dwCpuCntHi=>	VAR2
+				 );
+
+	VAR_Date_Off.dwLowPart := UDINT_TO_DWORD(VAR1);
+	VAR_DATE_Off.dwHighPart := UDINT_TO_DWORD(VAR2);
+	(*si la variable était à 1 au cycle précédent  alors on calcul la valeur*)
+	IF MEM_PREVIOUS_ON THEN
+		_TIM1 := UInt64Sub64(VAR_DATE_OFF,VAR_DATE_ON);
+		_TIM2 := UINT64_TO_LREAL(_TIM1) / 10000000;
+		IF CONF_TimeUnit = 0 THEN
+			STATE_CPT := STATE_CPT + LREAL_TO_REAL(_TIM2 * REAL_TO_LREAL(I_VALUE)*REAL_TO_LREAL(CONF_Coeff));
+		ELSIF CONF_TimeUnit = 1 THEN
+			STATE_CPT:=  STATE_CPT + LREAL_TO_REAL(_TIM2 * REAL_TO_LREAL(I_VALUE)*REAL_TO_LREAL(CONF_Coeff) / REAL_TO_LREAL(60));
+		ELSIF CONF_TimeUnit = 2 THEN
+			STATE_CPT:=  STATE_CPT + LREAL_TO_REAL(_TIM2 * REAL_TO_LREAL(I_VALUE)*REAL_TO_LREAL(CONF_Coeff) / REAL_TO_LREAL(3600));
+		END_IF
+	END_IF
+
+	VAR_Date_On := VAR_Date_Off;
+	MEM_PREVIOUS_ON := TRUE;
+ELSE
+	MEM_PREVIOUS_ON:=FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CPT_INTEG">
+      <LineId Id="53" Count="32" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

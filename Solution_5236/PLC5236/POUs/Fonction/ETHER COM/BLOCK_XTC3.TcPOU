@@ -1,0 +1,1947 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_XTC3" Id="{2fb9fe53-fa14-427d-bc72-a097331191e8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_XTC3
+(*Fonction de communication Ethernet TCP/IP pour contrôleur de dépôt XTC3*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SD - VERSION INITIALE - 8157 - 11/2013*)
+(* Version 2-0 - SD - Ajout parametres rampe de prefusion - 8650 - 07/2014*)
+(* Version 3-0 - GV/SP - Fiabilisation de la connexion/communication avec l'XTC*)
+(* Version 4-0 - GV - Ajout CO_Switch_Crystal pour gestion tête multi-quartz - 8950 - 04/2015
+				- Ajout attente serveur déconnecté dans G7 de gestion
+				- Modification lancement des actions du G7 de gestion
+				- Les commandes Start, Stop et Raz thickness sont maintenant envoyées par ethernet*)
+(* Version 5-0 - GV - Optimisation temps processus + Modification condition défaut VAR_StatusReader  - 9070 - 09/2015*)
+(* Version 5-1 - GV - Modification condition défaut VAR_ParameterWriter + VAR_CommandWriter - 10315 - 09\2017*)
+(* Version 5-2 - GV - Ajout de la commande film to run = 1 - 08/2020*)
+(* Version 5-3 - GV - Modification gestion STATE_READY + Ajout inhibition des défauts *)
+
+(*Amélioration à prévoir*)
+(*Voir pour tout envoyer d'un coup*)
+
+(*************************************************************************)
+VAR_INPUT
+	MANUAL:					BOOL;
+	RESET:						BOOL;						(* Condition de réinitialisation de la fonction *)
+	CONF_sRemoteHost: 			STRING(15) := '192.168.0.20';	(* Adresse IP de l'XTC*)
+	CONF_nRemotePort: 			UDINT := 2101;				(*N° de port de communication de l'XTC*)
+
+(*Commande externe*)
+	CO_START:					BOOL;	(*Demande de marche du contrôleur de dépôt*)
+	CO_STOP:					BOOL;	(*Demande d'arrêt du contrôleur*)
+	CO_RAZ_THICK:				BOOL;	(*Demande de RAZ épaisseur*)
+	CO_RESET_Ctrl:				BOOL;	(*Demande de RESET du controleur*)
+	CO_VALID_CREUSET:			BOOL;
+	CO_Switch_Crystal:			BOOL;	(*Demande changement de quartz dans le cas d'une tête multi-quartz*)
+
+
+	CO_Enable:					BOOL;	(* Demande d'activation de la communication, récupération automatique des valeurs de l'XTC*)
+	CO_Load_Param:				BOOL;	(*Demande de chargement des parametres couche etc*)
+
+	IN_CD31T	AT%I*:			BOOL;	(*Entrée XTC3 à l'état STOP*)
+	IN_CD32T	AT%I*:			BOOL;	(*Entrée Fin de couche*)
+	IN_CD33T	AT%I*:			BOOL;	(*Entrée Crystal Fail*)
+	IN_CD34T	AT%I*:			BOOL;	(*Entrée Alarm*)
+
+	IN_CD35T	AT%I*:			BOOL;	(*Entrée ouverture cache source*)
+	IN_CD36T 	AT%I*:			BOOL;	(*Entrée ouverture cache Quartz*)
+
+	IN_CD31Q	AT%I*:			INT;		(*Entrée analogique consigne puissance source*)
+
+(*Action sur le controleur*)
+
+(****Parametres chargés dans le contrôleur XTC3 avec la commande UF*)
+	I_Rise_Time_1:			INT:=0;
+	I_Soak_Power_1:			REAL:=0;
+	I_Soak_Time_1:			INT:=0;
+	I_Rise_Time_2:			INT:=0;
+	I_Soak_Power_2:			REAL:=0;
+	I_Soak_Time_2:			INT:=0;
+	I_Idle_Ramp:				INT:=0;
+	I_Idle_Power:				REAL:=0;
+	I_Deposition_Rate:		REAL:=0;
+	I_Final_Thickness:			REAL:=0;
+	I_Thick_SP:				REAL:=0;		(*Epaisseur à partir duquel on applique la nouvelle consigne de vitesse*)
+	I_New_Rate:				REAL:=0;		(*Nouvelle consigne de vitesse*)
+	I_Rate_Ramp_Time:		UINT:=0;		(*Temps de montée pour la nouvelle vitesse*)
+	I_Rate_Watcher_Accuracy:	INT:=1;
+	I_RW_Hold_Time:			INT:=0;
+	I_Sensor:				BYTE:=16#01;
+	I_Tool_Factor1:			REAL:=100;	(*Facteur de correction crystal actif*)
+	I_Tool_Factor2:			REAL:=100;	(*Facteur de correction crystal backup*)
+	I_Stab_Single:			UINT:=0;
+	I_Stab_Total:				UINT:=0;
+	I_Quality_Percent:			USINT:=0;
+	I_Quality_Counts:			USINT:=0;
+	I_Source:				BYTE:=1;	(*Source à utiliser*)
+	I_Crucible_Nb:			BYTE:=0;	(*Numéro de creuset à utiliser*)
+	I_PID_Gain:				REAL:=1.0;	(*Gain PID*)
+	I_PID_Ti:					REAL:=0.1;
+	I_PID_Td:				REAL:=0.1;
+	I_Max_Power:				REAL:=100.0;		(*Puissance max de la source*)
+	I_Densite:				REAL:=1.0;		(*Densité du matériau utilisé en g/cc*)
+	I_ZRatio:					REAL:=1.0;		(*Z-Ratio du matériau utilisé*)
+	I_Time_Power:			BOOL:=FALSE;	(*Option TimePower = 1*)
+	I_Delay_Option:			BYTE:=0;		(*Gestion de l'étalonnage de la vitesse d'évaporation, 0 =None, 1 = Shutter delay, 2 = Control, 3 = Both*)
+	I_Transfer_Tool:			REAL:=100;
+	I_Ctrl_Delay_Time:		INT:=0;
+	I_Transfer_Sensor:		INT:=0;
+	I_IAD_Deposit:			BOOL:=0;
+
+(*opération*)
+	OP_Gest:					BLOCK_G7; 	(*Opération de gestion Status, chargement parametres, Envoi de commandes*)
+
+(*défaut*)
+	DEF_COM_STATUS:			PRCDEF;	(*Défaut de communication port de lecture état de l'XTC*)
+	DEF_COM_PARAMETER:		PRCDEF; 	(*Défaut de communication port écriture des paramètres de couche*)
+	DEF_COM_COMMAND:		PRCDEF;	(*Défaut de communication port d'envoie de commande à l'XTC*)
+	I_Inhibe_Def:			BOOL:=0;
+END_VAR
+VAR_OUTPUT
+	(*Variable d'état de connextion*)
+	hSocket:							T_HSOCKET; 	(*ID de connexion - *)
+
+	(*Informations obtenues avec la commande S0*)
+	STATE_Sensor_Fail:				BOOL;			(*Etat du Quartz , 0 = Good, 1 = Failed Crystal*)
+	STATE_Phase:					STRING;			(*Phase du contrôleur, READY,DEPOSIT, etc*)
+	STATE_NPhase:					BYTE;			(*Code de phase du controlleur*)
+	STATE_Active_Sensor:			USINT;			(*Numéro du Capteur utilisé*)
+	STATE_Active_Crystal:			USINT;			(*Numéro du Quartz utilisé pour un MultiQuartz*)
+	STATE_Rate:						REAL;			(*Vitesse d'évaporation, A°/s*)
+	STATE_Thickness:				REAL;			(*Epaisseur de dépôt, kA°*)
+	STATE_Power:					REAL;			(*Puissance demandée en %*)
+	STATE_Rate_Deviation:			REAL;			(*Rate deviation , A°/s*)
+	STATE_Frequency:				REAL;			(*Fréquence du Quartz, Hz*)
+	STATE_XTC_INPUT:				ARRAY[0..15] OF BOOL;	(*etat des entrrée de l'XTC*)
+	STATE_Timer_Tick:				BYTE;			(*Dernière valeur connue du timer tick renvoyer dans les trames par l'XTC*)
+	(*Information obtenues avec la commande S9*)
+	STATE_Crystal_Life:				USINT;			(*Durée de vie du Crystal*)
+
+	STATE_Prog_Layer_OK:			BOOL;			(*Indique que la programmation de la couche est OK*)
+	STATE_NOK:						BOOL;			(*Driver en défaut*)
+	STATE_READY:					BOOL;			(*Driver en fonctionnement*)
+	STATE_ACTION_OK:				BOOL;			(*Indique que la demande d'action à été effectuée*)
+	STATE_STOP:					BOOL;			(*Indique que le controleur est à l'état STOP*)
+
+	STATE_START_OK:				BOOL;			(*TRUE lorsque la commande de start a été envoyée*)
+	STATE_STOP_OK:				BOOL;			(*TRUE lorsque la commande de stop a été envoyée*)
+	STATE_RESET_OK:				BOOL;			(*TRUE lorsque la commande de reset a été envoyée*)
+	STATE_RAZ_THICK_OK:			BOOL;			(*TRUE lorsque la commande de raz thicknesse a été envoyée*)
+	STATE_SWITCH_XTAL_OK:		BOOL;	 		(*TRUE lorsque la commande de switch est à OK*)
+
+	(*Information en sortie de l'XTC3*)
+	OUT_STOP_STATE:				BOOL;
+	OUT_END_OF_PROCESS:			BOOL;
+	OUT_CRYSTAL_FAIL:				BOOL;
+	OUT_ALARMS:					BOOL;
+	OUT_CACHE_SRCE:				BOOL;
+	OUT_CACHE_QUARTZ:			BOOL;
+	OUT_POWER_SP:				INT;
+
+END_VAR
+VAR
+
+	VAR_StatusReader:					STRUCT_ClientConnect;	(*structure de variable associée à la lecture cyclique des états de l'XTC*)
+	VAR_ParameterWriter:					STRUCT_ClientConnect;	(*structure de variable associée à la programmation des paramètres de l'XTC*)
+	VAR_CommandWriter:					STRUCT_ClientConnect;	(*structure de variable associée à l'envoie de commande à l'XTC*)
+
+(* Variables demande en mode manuel*)
+	M_Start:						BOOL;	(*Ordre start en mode manuel*)
+	M_Stop:						BOOL;	(*Ordre stop en mode manuel*)
+	M_Reset:					BOOL;	(*Ordre reset en mode manuel*)
+	M_RAZ_Thick:				BOOL;	(*Ordre raz epaisseur en mode manuel*)
+	M_Load_param:				BOOL;	(*Ordre programmation de la couche en mode manuel*)
+	M_Switch_Crystal:				BOOL;	(*Ordre de changement de quartz en mode manuel*)
+
+	RCP_M_Start:					BOOL;	(*Reception ordre start en mode manuel*)
+	RCP_M_Stop:				BOOL;	(*Reception ordre stop en mode manuel*)
+	RCP_M_Reset:				BOOL;	(*Receptionordre reset en mode manuel*)
+	RCP_M_RAZ_Thick:			BOOL;	(*Reception ordre raz epaisseur en mode manuel*)
+	RCP_M_Load_param:			BOOL;	(*Reception ordre programmation de la couche en mode manuel*)
+	RCP_M_Switch_Crystal:		BOOL;	(*Reception ordre de switch du crystal en mode manuel*)
+
+	VAR_START:				BOOL;
+	VAR_RAZ_THICK:				BOOL;
+	VAR_STOP:					BOOL;
+	VAR_LOAD_PARAM:			BOOL;
+	VAR_RESET:				BOOL;
+	VAR_SWITCH_CRYSTAL:		BOOL;
+
+	FM_CO_Load_Param:			R_TRIG;	(*Gestion du front montant de la demande de paramétrage en automatique*)
+	FM_CO_RESET_Ctrl:			R_TRIG; (*Gestion de front montant de la demande de reset en automatique*)
+	FM_CO_Start:					R_TRIG;	(*Gestion de front montant de la demande de start en automatique*)
+	FM_CO_Stop:					R_TRIG;	(*Gestion de front montant de la demande de stop en automatique*)
+	FM_CO_Raz_Thick:			R_TRIG; (*Gestion de front montant de la demande de remise à zéro de l'épaisseur en automatique*)
+	FM_CO_Switch_Crystal:		R_TRIG;	(*Gestion de front montant de la demande de changement quartz en automatique*)
+
+	FD_Manual:					F_TRIG;	(*Gestion du front descendant du mode manuel*)
+
+	TEMP_REAL:					REAL;
+	TEMP_DWORD:				DWORD;
+
+	VAR_Frequence:				ARRAY[0..7] OF BYTE;	(* 8 octets pour la fréquence de chaque Quartz*)
+
+	VAR_Freq_Multiplieur:			REAL:=0.0034924596;	(*Facteur de conversion Fréquence(Hz)*)
+
+	Def_connect_com_status:		BOOL;				(*Flag en cas de défaut de connection com_status*)
+	Def_connect_com_parameters:	BOOL;				(*Flag en cas de défaut de connection com_parameters*)
+	Def_connect_com_command:	BOOL;				(*Flag en cas de défaut de connection com_command*)
+	Condition_def_com_status:		BOOL;				(*Condition d'apparition défaut com_satus*)
+	Condition_def_com_parameters: BOOL;				(*Condition d'apparition défaut com_parameters*)
+	Condition_def_com_command:	BOOL;				(*Condition d'apparition défaut com_command*)
+
+	(*Visualisation TC3*)
+	VISU_Show_Details:			BOOL;
+	
+	(*Timer validation STATE_Ready*)
+	TIMER_STATE_READY:			TON;
+END_VAR
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+(*Appel des processus de communication*)
+VAR_StatusReader.ConnectTime := T#50ms;
+VAR_StatusReader.ExchangeCycleTime := T#10ms;
+COM_STATUS();
+
+VAR_ParameterWriter.ConnectTime := T#1s;
+VAR_ParameterWriter.ExchangeCycleTime := T#10ms;
+COM_PARAM();
+
+VAR_CommandWriter.ConnectTime := T#50ms;
+VAR_CommandWriter.ExchangeCycleTime := T#10ms;
+COM_COMMAND();
+
+(*appel des opérations*)
+ACT_GESTION();
+
+(*action en sortie*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_GESTION" Id="{6eb59d7f-06e8-405b-8f5d-fcccea8d2264}">
+      <Implementation>
+        <ST><![CDATA[OP_Gest(
+	N_STEP_OP_OK:= 0,
+	N_STEP_OP_NOK:=0 );
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Gest.Etape = 0 THEN
+				OP_Gest.Etape.0:=TRUE;
+(*repositionnement sur étape 0*)
+ELSIF RESET THEN
+				OP_Gest.Etape := 0;
+				OP_Gest.Etape.0 := TRUE;
+(*étape 0-1*)
+ELSIF OP_Gest.Etape.0
+			AND VAR_ParameterWriter.eStep = CLIENT_STATE_IDLE
+			AND VAR_CommandWriter.eStep = CLIENT_STATE_IDLE
+			AND NOT VAR_ParameterWriter.bConnected
+			AND NOT VAR_CommandWriter.bConnected
+			THEN
+				OP_Gest.Etape.1:= TRUE;
+				OP_Gest.Etape.0:= FALSE;
+(*étape 1-2*)
+ELSIF OP_Gest.Etape.1
+			AND VAR_LOAD_PARAM
+			THEN
+				OP_Gest.Etape.2 := TRUE;
+				OP_Gest.Etape.1 := FALSE;
+(*étape 2-3*)
+ELSIF OP_Gest.Etape.2
+			AND VAR_StatusReader.eStep = CLIENT_STATE_IDLE
+			AND NOT VAR_StatusReader.bConnected
+			THEN
+				OP_Gest.Etape.3 := TRUE;
+				OP_Gest.Etape.2 := FALSE;
+(*étape 3-4*)
+ELSIF OP_Gest.Etape.3
+			AND (STATE_Prog_Layer_OK OR VAR_ParameterWriter.bError)
+			THEN
+				OP_Gest.Etape.4 := TRUE;
+				OP_Gest.Etape.3 := FALSE;
+(*étape 4-0*)
+ELSIF OP_Gest.Etape.4 THEN
+				OP_Gest.Etape.0 := TRUE;
+				OP_Gest.Etape.4 := FALSE;
+(*étape 1-5*)
+ELSIF OP_Gest.Etape.1
+			AND (VAR_START OR VAR_STOP OR VAR_RAZ_THICK OR VAR_RESET OR VAR_SWITCH_CRYSTAL)
+			THEN
+				OP_Gest.Etape.5 := TRUE;
+				OP_Gest.Etape.1 := FALSE;
+(*étape 5-6*)
+ELSIF OP_Gest.Etape.5
+			AND VAR_StatusReader.eStep = CLIENT_STATE_IDLE
+			AND NOT VAR_StatusReader.bConnected
+			THEN
+				OP_Gest.Etape.6 := TRUE;
+				OP_Gest.Etape.5 := FALSE;
+(*étape 6-7*)
+ELSIF OP_Gest.Etape.6
+			AND (STATE_ACTION_OK OR VAR_CommandWriter.bError)
+			THEN
+				OP_Gest.Etape.7 := TRUE;
+				OP_GEst.Etape.6 := FALSE;
+(*étape 7-0*)
+ELSIF OP_Gest.Etape.7 THEN
+				OP_Gest.Etape.0 := TRUE;
+				OP_Gest.Etape.7 := FALSE;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="COM_COMMAND" Id="{c666c404-b7c8-430f-ad20-359e1ce34463}">
+      <Implementation>
+        <ST><![CDATA[CASE VAR_CommandWriter.eStep OF
+	CLIENT_STATE_IDLE:		(*Etape 0 - sequence d'échange à l'arrêt*)
+		(*si demande de marche ou exclusif serveur connecté*)
+		IF VAR_CommandWriter.bEnable XOR VAR_CommandWriter.bConnected THEN
+			VAR_CommandWriter.bBusy := TRUE;
+			VAR_CommandWriter.bError := FALSE;
+			VAR_CommandWriter.nErrid := 0;
+			(*si demande d'exécution des échanges et pas le serveur connecté - on demande la connexion*)
+			IF VAR_CommandWriter.bEnable THEN
+				VAR_CommandWriter.fbConnectTON( IN := FALSE );
+				VAR_CommandWriter.eStep := CLIENT_STATE_CONNECT_START;
+			(*sinon cad pas demande d'execution et que le serveur est connecté - on demande la fermeture du port*)
+			ELSE
+				VAR_CommandWriter.eStep := CLIENT_STATE_CLOSE_START;
+			END_IF
+		(*si connection demandé et serveur connecté - on passe directement au échange*)
+		ELSIF VAR_CommandWriter.bConnected THEN
+			VAR_CommandWriter.fbDataExchaTON( IN := FALSE );
+			VAR_CommandWriter.eStep := CLIENT_STATE_DATAEXCHA_START;
+		ELSE
+			VAR_CommandWriter.bBusy := FALSE;
+		END_IF
+
+	CLIENT_STATE_CONNECT_START: (*Etape 1 - connexion au port*)
+		(*temporisation de reconnexion*)
+		VAR_CommandWriter.fbConnectTON( IN := TRUE, PT := VAR_CommandWriter.connectTime);
+		(*si tempo de reconnexion ok*)
+		IF VAR_CommandWriter.fbConnectTON.Q THEN
+			VAR_CommandWriter.fbConnectTON( IN := FALSE );
+			VAR_CommandWriter.fbConnect(  bExecute := FALSE  );
+			VAR_CommandWriter.fbConnect(
+						sRemoteHost		:= CONF_sRemoteHost,
+						nRemotePort		:= CONF_nRemotePort,
+						 sSrvNetId		:= '',
+						bExecute		:= TRUE );
+			VAR_CommandWriter.eStep := CLIENT_STATE_CONNECT_WAIT;
+			VAR_CommandWriter.Compteur_connection := VAR_CommandWriter.Compteur_connection + 1;
+		END_IF
+
+	CLIENT_STATE_CONNECT_WAIT:	(*Etape 2 - attente connexion ok*)
+		VAR_CommandWriter.fbConnect( bExecute := FALSE );
+		IF NOT VAR_CommandWriter.fbConnect.bBusy THEN
+			IF NOT VAR_CommandWriter.fbConnect.bError THEN
+				VAR_CommandWriter.bConnected 	:= TRUE;
+				VAR_CommandWriter.hSocket 	:= VAR_CommandWriter.fbConnect.hSocket;
+				VAR_CommandWriter.eStep 	:= CLIENT_STATE_IDLE;
+				Def_connect_com_command := FALSE;
+				(*reinitalisation du n° de requete en fonction de la premier commande demandée dans l'ordre de transmission*)
+				IF VAR_START THEN
+					VAR_CommandWriter.nRequest := 0;
+				ELSIF VAR_STOP THEN
+					VAR_CommandWriter.nRequest := 1;
+				ELSIF VAR_RESET THEN
+					VAR_CommandWriter.nRequest := 2;
+				ELSIF VAR_RAZ_THICK  THEN
+					VAR_CommandWriter.nRequest := 3;
+				ELSIF VAR_SWITCH_CRYSTAL THEN
+					VAR_CommandWriter.nRequest := 4;
+				(*si aucune commande active alors que le gracet a été lancé*)
+				(*on repositionne en idle et on valide l'état state_action_ok pour ne pas bloquer le grafcet de gestion des échanges *)
+				ELSE
+					STATE_ACTION_OK := TRUE;
+					VAR_CommandWriter.eStep := CLIENT_STATE_IDLE;
+				END_IF
+			ELSE
+				VAR_CommandWriter.nErrId := VAR_CommandWriter.fbConnect.nErrId;
+				VAR_CommandWriter.nStepInError  := 2;
+				VAR_CommandWriter.ErrDescription := CONCAT('FbConnect Error : ', UDINT_TO_STRING(VAR_CommandWriter.fbConnect.nErrId));
+				VAR_CommandWriter.eStep := CLIENT_STATE_ERROR;
+				Def_connect_com_command := TRUE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_START:	(*Etape 3 - lancement des échanges*)
+		VAR_CommandWriter.fbDataExchaTON( IN := TRUE, PT := VAR_CommandWriter.ExchangeCycleTime );
+		IF VAR_CommandWriter.fbDataExchaTON.Q THEN
+			VAR_CommandWriter.fbDataExchaTON( IN := FALSE );
+			VAR_CommandWriter.fbClientDataExcha( bExecute := FALSE );
+
+			CASE VAR_CommandWriter.nRequest  OF
+			0:
+				(*Start - R0*)
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('R');
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[3]:= 16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[4]:= VAR_CommandWriter.fbClientDataExcha.txBuffer[2] +
+															VAR_CommandWriter.fbClientDataExcha.txBuffer[3];
+				VAR_CommandWriter.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_CommandWriter.fbClientDataExcha.nbExpectedChar := 6;
+			1:
+				(*Stop - R1*)
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('R');
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[3]:= 16#01;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[4]:= VAR_CommandWriter.fbClientDataExcha.txBuffer[2] +
+															VAR_CommandWriter.fbClientDataExcha.txBuffer[3];
+				VAR_CommandWriter.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_CommandWriter.fbClientDataExcha.nbExpectedChar := 6;
+			2:
+				(*Reset - R2*)
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('R');
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[3]:= 16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[4]:= VAR_CommandWriter.fbClientDataExcha.txBuffer[2] +
+															VAR_CommandWriter.fbClientDataExcha.txBuffer[3];
+				VAR_CommandWriter.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_CommandWriter.fbClientDataExcha.nbExpectedChar := 6;
+			3:
+				(*Raz Thick - 12*)
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('R');
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[3]:= 16#0C;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[4]:= VAR_CommandWriter.fbClientDataExcha.txBuffer[2] +
+															VAR_CommandWriter.fbClientDataExcha.txBuffer[3];
+				VAR_CommandWriter.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_CommandWriter.fbClientDataExcha.nbExpectedChar := 6;
+			4:
+				(*Crystal Switch - R14*)
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('R');
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[3]:= 16#0E;
+				VAR_CommandWriter.fbClientDataExcha.txBuffer[4]:= VAR_CommandWriter.fbClientDataExcha.txBuffer[2] +
+															VAR_CommandWriter.fbClientDataExcha.txBuffer[3];
+				VAR_CommandWriter.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_CommandWriter.fbClientDataExcha.nbExpectedChar := 6;
+			END_CASE
+
+			VAR_CommandWriter.fbClientDataExcha(
+								hSocket 		:= VAR_CommandWriter.hSocket,
+								bExecute 	:= TRUE,
+								PRM_RECEIVE_POLLING_TIME:= T#1s, (*temporisation de polling de réception*)
+								PRM_RECEIVE_TIMEOUT	:= T#10s);	(*temporisation de timeout de communication*)
+			VAR_CommandWriter.eStep := CLIENT_STATE_DATAEXCHA_WAIT;
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_WAIT:	(*Etape 4 - Attente de la fin de l'échange*)
+		VAR_CommandWriter.fbClientDataExcha( bExecute := FALSE );
+		IF NOT VAR_CommandWriter.fbClientDataExcha.bBusy THEN
+			IF NOT VAR_CommandWriter.fbClientDataExcha.bError THEN
+				VAR_CommandWriter.eStep 		:= CLIENT_STATE_DATA_ANALYSE;
+			ELSE
+				(* possible errors are logged inside of fbClientDataExcha function block *)
+				VAR_CommandWriter.nStepInError := 4;
+				VAR_CommandWriter.nErrId := 	VAR_CommandWriter.fbClientDataExcha.nErrId;	(*n° d'erreur hérité de la fonction Fb_clientDataExchange*)
+				VAR_CommandWriter.ErrDescription :=	CONCAT(
+												CONCAT(VAR_CommandWriter.fbClientDataExcha.ErrDescription, ' '),
+												CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_CommandWriter.nRequest))
+												);
+				VAR_CommandWriter.eStep :=	CLIENT_STATE_ERROR;
+			END_IF
+		END_IF
+	CLIENT_STATE_DATA_ANALYSE:	(*Etape 5 - Analyse des données reçues*)
+		(*si retour d'une trame signalant une erreur*)
+		IF (VAR_CommandWriter.fbClientDataExcha.rxBuffer[2] = 16#80) THEN
+				VAR_CommandWriter.nStepInError := 5;
+				VAR_CommandWriter.nErrId :=  1;
+				VAR_CommandWriter.ErrDescription := CONCAT(
+								CONCAT( 'PACKET ERROR : ',F_ToCHR( VAR_CommandWriter.fbClientDataExcha.RxBuffer[6])),
+								CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_CommandWriter.nRequest))
+								);
+				VAR_CommandWriter.eStep :=	CLIENT_STATE_ERROR;
+		ELSE
+			(*Actualisation des état ok sur les actions + on refait tomber les commandes*)
+			CASE VAR_CommandWriter.nRequest OF
+				0:
+					STATE_START_OK := TRUE;
+					VAR_START := FALSE;
+				1:
+					STATE_STOP_OK := TRUE;
+					VAR_STOP := FALSE;
+				2:
+					STATE_RESET_OK :=TRUE;
+					VAR_RESET	:= FALSE;
+				3:
+					STATE_RAZ_THICK_OK :=TRUE;
+					VAR_RAZ_THICK	:= FALSE;
+				4:
+					STATE_SWITCH_XTAL_OK:=TRUE;
+					VAR_SWITCH_CRYSTAL := FALSE;
+			END_CASE;
+			(*réactualisation du n° de trame de commande à envoyer en fonction des demandes d'envoi active et de ce qui a déjà été
+			transmis*)
+			IF (VAR_CommandWriter.nRequest <1 AND VAR_STOP) THEN
+				VAR_CommandWriter.nRequest :=1;
+			ELSIF (VAR_CommandWriter.nRequest <2 AND VAR_RESET) THEN
+				VAR_CommandWriter.nRequest :=2;
+			ELSIF (VAR_CommandWriter.nRequest <3 AND VAR_RAZ_THICK) THEN
+				VAR_CommandWriter.nRequest :=3;
+			ELSIF (VAR_CommandWriter.nRequest <4 AND VAR_SWITCH_CRYSTAL) THEN
+				VAR_CommandWriter.nRequest :=4;
+			ELSE
+				VAR_CommandWriter.nRequest := 0;
+				STATE_ACTION_OK := TRUE;
+			END_IF
+			VAR_CommandWriter.eStep :=	CLIENT_STATE_IDLE;
+		END_IF
+
+	CLIENT_STATE_CLOSE_START:	(*Etape 6 - déclenchement fermeture du port*)
+		VAR_CommandWriter.fbClose( bExecute := FALSE );
+		VAR_CommandWriter.fbClose(
+				hSocket:= VAR_CommandWriter.hSocket,
+				bExecute:= TRUE );
+		VAR_CommandWriter.eStep := CLIENT_STATE_CLOSE_WAIT;
+
+	CLIENT_STATE_CLOSE_WAIT: (*Etape 7 - attente de la fermeture du port*)
+		VAR_CommandWriter.fbClose( bExecute := FALSE );
+		IF NOT VAR_CommandWriter.fbClose.bBusy THEN
+			VAR_CommandWriter.bConnected := FALSE;
+			MEMSET( ADR(hSocket), 0, SIZEOF(hSocket));
+			IF VAR_CommandWriter.fbClose.bError THEN
+				VAR_CommandWriter.nErrId := VAR_CommandWriter.fbClose.nErrId;
+				VAR_CommandWriter.nStepInError := 7;
+				VAR_CommandWriter.ErrDescription := CONCAT('FbClose Error : ', UDINT_TO_STRING(VAR_CommandWriter.fbClose.nErrId));
+				VAR_CommandWriter.eStep := CLIENT_STATE_ERROR;
+			ELSE
+				VAR_CommandWriter.bBusy := FALSE;
+				VAR_CommandWriter.bError := FALSE;
+				VAR_CommandWriter.nErrId := 0;
+				VAR_CommandWriter.eStep := CLIENT_STATE_IDLE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_ERROR: (* Etape 8 : Error step *)
+		VAR_CommandWriter.bError := TRUE;
+		IF VAR_CommandWriter.bConnected THEN
+			VAR_CommandWriter.eStep := CLIENT_STATE_CLOSE_START;
+		ELSE
+			VAR_CommandWriter.bBusy := FALSE;
+			//IF DEF_COM_COMMAND.AR_DEF THEN
+				VAR_CommandWriter.eStep := CLIENT_STATE_IDLE;
+			//END_IF
+		END_IF
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="COM_PARAM" Id="{de64ea06-746b-430c-aa0e-da580b9201a6}">
+      <Implementation>
+        <ST><![CDATA[CASE VAR_ParameterWriter.eStep OF
+	CLIENT_STATE_IDLE:		(*Etape 0 - sequence d'échange à l'arrêt*)
+		(*si autorisé ou exclusif si connecté*)
+		IF VAR_ParameterWriter.bEnable XOR VAR_ParameterWriter.bConnected THEN
+			VAR_ParameterWriter.bBusy := TRUE;
+			VAR_ParameterWriter.bError := FALSE;
+			VAR_ParameterWriter.nErrid := 0;
+			IF VAR_ParameterWriter.bEnable THEN
+				VAR_ParameterWriter.fbConnectTON( IN := FALSE );
+				VAR_ParameterWriter.eStep := CLIENT_STATE_CONNECT_START;
+			ELSE
+				VAR_ParameterWriter.eStep := CLIENT_STATE_CLOSE_START;
+			END_IF
+		ELSIF VAR_ParameterWriter.bConnected THEN
+			VAR_ParameterWriter.fbDataExchaTON( IN := FALSE );
+			VAR_ParameterWriter.eStep := CLIENT_STATE_DATAEXCHA_START;
+		ELSE
+			VAR_ParameterWriter.bBusy := FALSE;
+		END_IF
+
+	CLIENT_STATE_CONNECT_START: (*Etape 1 - connexion au port*)
+		(*temporisation de reconnexion*)
+		VAR_ParameterWriter.fbConnectTON( IN := TRUE, PT := VAR_ParameterWriter.connectTime);
+		(*si tempo de reconnexion ok*)
+		IF VAR_ParameterWriter.fbConnectTON.Q THEN
+			VAR_ParameterWriter.fbConnectTON( IN := FALSE );
+			VAR_ParameterWriter.fbConnect(  bExecute := FALSE  );
+			VAR_ParameterWriter.fbConnect(
+						sRemoteHost		:= CONF_sRemoteHost,
+						nRemotePort		:= CONF_nRemotePort,
+						 sSrvNetId		:= '',
+						bExecute		:= TRUE );
+			VAR_ParameterWriter.eStep := CLIENT_STATE_CONNECT_WAIT;
+			VAR_ParameterWriter.nRequest := 0; (*reinitalisation du n° de requete à 0*)
+			VAR_ParameterWriter.Compteur_connection := VAR_ParameterWriter.Compteur_connection + 1;
+		END_IF
+
+	CLIENT_STATE_CONNECT_WAIT:	(*Etape 2 - attente connexion ok*)
+		VAR_ParameterWriter.fbConnect( bExecute := FALSE );
+		IF NOT VAR_ParameterWriter.fbConnect.bBusy THEN
+			IF NOT VAR_ParameterWriter.fbConnect.bError THEN
+				VAR_ParameterWriter.bConnected 	:= TRUE;
+				VAR_ParameterWriter.hSocket 	:= VAR_ParameterWriter.fbConnect.hSocket;
+				VAR_ParameterWriter.eStep 		:= CLIENT_STATE_IDLE;
+				Def_connect_com_parameters := FALSE;
+			ELSE
+				VAR_ParameterWriter.nErrId := VAR_ParameterWriter.fbConnect.nErrId;
+				VAR_ParameterWriter.nStepInError  := 2;
+				VAR_ParameterWriter.ErrDescription := CONCAT('FbConnect Error : ', UDINT_TO_STRING(VAR_ParameterWriter.fbConnect.nErrId));
+				VAR_ParameterWriter.eStep := CLIENT_STATE_ERROR;
+				Def_connect_com_parameters := TRUE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_START:	(*Etape 3 - lancement des échanges*)
+		VAR_ParameterWriter.fbDataExchaTON( IN := TRUE, PT := VAR_ParameterWriter.ExchangeCycleTime );
+		IF VAR_ParameterWriter.fbDataExchaTON.Q THEN
+			VAR_ParameterWriter.fbDataExchaTON( IN := FALSE );
+			VAR_ParameterWriter.fbClientDataExcha( bExecute := FALSE );
+
+
+			CASE VAR_ParameterWriter.nRequest OF
+
+						0:	(*Rise Time 1*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Rise_Time_1);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						1:	(*Soak Power 1*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#01;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Soak_Power_1),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						2:	(*Soak Time 1*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#02;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Soak_Time_1);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						3:	(*Rise Time 2*)
+							VAR_ParameterWriter.fbClientDataExcha.TxBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#03;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Rise_Time_2);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						4:	(*Soak Power 2*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#04;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Soak_Power_2),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						5:	(*Soak Time 2*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#05;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Soak_Time_2);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						6:	(*Idle Ramp*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#06;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD :=INT_TO_DWORD(I_Idle_Ramp);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						7:	(*Idle Power*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#07;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Idle_Power),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						8:	(*Consigne de Vitesse d'évaporation*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Deposition_Rate),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+
+						9:	(*Consigne d'épaisseur*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#09;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Final_thickness),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						10:	(*Consigne epaisseur pour la nouvelle vitesse*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0A;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Thick_SP),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						11:	(*Nouvelle consigne de vitesse*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0B;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_New_Rate),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						12:	(*Temps de monté à la nouvelle vitesse*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0C;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := UINT_TO_DWORD(I_Rate_Ramp_Time);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						13:	(*Rate Watcher Accuracy*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0D;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Rate_Watcher_Accuracy);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						14:	(*RW hold time*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0E;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_RW_Hold_Time);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						15:	(*Sensor à utiliser*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#0F;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BYTE_TO_DWORD(I_Sensor);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						16:	(*Facteur de correction 1*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#10;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Tool_Factor1),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+
+						17:	(*Facteur de correction 2*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#11;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Tool_Factor2),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+
+						18:	(*Xtal stabilility single*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#12;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := UINT_TO_DWORD(I_Stab_Single);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						19:	(*Xtal stabilility total*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#13;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := UINT_TO_DWORD(I_Stab_Total);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						20:	(*Xtal quality percent*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#14;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := USINT_TO_DWORD(I_Quality_percent);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						21:	(*Xtal quality Counts*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#15;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := USINT_TO_DWORD(I_Quality_Counts);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						22:	(*Source*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#16;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BYTE_TO_DWORD(I_Source);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						23:	(*Source*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#17;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BYTE_TO_DWORD(I_Crucible_Nb);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						24:	(*PID Gain*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#18;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_PID_GAIN),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						25:	(*PID Integral - control time constant*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#19;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_PID_Ti),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						26:	(*PID Dérivée - control dead time*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1A;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_PID_Td),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						27:	(*Max Power*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1B;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Max_Power),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+
+						28:	(*Densité*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1C;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Densite),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						29:	(*Z-Ratio*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1D;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_ZRatio),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						30:	(*TimePower*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1E;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BOOL_TO_DWORD(I_TIME_POWER);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						31:	(*Delay Option*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#1F;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BYTE_TO_DWORD(I_Delay_Option);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						32:	(*Transfer Sensor*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#20;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Transfer_sensor);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						33:	(*Transfer Tooling*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#21;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(I_Transfer_Tool),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						34:	(*Control Delay Time*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#22;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := INT_TO_DWORD(I_Ctrl_Delay_Time);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+
+						35:	(*Ion assisted deposition*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#08;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('F');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#23;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]:= 16#01;
+							TEMP_DWORD := BOOL_TO_DWORD(I_IAD_DEPOSIT);
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[6]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[10] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[9];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 11;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+							
+						36:	(*Film to run*)
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[0]:=16#07;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[1]:=16#00;
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[2]:= F_ToASC('U');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[3]:= F_ToASC('G');
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[4]:= 16#00; (*n° de paramètre*)
+							TEMP_DWORD := 16#01; (*film n°1*)
+							MEMCPY(ADR(VAR_ParameterWriter.fbClientDataExcha.txBuffer[5]),ADR(TEMP_DWORD),4);
+							VAR_ParameterWriter.fbClientDataExcha.txBuffer[9] := VAR_ParameterWriter.fbClientDataExcha.txBuffer[2] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[3] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[4] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[5] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[6] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[7] +
+												VAR_ParameterWriter.fbClientDataExcha.txBuffer[8];
+							VAR_ParameterWriter.fbClientDataExcha.nbTransmittedChar := 10;
+							VAR_ParameterWriter.fbClientDataExcha.nbExpectedChar := 6;
+				END_CASE
+
+			VAR_ParameterWriter.fbClientDataExcha(
+								hSocket 		:= VAR_ParameterWriter.hSocket,
+								bExecute 	:= TRUE,
+								PRM_RECEIVE_POLLING_TIME:= T#1s, (*temporisation de polling de réception*)
+								PRM_RECEIVE_TIMEOUT	:= T#10s);	(*temporisation de timeout de communication*)
+			VAR_ParameterWriter.eStep := CLIENT_STATE_DATAEXCHA_WAIT;
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_WAIT:	(*Etape 4 - Attente de la fin de l'échange*)
+		VAR_ParameterWriter.fbClientDataExcha( bExecute := FALSE );
+		IF NOT VAR_ParameterWriter.fbClientDataExcha.bBusy THEN
+			IF NOT VAR_ParameterWriter.fbClientDataExcha.bError THEN
+				VAR_ParameterWriter.eStep 		:= CLIENT_STATE_DATA_ANALYSE;
+			ELSE
+				(* possible errors are logged inside of fbClientDataExcha function block *)
+				VAR_ParameterWriter.nStepInError := 4;
+				VAR_ParameterWriter.nErrId := 	VAR_ParameterWriter.fbClientDataExcha.nErrId;	(*n° d'erreur hérité de la fonction Fb_clientDataExchange*)
+				VAR_ParameterWriter.ErrDescription :=	CONCAT(
+												CONCAT(VAR_ParameterWriter.fbClientDataExcha.ErrDescription, ' '),
+												CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_ParameterWriter.nRequest))
+												);
+				VAR_ParameterWriter.eStep :=	CLIENT_STATE_ERROR;
+			END_IF
+		END_IF
+	CLIENT_STATE_DATA_ANALYSE:	(*Etape 5 - Analyse des données reçues*)
+		(*Contrôle que réponse ne comporte pas une erreur*)
+		IF (VAR_ParameterWriter.fbClientDataExcha.rxBuffer[2] = 16#80) THEN
+				VAR_ParameterWriter.nStepInError := 5;
+				VAR_ParameterWriter.nErrId :=  1;
+				VAR_ParameterWriter.ErrDescription := CONCAT(
+								CONCAT( 'PACKET ERROR : ',F_ToCHR( VAR_ParameterWriter.fbClientDataExcha.RxBuffer[6])),
+								CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_ParameterWriter.nRequest))
+								);
+				VAR_ParameterWriter.eStep :=	CLIENT_STATE_ERROR;
+		ELSE
+			VAR_LOAD_PARAM := FALSE;										(*on refait tomber la commande*)
+			VAR_ParameterWriter.nRequest := VAR_ParameterWriter.nRequest + 1;	(*incrémentation du n° de trame*)
+			IF VAR_ParameterWriter.nRequest = 37 THEN
+					VAR_ParameterWriter.nRequest := 0;
+					STATE_Prog_Layer_OK := TRUE;
+			END_IF
+			VAR_ParameterWriter.eStep :=	CLIENT_STATE_IDLE;
+		END_IF
+
+	CLIENT_STATE_CLOSE_START:	(*Etape 6 - déclenchement fermeture du port*)
+		VAR_ParameterWriter.fbClose( bExecute := FALSE );
+		VAR_ParameterWriter.fbClose(
+				hSocket:= VAR_ParameterWriter.hSocket,
+				bExecute:= TRUE );
+		VAR_ParameterWriter.eStep := CLIENT_STATE_CLOSE_WAIT;
+
+	CLIENT_STATE_CLOSE_WAIT: (*Etape 7 - attente de la fermeture du port*)
+		VAR_ParameterWriter.fbClose( bExecute := FALSE );
+		IF NOT VAR_ParameterWriter.fbClose.bBusy THEN
+			VAR_ParameterWriter.bConnected := FALSE;
+			MEMSET( ADR(hSocket), 0, SIZEOF(hSocket));
+			IF VAR_ParameterWriter.fbClose.bError THEN
+				VAR_ParameterWriter.nErrId := VAR_ParameterWriter.fbClose.nErrId;
+				VAR_ParameterWriter.nStepInError := 7;
+				VAR_ParameterWriter.ErrDescription := CONCAT('FbClose Error : ', UDINT_TO_STRING(VAR_ParameterWriter.fbClose.nErrId));
+				VAR_ParameterWriter.eStep := CLIENT_STATE_ERROR;
+			ELSE
+				VAR_ParameterWriter.bBusy := FALSE;
+				VAR_ParameterWriter.bError := FALSE;
+				VAR_ParameterWriter.nErrId := 0;
+				VAR_ParameterWriter.eStep := CLIENT_STATE_IDLE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_ERROR: (* Etape 8 : Error step *)
+		VAR_ParameterWriter.bError := TRUE;
+		IF VAR_ParameterWriter.bConnected THEN
+			VAR_ParameterWriter.eStep := CLIENT_STATE_CLOSE_START;
+		ELSE
+			VAR_ParameterWriter.bBusy := FALSE;
+			//IF DEF_COM_PARAMETER.AR_DEF THEN
+				VAR_ParameterWriter.eStep := CLIENT_STATE_IDLE;
+			//END_IF
+		END_IF
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="COM_STATUS" Id="{9f0affe9-8aa1-44d3-ace7-847326978ddf}">
+      <Implementation>
+        <ST><![CDATA[CASE VAR_StatusReader.eStep OF
+	CLIENT_STATE_IDLE:		(*Etape 0 - sequence d'échange à l'arrêt*)
+		(*si autorisé ou exclusif si connecté*)
+		IF VAR_StatusReader.bEnable XOR VAR_StatusReader.bConnected THEN
+			VAR_StatusReader.bBusy := TRUE;
+			VAR_StatusReader.bError := FALSE;
+			VAR_StatusReader.nErrid := 0;
+			IF VAR_StatusReader.bEnable THEN
+				VAR_StatusReader.fbConnectTON( IN := FALSE );
+				VAR_StatusReader.eStep := CLIENT_STATE_CONNECT_START;
+			ELSE
+				VAR_StatusReader.eStep := CLIENT_STATE_CLOSE_START;
+			END_IF
+		ELSIF VAR_StatusReader.bConnected THEN
+			VAR_StatusReader.fbDataExchaTON( IN := FALSE );
+			VAR_StatusReader.eStep := CLIENT_STATE_DATAEXCHA_START;
+		ELSE
+			VAR_StatusReader.bBusy := FALSE;
+		END_IF
+
+	CLIENT_STATE_CONNECT_START: (*Etape 1 - connexion au port*)
+		(*temporisation de reconnexion*)
+		VAR_StatusReader.fbConnectTON( IN := TRUE, PT := VAR_StatusReader.connectTime);
+		(*si tempo de reconnexion ok*)
+		IF VAR_StatusReader.fbConnectTON.Q THEN
+			VAR_StatusReader.fbConnectTON( IN := FALSE );
+			VAR_StatusReader.fbConnect(  bExecute := FALSE  );
+			VAR_StatusReader.fbConnect(
+						sRemoteHost		:= CONF_sRemoteHost,
+						nRemotePort		:= CONF_nRemotePort,
+						 sSrvNetId		:= '',
+						bExecute		:= TRUE );
+			VAR_StatusReader.eStep := CLIENT_STATE_CONNECT_WAIT;
+			VAR_StatusReader.nRequest := 0; (*reinitalisation du n° de requete à 0*)
+			VAR_StatusReader.Compteur_connection := VAR_StatusReader.Compteur_connection + 1;
+		END_IF
+
+	CLIENT_STATE_CONNECT_WAIT:	(*Etape 2 - attente connexion ok*)
+		VAR_StatusReader.fbConnect( bExecute := FALSE );
+		IF NOT VAR_StatusReader.fbConnect.bBusy THEN
+			IF NOT VAR_StatusReader.fbConnect.bError THEN
+				VAR_StatusReader.bConnected 	:= TRUE;
+				VAR_StatusReader.hSocket 	:= VAR_StatusReader.fbConnect.hSocket;
+				VAR_StatusReader.eStep 		:= CLIENT_STATE_IDLE;
+				Def_connect_com_status := FALSE;
+			ELSE
+				(*LogError( 'FB_SocketConnect', fbConnect.nErrId );*)
+				VAR_StatusReader.nErrId := VAR_StatusReader.fbConnect.nErrId;
+				VAR_StatusReader.nStepInError  := 2;
+				VAR_StatusReader.ErrDescription := CONCAT('FbConnect Error : ', UDINT_TO_STRING(VAR_StatusReader.fbConnect.nErrId));
+				VAR_StatusReader.eStep := CLIENT_STATE_ERROR;
+				Def_connect_com_status := TRUE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_START:	(*Etape 3 - lancement des échanges*)
+		VAR_StatusReader.fbDataExchaTON( IN := TRUE, PT := VAR_StatusReader.ExchangeCycleTime );
+		IF VAR_StatusReader.fbDataExchaTON.Q THEN
+			VAR_StatusReader.fbDataExchaTON( IN := FALSE );
+			VAR_StatusReader.fbClientDataExcha( bExecute := FALSE );
+
+			CASE VAR_StatusReader.nRequest  OF
+			0:
+				(*Current Rate - S1*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[2]:= F_ToASC('S');
+				VAR_StatusReader.fbClientDataExcha.txBuffer[3]:= 16#01;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[4]:= VAR_StatusReader.fbClientDataExcha.txBuffer[2] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[3];
+				VAR_StatusReader.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_StatusReader.fbClientDataExcha.nbExpectedChar := 10;
+			1:
+				(*Process Information - S0*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[0]:=16#03;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[2]:= F_ToASC('S');
+				VAR_StatusReader.fbClientDataExcha.txBuffer[3]:= 16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[4]:= STATE_Timer_Tick;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[5]:= VAR_StatusReader.fbClientDataExcha.txBuffer[2] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[3] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[4];
+				VAR_StatusReader.fbClientDataExcha.nbTransmittedChar := 6;
+				VAR_StatusReader.fbClientDataExcha.nbExpectedChar := 30;
+
+			2:	(*Crystal Life - S9*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[0]:= 16#02;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[2]:= F_ToASC('S');
+				VAR_StatusReader.fbClientDataExcha.txBuffer[3]:= 16#09;  (*09*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[4]:= VAR_StatusReader.fbClientDataExcha.txBuffer[2] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[3];
+				VAR_StatusReader.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_StatusReader.fbClientDataExcha.nbExpectedChar := 7;
+
+			3:	(*Etat STOP*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[2]:= F_ToASC('S');
+				VAR_StatusReader.fbClientDataExcha.txBuffer[3]:=16#12;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[4]:= VAR_StatusReader.fbClientDataExcha.txBuffer[2] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[3];
+				VAR_StatusReader.fbClientDataExcha.nbTransmittedChar := 5;
+				VAR_StatusReader.fbClientDataExcha.nbExpectedChar := 7;
+
+			4: 	(*etat des entrées de l'XTC*)
+				VAR_StatusReader.fbClientDataExcha.txBuffer[0]:=16#02;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[1]:=16#00;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[2]:= F_ToASC('S');
+				VAR_StatusReader.fbClientDataExcha.txBuffer[3]:=16#0C;
+				VAR_StatusReader.fbClientDataExcha.txBuffer[4]:= VAR_StatusReader.fbClientDataExcha.txBuffer[2] +
+															VAR_StatusReader.fbClientDataExcha.txBuffer[3];
+				VAR_StatusReader.fbClientDataExcha.nbTransmittedChar := 5;
+
+			END_CASE
+
+			VAR_StatusReader.fbClientDataExcha(
+								hSocket 		:= VAR_StatusReader.hSocket,
+								bExecute 	:= TRUE,
+								PRM_RECEIVE_POLLING_TIME:= T#1s, (*temporisation de polling de réception*)
+								PRM_RECEIVE_TIMEOUT	:= T#10s);	(*temporisation de timeout de communication*)
+			VAR_StatusReader.eStep := CLIENT_STATE_DATAEXCHA_WAIT;
+		END_IF
+
+	CLIENT_STATE_DATAEXCHA_WAIT:	(*Etape 4 - Attente de la fin de l'échange*)
+		VAR_StatusReader.fbClientDataExcha( bExecute := FALSE );
+		IF NOT VAR_StatusReader.fbClientDataExcha.bBusy THEN
+			IF NOT VAR_StatusReader.fbClientDataExcha.bError THEN
+				VAR_StatusReader.eStep 		:= CLIENT_STATE_DATA_ANALYSE;
+			ELSE
+				(* possible errors are logged inside of fbClientDataExcha function block *)
+				VAR_StatusReader.nStepInError := 4;
+				VAR_StatusReader.nErrId := 	VAR_StatusReader.fbClientDataExcha.nErrId;	(*n° d'erreur hérité de la fonction Fb_clientDataExchange*)
+				VAR_StatusReader.ErrDescription :=	CONCAT(
+												CONCAT(VAR_StatusReader.fbClientDataExcha.ErrDescription, ' '),
+												CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_StatusReader.nRequest))
+												);
+				VAR_StatusReader.eStep :=	CLIENT_STATE_ERROR;
+			END_IF
+		END_IF
+	CLIENT_STATE_DATA_ANALYSE:	(*Etape 5 - Analyse des données reçues*)
+		(*si retour d'une trame signalant une erreur*)
+		IF (VAR_StatusReader.fbClientDataExcha.rxBuffer[2] = 16#80) THEN
+				VAR_StatusReader.nStepInError := 5;
+				VAR_StatusReader.nErrId :=  1;
+				VAR_StatusReader.ErrDescription := CONCAT(
+								CONCAT( 'PACKET ERROR : ',F_ToCHR( VAR_StatusReader.fbClientDataExcha.RxBuffer[6])),
+								CONCAT(' -Trame: ',UDINT_TO_STRING(VAR_StatusReader.nRequest))
+								);
+				VAR_StatusReader.eStep :=	CLIENT_STATE_ERROR;
+		ELSE
+			CASE VAR_StatusReader.nRequest  OF
+				0:
+					STATE_Timer_Tick:= VAR_StatusReader.fbClientDataExcha.RxBuffer[3];
+					(*Récuperation de la vitesse d'évaporation*)
+					MEMCPY(ADR(STATE_Rate),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[5]),4);
+				1:
+					STATE_Timer_Tick:= VAR_StatusReader.fbClientDataExcha.rxBuffer[3];		(*Récuperation de la valeur du timer tick*)
+					STATE_Sensor_Fail:= VAR_StatusReader.fbClientDataExcha.rxBuffer[5].0;		(*Etat du Quartz*)
+					STATE_NPHASE := VAR_StatusReader.fbClientDataExcha.rxBuffer[6];		(*Phase en cours*)
+					CASE	STATE_NPHASE OF
+							0:
+								STATE_Phase:= 'Ready';
+							1:
+								STATE_Phase:= 'Crucible Switch';
+							2:
+								STATE_Phase:= 'Rise 1';
+							3:
+								STATE_Phase:= 'Soak 1';
+							4:
+								STATE_Phase:= 'Rise 2';
+							5:
+								STATE_Phase:= 'Soak 2';
+							6:
+								STATE_Phase:= 'Shutter Delay';
+							7:
+								STATE_Phase:= 'Deposit';
+							8:
+								STATE_Phase:= 'Rate Ramp';
+							9:
+								STATE_Phase:= 'Manual';
+							10:
+								STATE_Phase:= 'Time Power';
+							11:
+								STATE_Phase:= 'Idle Ramp';
+							12:
+								STATE_Phase:= 'Idle';
+				END_CASE
+				STATE_Active_Sensor:= VAR_StatusReader.fbClientDataExcha.rxBuffer[7];
+				STATE_Active_Crystal:= VAR_StatusReader.fbClientDataExcha.rxBuffer[8];
+				(*Récuperation de la vitesse d'évaporation*)
+				MEMCPY(ADR(STATE_Rate),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[9]),4);
+				(*Récuperation de l'épaisseur*)
+				MEMCPY(ADR(STATE_Thickness),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[13]),4);
+				(*Récupération de la puissance*)
+				MEMCPY(ADR(STATE_Power),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[17]),4);
+				(*Récuperation de la déviation de vitesse*)
+				MEMCPY(ADR(STATE_Rate_Deviation),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[21]),4);
+				(*Récuperation de la fréquence*)
+				MEMCPY(ADR(temp_dword),ADR(VAR_StatusReader.fbClientDataExcha.rxBuffer[25]),4);
+				STATE_Frequency := temp_dword * VAR_Freq_Multiplieur;
+			2:
+				(*Récuperation de la durée de vie du Quartz*)
+				STATE_Crystal_Life:= VAR_StatusReader.fbClientDataExcha.rxBuffer[5];
+			3:
+				STATE_STOP	:=	BYTE_TO_BOOL(VAR_StatusReader.fbClientDataExcha.rxBuffer[5]);
+
+		END_CASE
+		VAR_StatusReader.nRequest := VAR_StatusReader.nRequest + 1;	(*incrémentation du n° de trame*)
+		IF VAR_StatusReader.nRequest = 4 THEN
+			VAR_StatusReader.nRequest := 0;
+		END_IF
+		VAR_StatusReader.eStep :=	CLIENT_STATE_IDLE;
+	END_IF
+
+	CLIENT_STATE_CLOSE_START:	(*Etape 6 - déclenchement fermeture du port*)
+		VAR_StatusReader.fbClose( bExecute := FALSE );
+		VAR_StatusReader.fbClose(
+				hSocket:= VAR_StatusReader.hSocket,
+				bExecute:= TRUE );
+		VAR_StatusReader.eStep := CLIENT_STATE_CLOSE_WAIT;
+
+	CLIENT_STATE_CLOSE_WAIT: (*Etape 7 - attente de la fermeture du port*)
+		VAR_StatusReader.fbClose( bExecute := FALSE );
+		IF NOT VAR_StatusReader.fbClose.bBusy THEN
+			VAR_StatusReader.bConnected := FALSE;
+			MEMSET( ADR(hSocket), 0, SIZEOF(hSocket));
+			IF VAR_StatusReader.fbClose.bError THEN
+				VAR_StatusReader.nErrId := VAR_StatusReader.fbClose.nErrId;
+				VAR_StatusReader.nStepInError := 7;
+				VAR_StatusReader.ErrDescription := CONCAT('FbClose Error : ', UDINT_TO_STRING(VAR_StatusReader.fbClose.nErrId));
+				VAR_StatusReader.eStep := CLIENT_STATE_ERROR;
+			ELSE
+				VAR_StatusReader.bBusy := FALSE;
+				VAR_StatusReader.bError := FALSE;
+				VAR_StatusReader.nErrId := 0;
+				VAR_StatusReader.eStep := CLIENT_STATE_IDLE;
+			END_IF
+		END_IF
+
+	CLIENT_STATE_ERROR: (* Etape 8 : Error step *)
+		VAR_StatusReader.bError := TRUE;
+		IF VAR_StatusReader.bConnected THEN
+			VAR_StatusReader.eStep := CLIENT_STATE_CLOSE_START;
+		ELSE
+			VAR_StatusReader.bBusy := FALSE;
+			//IF DEF_COM_STATUS.AR_DEF THEN
+				VAR_StatusReader.eStep := CLIENT_STATE_IDLE;
+			//END_IF
+		END_IF
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{deaaa977-4f70-4989-af18-2d5a64511487}">
+      <Implementation>
+        <ST><![CDATA[(*Action G7 de gestion*)
+(*étape 1 - Récupération des informations XTC*)
+VAR_StatusReader.bEnable := OP_Gest.Etape.1;
+
+(*étape 3 - Chargement des paramètres XTC*)
+VAR_ParameterWriter.bEnable :=  OP_Gest.Etape.3;
+
+(*étape 6 - Envoie d'une commande XTC*)
+VAR_CommandWriter.bEnable := OP_Gest.Etape.6;
+
+
+(*Défaut de Communication*)
+IF (VAR_StatusReader.eStep = CLIENT_STATE_ERROR) AND NOT (VAR_StatusReader.nStepInError  = 2) THEN
+	Condition_def_com_status := TRUE;
+ELSIF Def_connect_com_status AND (VAR_StatusReader.nStepInError  = 2) THEN
+	Condition_def_com_status := TRUE;
+ELSE
+	Condition_def_com_status := FALSE;
+END_IF
+
+DEF_COM_STATUS.CONDITION:= Condition_def_com_status AND NOT I_Inhibe_Def;
+DEF_COM_STATUS.DELAY:= T#0s;
+DEF_COM_STATUS.VAL1 := VAR_StatusReader.ErrDescription;
+DEF_COM_STATUS();
+
+(*Défaut de Communication*)
+IF (VAR_ParameterWriter.eStep = CLIENT_STATE_ERROR) AND NOT (VAR_ParameterWriter.nStepInError  = 2) THEN
+	Condition_def_com_parameters := TRUE;
+ELSIF Def_connect_com_parameters AND (VAR_ParameterWriter.nStepInError  = 2) THEN
+	Condition_def_com_parameters := TRUE;
+ELSE
+	Condition_def_com_parameters := FALSE;
+END_IF
+
+DEF_COM_PARAMETER.CONDITION:= Condition_def_com_parameters AND NOT I_Inhibe_Def;
+DEF_COM_PARAMETER.DELAY:= T#0s;
+DEF_COM_PARAMETER.VAL1 := VAR_ParameterWriter.ErrDescription;
+DEF_COM_PARAMETER();
+
+(*Défaut de Communication*)
+IF (VAR_CommandWriter.eStep = CLIENT_STATE_ERROR) AND NOT (VAR_CommandWriter.nStepInError  = 2) THEN
+	Condition_def_com_command := TRUE;
+ELSIF Def_connect_com_command AND (VAR_CommandWriter.nStepInError  = 2) THEN
+	Condition_def_com_command := TRUE;
+ELSE
+	Condition_def_com_command := FALSE;
+END_IF
+
+DEF_COM_COMMAND.CONDITION:= Condition_def_com_command AND NOT I_Inhibe_Def;
+DEF_COM_COMMAND.DELAY:= T#0s;
+DEF_COM_COMMAND.VAL1 := VAR_CommandWriter.ErrDescription;
+DEF_COM_COMMAND();
+
+
+(*Indicateur driver en fonctionnement*)
+TIMER_STATE_READY.IN := (VAR_StatusReader.bConnected OR VAR_CommandWriter.bConnected OR VAR_ParameterWriter.bConnected) AND NOT STATE_NOK;
+TIMER_STATE_READY.PT := T#10S;
+TIMER_STATE_READY();
+
+STATE_READY:= TIMER_STATE_READY.Q;
+
+(*Indicateur contrôleur NON OK*)
+STATE_NOK:= DEF_COM_PARAMETER.DEF OR DEF_COM_COMMAND.DEF OR DEF_COM_STATUS.DEF;
+
+(*RAZ Indicateur de programmation couche ok*)
+IF OP_Gest.Etape.1 THEN
+	STATE_Prog_Layer_OK := FALSE;
+END_IF
+
+(*RAZ Indicateur d'action ok*)
+IF OP_Gest.Etape.1 THEN
+	STATE_ACTION_OK := FALSE;
+	STATE_RAZ_THICK_OK := FALSE;
+	STATE_START_OK:=FALSE;
+	STATE_STOP_OK:=FALSE;
+	STATE_RESET_OK:=FALSE;
+	STATE_SWITCH_XTAL_OK:=FALSE;
+END_IF
+
+(*Affectation sorties*)
+OUT_STOP_STATE		:=	IN_CD31T;
+OUT_END_OF_PROCESS	:=	IN_CD32T;
+OUT_CRYSTAL_FAIL		:=	IN_CD33T;
+OUT_ALARMS			:=	IN_CD34T;
+OUT_CACHE_SRCE		:=	IN_CD35T;
+OUT_CACHE_QUARTZ	:=	IN_CD36T;
+OUT_POWER_SP		:=	IN_CD31Q;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{a46881c8-1c00-4d25-9173-41e7b907ba7d}">
+      <Implementation>
+        <ST><![CDATA[(*Défaut*)
+DEF_COM_STATUS.IdXML := '16';
+DEF_COM_STATUS.TagXML := 1;
+
+DEF_COM_PARAMETER.IdXML := '16';
+DEF_COM_PARAMETER.TagXML := 2;
+
+DEF_COM_COMMAND.IdXML := '16';
+DEF_COM_COMMAND.TagXML := 3;
+
+VAR_Freq_Multiplieur	:= 0.0034924596;
+
+(*Reception des bit d'ordre de maintenance*)
+RCP_M_Start := M_Start;
+RCP_M_Stop := M_Stop;
+RCP_M_Reset := M_reset;
+RCP_M_RAZ_Thick := M_RAZ_Thick;
+RCP_M_Load_param := M_Load_param;
+RCP_M_Switch_Crystal := M_Switch_Crystal;
+
+(*Gestion de la sortie de mode manuel*)
+(*les demandes d'action en mode manuel en attente sont resetées*)
+FD_Manual(CLK:= Manual);
+
+(*********Réception des ordres externes**********)
+(*********demande de start ********)
+FM_CO_Start(CLK:= CO_START);
+IF	(*(NOT CO_START AND NOT MANUAL)
+	OR *)FD_Manual.Q
+	OR RESET THEN
+	VAR_Start:= FALSE;
+END_IF
+IF 	((FM_CO_Start.Q AND NOT MANUAL)
+	OR (RCP_M_Start AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_Start:= TRUE;
+END_IF
+
+
+(**********demande de stop*********)
+FM_CO_Stop(CLK:= CO_STOP);
+IF	(NOT CO_STOP AND NOT MANUAL)
+	OR FD_Manual.Q OR RESET THEN
+	VAR_Stop:= FALSE;
+END_IF
+IF 	((FM_CO_Stop.Q AND NOT MANUAL)
+	OR (RCP_M_Stop AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_Stop:= TRUE;
+END_IF
+
+(*demande de RAZ épaisseur*)
+FM_CO_Raz_Thick(CLK:= CO_RAZ_THICK);
+IF	(NOT CO_RAZ_THICK AND NOT MANUAL)
+	OR FD_Manual.Q OR RESET THEN
+	VAR_Raz_Thick:= FALSE;
+END_IF
+IF 	((FM_CO_Raz_Thick.Q AND NOT MANUAL)
+	OR (RCP_M_Raz_Thick AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_Raz_Thick:= TRUE;
+END_IF
+
+(*demande de reset du contrôleur*)
+FM_CO_RESET_Ctrl(CLK:= CO_RESET_Ctrl);
+IF	(NOT CO_RESET_Ctrl AND NOT MANUAL)
+	OR FD_Manual.Q OR RESET THEN
+	VAR_Reset:= FALSE;
+END_IF
+IF 	((FM_CO_RESET_Ctrl.Q AND NOT MANUAL)
+	OR (RCP_M_Reset  AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_Reset:= TRUE;
+END_IF
+
+(*demande de programmation de la couche*)
+FM_CO_Load_Param(CLK:= CO_Load_Param);
+IF	(NOT CO_LOAD_PARAM AND NOT MANUAL)
+	OR FD_Manual.Q OR RESET THEN
+	VAR_LOAD_PARAM:= FALSE;
+END_IF
+IF 	((FM_CO_Load_Param.Q AND NOT MANUAL)
+	OR (RCP_M_Load_Param  AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_LOAD_PARAM:= TRUE;
+END_IF
+
+(*demande de switch du crystal*)
+FM_CO_Switch_Crystal(CLK:= CO_Switch_Crystal);
+IF	(NOT CO_Switch_Crystal AND NOT MANUAL)
+	OR FD_Manual.Q
+	OR RESET THEN
+	VAR_SWITCH_CRYSTAL:= FALSE;
+END_IF
+IF 	((FM_CO_Switch_Crystal.Q AND NOT MANUAL)
+	OR (RCP_M_Switch_Crystal AND MANUAL))
+	AND NOT RESET  THEN
+	VAR_SWITCH_CRYSTAL:= TRUE;
+END_IF
+
+(*RAZ des bit de d'ordre en mode manuel*)
+IF RCP_M_Start AND M_Start THEN
+	M_START:=FALSE;
+END_IF
+IF RCP_M_Stop AND M_Stop THEN
+	M_STOP:=FALSE;
+END_IF
+IF RCP_M_Reset AND M_reset THEN
+	M_RESET:=FALSE;
+END_IF
+IF RCP_M_RAZ_Thick AND M_RAZ_Thick THEN
+	M_RAZ_Thick:=FALSE;
+END_IF
+IF RCP_M_Load_param AND M_Load_param THEN
+	M_Load_param := FALSE;
+END_IF
+IF RCP_M_Switch_Crystal AND M_Switch_Crystal THEN
+	M_Switch_Crystal:=FALSE;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_XTC3">
+      <LineId Id="199" Count="19" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.ACT_GESTION">
+      <LineId Id="0" Count="68" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.COM_COMMAND">
+      <LineId Id="0" Count="237" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.COM_PARAM">
+      <LineId Id="0" Count="796" />
+      <LineId Id="880" Count="0" />
+      <LineId Id="901" Count="0" />
+      <LineId Id="919" Count="14" />
+      <LineId Id="900" Count="0" />
+      <LineId Id="797" Count="81" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.COM_STATUS">
+      <LineId Id="0" Count="250" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.POST">
+      <LineId Id="0" Count="54" />
+      <LineId Id="85" Count="2" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="55" Count="27" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC3.PRL">
+      <LineId Id="0" Count="118" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,188 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_RAMP" Id="{c54940d6-6e78-4e91-b239-e816a40c78c5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_RAMP
+(* Gestion d'une rampe *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE*)
+(* Version 2-0 - HG - Adaptation pour journal des évènements externe - 27/06/2011*)
+
+(*************************************************************************)
+VAR_INPUT
+	IN_Value:						REAL;				(* Retour consigne analogique appliquée*)
+	PRM_Rampe:						REAL;				(* Consigne analogique en fin de rampe*)
+	PRM_Temps:						TIME;				(* Consigne de temps de rampe*)
+	CO_Modif_Rampe:					BOOL;				(* Demande modification rampe en cours*)
+	CO_Rampe_Suivante:				BOOL;				(* Demande arrêt segment en cours pour passage au suivant*)
+	CO_Pause:						BOOL;				(* Mise en pause de la rampe tant que la demande est valide*)
+	MARCHE:						BLOCK_OPERATION;		(* Opération de gestion de la rampe*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_Tps_ecoule:					TIME;				(* Temps de rampe écoulé*)
+	OUT_Value:						REAL;				(* Consigne analogique demandée pendant la rampe*)
+	STATE_Pause:					BOOL;				(* Rampe en pause*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsFunction:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR
+	TIMER_Rampe:				TON;
+	VAR_Dep_Rampe:				REAL;				(* mémoire consigne départ rampe - Gestion rampe *)
+	VAR_Fin_Rampe:				REAL;				(* mémoire consigne fin rampe - Gestion rampe *)
+	VAR_Tps_Rampe:				TIME;				(* mémoire consigne temps de rampe - Gestion rampe *)
+	FM_Modif_rampe:				R_TRIG;
+	FM_Rampe_suivante:			R_TRIG;
+	FM_Pause:					R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[MARCHE.IdParent			:=	MNEMO;
+MARCHE.MNEMO			:=	CONCAT(MNEMO,'_MARCHE');
+MARCHE.IdXML			:=	'0';
+MARCHE.TagXML			:=	3;
+
+FM_Modif_rampe(clk:=CO_Modif_Rampe);
+FM_Rampe_suivante(clk:=CO_Rampe_Suivante);
+FM_Pause(clk:=MARCHE.Etape.6);
+
+(*----------G7----------*)
+MARCHE(
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:=3 ,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+Marche.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		MARCHE.ETAPE = 0
+		THEN
+				MARCHE.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MARCHE.RESET
+		THEN
+				MARCHE.ETAPE := 0;
+				MARCHE.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	MARCHE.ETAPE.0 AND MARCHE.MARCHE_OP
+		THEN
+				MARCHE.ETAPE.1:=TRUE;
+				MARCHE.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	MARCHE.ETAPE.1
+		THEN
+				MARCHE.ETAPE.2:=TRUE;
+				MARCHE.ETAPE.1:=FALSE;
+(*étape 2-7*)
+ELSIF	MARCHE.ETAPE.2 AND (TIMER_rampe.Q OR VAR_tps_rampe = t#0s)
+		THEN
+				MARCHE.ETAPE.7:=TRUE;
+				MARCHE.ETAPE.2:=FALSE;
+(*étape 7-3*)
+ELSIF	MARCHE.ETAPE.7
+		THEN
+				MARCHE.ETAPE.3:=TRUE;
+				MARCHE.ETAPE.7:=FALSE;
+(*étape 3-4*)
+ELSIF	MARCHE.ETAPE.3 AND MARCHE.MARCHE_OP
+		THEN
+				MARCHE.ETAPE.4:=TRUE;
+				MARCHE.ETAPE.3:=FALSE;
+(*étape 4-2*)
+ELSIF	MARCHE.ETAPE.4
+		THEN
+				MARCHE.ETAPE.2:=TRUE;
+				MARCHE.ETAPE.4:=FALSE;
+(*étape 2-5*)
+ELSIF	MARCHE.ETAPE.2 AND FM_modif_rampe.Q
+		THEN
+				MARCHE.ETAPE.5:=TRUE;
+				MARCHE.ETAPE.2:=FALSE;
+(*étape 5-2*)
+ELSIF	MARCHE.ETAPE.5
+		THEN
+				MARCHE.ETAPE.2:=TRUE;
+				MARCHE.ETAPE.5:=FALSE;
+(*étape 2-4*)
+ELSIF	MARCHE.ETAPE.2 AND FM_Rampe_suivante.Q
+		THEN
+				MARCHE.ETAPE.4:=TRUE;
+				MARCHE.ETAPE.2:=FALSE;
+(*étape 2-6*)
+ELSIF	MARCHE.ETAPE.2 AND CO_Pause
+		THEN
+				MARCHE.ETAPE.6:=TRUE;
+				MARCHE.ETAPE.2:=FALSE;
+(*étape 6-2*)
+ELSIF	MARCHE.ETAPE.6 AND NOT CO_Pause
+		THEN
+				MARCHE.ETAPE.2:=TRUE;
+				MARCHE.ETAPE.6:=FALSE;
+END_IF;
+
+(*Cloture du traitement de l'opération*)
+MARCHE.POST();
+
+(*Mémorisation*)
+IF 		MARCHE.ETAPE.1 OR MARCHE.ETAPE.4 THEN
+	VAR_dep_rampe		:=	IN_VALUE;
+	VAR_fin_rampe		:=	PRM_rampe;
+	VAR_tps_rampe		:=	PRM_temps;
+	OUT_Tps_ecoule		:=	T#0s;
+ELSIF		MARCHE.ETAPE.2 THEN
+	OUT_Tps_ecoule		:=	Timer_rampe.ET;
+ELSIF		MARCHE.ETAPE.5 THEN
+	IF PRM_temps > OUT_tps_ecoule THEN
+		VAR_tps_rampe		:=	PRM_temps - OUT_tps_ecoule;
+	ELSE
+		VAR_tps_rampe		:=	T#0s;
+	END_IF;
+	VAR_dep_rampe		:=	OUT_value;
+	VAR_fin_rampe		:=	PRM_rampe;
+END_IF;
+
+IF			FM_pause.Q THEN
+	VAR_dep_rampe		:=	OUT_value;
+	VAR_tps_rampe		:=	VAR_tps_rampe - OUT_tps_ecoule;
+END_IF;
+
+(*Temporisation*)
+IF		marche.ETAPE.1 OR marche.ETAPE.4 OR marche.ETAPE.5 OR marche.Etape.6 THEN
+	Timer_rampe.PT	:=	VAR_tps_rampe;
+END_IF;
+timer_rampe.IN	:= marche.ETAPE.2;
+Timer_Rampe();
+
+(*Sortie*)
+IF 		marche.ETAPE.3 THEN
+	OUT_value	:=	var_fin_rampe;
+ELSIF	marche.ETAPE.2 AND (var_tps_rampe <> t#0S) THEN
+		OUT_value	:= 	(VAR_fin_rampe - VAR_dep_rampe) * (TIME_TO_REAL(OUT_tps_ecoule)/TIME_TO_REAL(VAR_tps_rampe)) +VAR_dep_rampe;
+ELSIF	marche.ETAPE.1 THEN
+	OUT_value 	:=	IN_value;
+ELSIF	MARCHE.Etape.7 THEN
+	OUT_Value := VAR_fin_Rampe;
+END_IF;
+
+(*Etat*)
+STATE_Pause	:=	MARCHE.Etape.6;
+
+CO_Modif_rampe		:=	FALSE;
+CO_Rampe_Suivante	:=	FALSE;
+CO_Pause			:=	FALSE;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_RAMP">
+      <LineId Id="43" Count="134" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

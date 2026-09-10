@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_CLIGNOTANT_V0_0" Id="{e2eeb183-5195-4af4-813e-ad3f9f70bd7f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CLIGNOTANT_V0_0
+VAR_INPUT
+	IN_On:				BOOL;			(*demande de marche*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Period_On:		TIME:= T#2S;	(*durée de maintien d'allumage*)	
+	CONF_Period_Off:	TIME:= T#2S;	(*durée de l'arrêt d'allumage*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_ON:			BOOL;			(*allumage*)
+END_VAR
+
+VAR
+	TIMER_On:			TP;
+	TIMER_Off:			TP;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[TIMER_On.PT		:=	CONF_Period_On;
+TIMER_On.IN		:=	IN_On
+					AND NOT TIMER_Off.Q;
+TIMER_On();
+
+TIMER_Off.PT	:=	CONF_Period_Off;
+TIMER_Off.IN	:=	IN_On
+					AND NOT TIMER_On.Q;
+TIMER_Off();
+
+STATE_ON		:=	TIMER_On.Q and IN_On;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CLIGNOTANT_V0_0">
+      <LineId Id="9" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="23" Count="1" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="29" Count="1" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="31" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

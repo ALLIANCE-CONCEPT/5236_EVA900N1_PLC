@@ -1,0 +1,606 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_BCG450_ETHERCAT" Id="{f347cc35-a867-4281-880f-569b8465674c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_BCG450_ETHERCAT
+
+
+(* Gestion d'une jauge triple BCG450 INFICON avec interface ethercat*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - version initiale développée sur 8760 CT100 n102 *)
+(* Versoin basée sur BLOCK_BCG_450_ANA version 4-0 *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:	BOOL;													(*paramétrage système ok*)
+(*paramètre standard*)
+	RESET:   				BOOL; 													(*Condition RAZ actionneur*)
+	MANUAL:  				BOOL; 													(*Mode manuel*)
+
+	IN_Pression: 				REAL; 					(* Retour pression *)
+	IN_WcState	 AT%I*:		BOOL;					(*0 = Data valid, 1 = Data invalid*)
+
+(*___________________TEST ETHERCAT___________________________*)
+(*ACTIVE SENSOR NUMBER*)
+	IN_Active_Sensor			AT%I*:	UINT;
+(*READING VALID VALUE*)
+	IN_Reading_Valid_M1		AT%I*:	BOOL;
+	IN_Reading_Valid_M2		AT%I*:	BOOL;
+	IN_Reading_Valid_M3		AT%I*:	BOOL;
+	IN_Reading_Valid_M4		AT%I*:	BOOL;
+(*SPECIFIC M4*)
+	IN_Emission_State_M4		AT%I*:	BOOL;
+	IN_Degas_State_M4		AT%I*:	BOOL;
+(*WARNING/ALARM STATE*)
+	IN_Overrange_M1 		AT%I*:	BOOL;
+	IN_Underrange_M1 		AT%I*:	BOOL;
+	IN_Overrange_M2 		AT%I*:	BOOL;
+	IN_Underrange_M2 		AT%I*:	BOOL;
+	IN_Overrange_M3 		AT%I*:	BOOL;
+	IN_Underrange_M3 		AT%I*:	BOOL;
+	IN_Overrange_M4 		AT%I*:	BOOL;
+	IN_Underrange_M4 		AT%I*:	BOOL;
+	IN_Active_Ex_Status		AT%I*:	USINT;
+	IN_Active_Dev_War_Det	AT%I*:	UDINT;
+	IN_Active_Man_War_Det	AT%I*:	UDINT;
+	IN_Latched_Ex_Status		AT%I*:	USINT;
+	IN_Latched_Man_War_Det	AT%I*:	UDINT;
+	IN_Latched_Man_Err_Det	AT%I*:	UDINT;
+(*______________________________________________________________*)
+
+	CO_Stop:				BOOL;					(* Condition de forcage d'arrêt d'alimentation de la jauge *)
+	CO_inhibe_Seuil:			BOOL;					(*information externe d'inhibition des seuils*)
+
+
+	I_Stop_Rah:				BOOL;					(* information externe de demande d'arrêt de la mesure avant remise à la PAtm *)
+	I_VHxx:					BOOL;					(* état des vannes de ventilation VH11 ou VH12 pour redémarrage temporisé de la mesure*)
+
+	PRM_Tim_Stop:			TIME:=T#10s;				(*Temps de validation de l'arrêt de la jauge*)
+	PRM_Tim_Restart:		TIME:=T#10s;				(*Temps pour remise en marche de la jauge
+																							aprés reception de la condition I_Restart_Mesure*)
+	PRM_Seuil: 				ARRAY[0..15] OF REAL;	(* Valeur des seuils*)
+	PRM_Delais:				ARRAY[0..15] OF TIME;	(*Delais de validation du seuil en multiple de 100ms *)
+	PRM_Type_seuil: 			ARRAY[0..15] OF BOOL; 	(* Type du seuil n°1 (False=seuil vide, True=seuil pression) *)
+
+
+(*entrées d'autorisation*)
+	EN_Dgz_EXT:			BOOL;			(*condition d'autorisation d'activation de la sortie de dégazage de la jauge externe*)
+	EN_Off_EXT:				BOOL;			(*condition d'autorisation d'arrêt de la jauge externe*)
+
+(*Défaut*)
+	DEF_jauge:					PRCDEF;	(* indicateur de défaut de fonctionnement de la jauge  *)
+	DEF_Pilotage:				PRCDEF;
+
+
+END_VAR
+
+VAR_OUTPUT
+(*Variable d'état*)
+	STATE_Seuil:		 		ARRAY[0..15] OF BOOL; 	(*Tableau des seuils*)
+	STATE_Pression:				REAL; 		(* Valeur de la pression (dans l'unité sélectionnée) *)
+	STATE_Ok:					BOOL;		(* Jauge à l'état OK*)
+	STATE_Nok:					BOOL;		(* Jauge en défaut*)
+	STATE_Err:					USINT;		(*Code d'erreur
+																				0 = Pas d'erreur
+																				1 = EEPROM Error Ou défaut jauge capacitive 
+																				2 = Défaut jauge à cathode chaude
+																				3 = Défaut jauge pirani *)
+
+
+	O_Pret_Pour_Rah:				BOOL;											(*information d'arrêt avant rah de la mesure effectué - délivrée aprés arret
+																				et une tempo égale à PRM_Tim_Stop ou si la pression est supérieure à 2e-2 mbar*)
+
+(*Variable d'information d'autorisation*)
+	AUTOR_Off_IHM:				BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation d'arrêt de la jauge depuis l'IHM en mode manuel*)
+	AUTOR_On_IHM:				BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation de marche de la jauge depuis l'IHM en mode manuel*)
+	AUTOR_Dgz_IHM:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation de dégazage depuis l'IHM en mode manuel*)
+END_VAR
+
+VAR
+	OP_DGZ:					BLOCK_G7;		(* séquence de mise en dégazage de la jauge*)
+	OP_RaH:					BLOCK_G7;		(* séquence d'arrêt filament pour remise à H de l'enceinte*)
+
+	M_M1:						BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre de marche / arret de la jauge en mode manuel*)
+	M_DGZ:						BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre de dégazage de la jauge en mode manuel*)
+	RCP_M_M1:					BOOL;
+	RCP_M_DGZ:				BOOL;
+
+	VAR_Degas_Ok:				BOOL;			(*variable permettant de mémoriser que le dégazage a été effectué et remise à 0*)
+(*
+	VAR_Stop:					BOOL;			(*Variable intermediaire de gestion de la marche arrêt de la jauge en mode manuel*)
+
+	VAR_Stop_Mesure:			BOOL;			(*Bit indiquant que la mesure est stoppée temporairement sur demande externe*)
+	VAR_Dem_Dgz:				BOOL;			(*Bit de demande de dégazage en mode manuel*)
+	VAR_Mem_Stop_Mesure:		BOOL;
+*)
+
+	i:							USINT;
+
+	TIMER_Stop_Jauge:			TON;
+	(*TIMER_Restart_Jauge:		TP;*)
+	TIMER_Restart_Jauge:		TON;
+	TIMER_Degas:				TON;
+	TIMER_Seuil:					ARRAY[0..15] OF TON;
+	Timer_Reprise_Pompage:		TON;
+
+	TIMER_State_Ok:				TON;
+
+	Timer_Envoi_CoE:			TON;
+	WRITE_CoE_WORD:			WRITE_CoE_WORD;	(*fonction d'écriture de paramètres CoEde type word*)
+	WRITE_CoE_BOOL:			WRITE_CoE_BOOL;	(*fonction d'écriture de paramètres CoE de type booléen*)
+
+(*___________________TEST ETHERCAT___________________________*)
+	VAR_Mem_Active_Ex:			BOOL;
+	VAR_Mem_Active_Dev_War:	BOOL;
+	VAR_Mem_Active_Man_War:	BOOL;
+	VAR_Mem_Latched_Ex:		BOOL;
+	VAR_Mem_Latched_Man_War:	BOOL;
+	VAR_Mem_Latched_Man_Err:	BOOL;
+(*______________________________________________________________*)
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	CONF_Unit: 				USINT; 					(* Unité : 0=mb,1=mTorr,2=Pa *)
+	CONF_degas_auto:		BOOL;					(* Option de degazage apres remise à atmosphere *)
+	CONF_Tim_Degas:		TIME;					(* Durée d'activation de la sortie de dégazage*)
+
+	(*variables CoE*)
+	CONF_NetId:				T_AmsNetId;				(*on le trouve dans le .tsm, sur le device ethercat , onglet ethercat, champ NetId*)
+	CONF_SlaveAddr:			UINT;					(*on le trouve dans le .tsm, sur le device jauge, onglet ethercat, champ Ethercat Addr*)
+
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'2';
+TagXML					:=	2;
+
+DEF_jauge.IdXml			:=	'1';
+DEF_jauge.TagXml		:=	7;
+
+DEF_Pilotage.IdXML		:=	'1';
+DEF_Pilotage.TagXML		:=	25;
+
+
+(*Reception des ordres de maintenance*)
+RCP_M_M1		:= 	M_M1;
+RCP_M_DGZ		:=	M_DGZ;
+
+(*calcul pression *)
+IF STATE_Ok THEN
+	STATE_Pression := IN_Pression;
+ELSE
+	STATE_Pression := 0;
+END_IF
+
+(* états jauge *)
+(*On temporise le state_ok car en cours de descente en vide lros du basculement dur cathode chaude on peut avoir un petit 0mbar transitoire*)
+TIMER_State_Ok.PT	:=	T#3s;
+(*signal correct ou RaH en cours (coupure filament en vide secondaire)*)
+IF IN_Pression > 1.0E-12 OR OP_RAH.EC THEN
+	TIMER_State_Ok.IN	:=	FALSE;
+ELSE
+	TIMER_State_Ok.IN	:=	TRUE;
+END_IF
+TIMER_State_Ok();
+
+
+STATE_Ok	:= NOT TIMER_State_Ok.Q AND NOT IN_WcState;
+STATE_Nok	:= DEF_jauge.DEF;
+
+
+(* GESTION DES SEUILS *)
+FOR i:=1 TO 15 DO
+		TIMER_Seuil[i].PT		:=	PRM_Delais[i];
+		TIMER_Seuil[i].IN		:=	(((STATE_Pression >= PRM_Seuil[i]) AND PRM_Type_seuil[i]) OR		(*Seuil en pression*)
+								((STATE_Pression <= PRM_Seuil[i]) AND NOT PRM_Type_seuil[i]))		(*Seuil de vide*)
+								AND NOT RESET AND NOT CO_inhibe_Seuil AND STATE_Ok;
+		TIMER_Seuil[i]();
+		STATE_Seuil[i]		:= 	TIMER_Seuil[i].Q;
+END_FOR;
+
+(* ---------------------------- gestion dégazage -------------------------------------*)
+(* dégazage autorisé en mode manuel si le dégazage est autorisé et la pression inférieure à 6e-6 mbar et si la sortie n'est pas déjà active
+et si mode manuel*)
+AUTOR_Dgz_IHM		:=	MANUAL
+						AND NOT RESET
+						AND NOT OP_DGZ.EC
+						AND ( STATE_Pression < 5E-6)
+						AND EN_Dgz_EXT
+						AND State_OK;
+
+(* temporisation de dégazage*)
+TIMER_Degas.PT	:= CONF_Tim_Degas;
+TIMER_Degas.IN	:= OP_DGZ.Etape.3;
+TIMER_Degas();
+
+(*gestion du drapeau dégazage ok*)
+IF OP_DGZ.Etape.0 THEN
+	VAR_Degas_Ok := FALSE;
+ELSIF OP_DGZ.OK THEN
+	VAR_Degas_Ok := TRUE;
+END_IF
+
+
+
+(* ---------------------------- gestion marche / arrêt filament -------------------------------------*)
+(*On interdit le pilotage en mode manuel (la mise en manu du filament n'est pas gérable ainsi, et en auto le filament va se rallumer tout seul)*)
+AUTOR_Off_IHM := FALSE;
+AUTOR_On_IHM := FALSE;
+
+(*temporisation d'arrêt de la jauge*)
+TIMER_Stop_Jauge.PT	:=	PRM_Tim_Stop;
+TIMER_Stop_Jauge.IN	:=	OP_RaH.Etape.5;
+TIMER_Stop_Jauge();
+
+(*temporisation de redémarrage de la jauge ==> remise en auto du filament*)
+(*Remarque : on n'allume pas le filament, donc tempo peut être courte, on squizze le PRM_tim_restart (mais reste dans l'interface standard pour anciens PRG_Pompage)*)
+TIMER_Restart_Jauge.PT	:=	PRM_Tim_Restart;
+TIMER_Restart_Jauge.IN	:=	OP_RaH.Etape.7;
+TIMER_Restart_Jauge();
+
+(*temporisation d'attente max d'ouverture de VH avant passage direct dans étape de remise en auto du filament
+==> permet de contrer une reprise de pompage en cours de ventilation alors qu'on a déjà mis en off le filament*)
+Timer_Reprise_Pompage.PT	:=	T#10s;
+Timer_Reprise_Pompage.IN	:=	OP_RaH.Etape.6;
+Timer_Reprise_Pompage();
+
+(*interfaçage avec autres fonctions*)
+O_Pret_Pour_Rah	:=	OP_RaH.Etape.6 OR (STATE_Pression > 0.02);
+
+
+(* ---------------------------- gestion de l'envoi de données CoE -------------------------------------*)
+(*Configuration de la fonction avec données inchangeantes*)
+WRITE_CoE_WORD.IN_NetId			:=	CONF_NetId;
+WRITE_CoE_WORD.IN_SlaveAddr		:=	CONF_SlaveAddr;
+WRITE_CoE_BOOL.IN_NetId			:=	CONF_NetId;
+WRITE_CoE_BOOL.IN_SlaveAddr		:=	CONF_SlaveAddr;
+
+(*Remplissage  de données à envoyer selon étapes des G7*)
+(*marche dégazage*)
+IF OP_DGZ.Etape.1 THEN
+	WRITE_CoE_WORD.IN_Index		:=	16#FB43;
+	WRITE_CoE_WORD.IN_SubIndex	:=	01;
+	WRITE_CoE_WORD.IN_Value		:=	16#0401;			(*la jauge prend 01 04 mais codage MSB ici*)
+
+(*arrêt dégazage*)
+ELSIF OP_DGZ.Etape.4 THEN
+	WRITE_CoE_WORD.IN_Index		:=	16#FB43;
+	WRITE_CoE_WORD.IN_SubIndex	:=	01;
+	WRITE_CoE_WORD.IN_Value		:=	16#0400;			(*la jauge prend 00 04 mais codage MSB ici*)
+
+(*arrêt du filament*)
+ELSIF OP_RaH.Etape.3 THEN
+	WRITE_CoE_WORD.IN_Index		:=	16#FB44;
+	WRITE_CoE_WORD.IN_SubIndex	:=	01;
+	WRITE_CoE_WORD.IN_Value		:=	16#0400;
+END_IF
+
+
+(*mise en manuel du filament*)
+IF OP_RaH.Etape.1 THEN
+	WRITE_CoE_BOOL.IN_Index		:=	16#8035;
+	WRITE_CoE_BOOL.IN_SubIndex	:=	02;
+	WRITE_CoE_BOOL.IN_Value		:=	16#1;
+
+(*mise en automatique du filament*)
+ELSIF OP_RaH.Etape.8 THEN
+	WRITE_CoE_BOOL.IN_Index		:=	16#8035;
+	WRITE_CoE_BOOL.IN_SubIndex	:=	02;
+	WRITE_CoE_BOOL.IN_Value		:=	16#0;
+END_IF
+
+(*marche de la fonction*)
+WRITE_COE_WORD.IN_ON		:=	OP_DGZ.Etape.1
+								OR OP_DGZ.Etape.4
+								OR OP_RaH.Etape.3;
+WRITE_CoE_BOOL.IN_ON		:=	OP_RaH.Etape.1
+								OR OP_RaH.Etape.8;
+
+(*appel fonction*)
+WRITE_CoE_WORD();
+WRITE_CoE_BOOL();
+
+
+(*parcours des G7*)
+ACT_DGZ();
+ACT_RAH();
+
+
+(*Gestion défaut jauge*)
+DEF_jauge.DELAY		:= T#5s;
+DEF_jauge.CONDITION	:= NOT STATE_Ok AND NOT RESET;
+DEF_jauge();
+
+(* Gestion défaut pilotage jauge*)
+DEF_Pilotage.DELAY		:=	T#0ms;
+DEF_Pilotage.CONDITION	:=	OP_RaH.Etape.12 OR OP_DGZ.Etape.10;
+DEF_Pilotage();
+
+
+
+(*RAZ des ordres de maintenance*)
+IF RCP_M_M1 AND M_M1 THEN
+	M_M1:=FALSE;
+END_IF;
+IF RCP_M_Dgz AND M_Dgz THEN
+	M_Dgz:=FALSE;
+END_IF;
+
+(*___________________TEST ETHERCAT___________________________*)
+	IF IN_Active_Ex_Status > 0 THEN
+		VAR_Mem_Active_Ex			:=	TRUE;
+	END_IF
+	IF IN_Active_Dev_War_Det > 0 THEN
+		VAR_Mem_Active_Dev_War	:=	TRUE;
+	END_IF
+	IF IN_Active_Man_War_Det > 0 THEN
+		VAR_Mem_Active_Man_War	:=	TRUE;
+	END_IF
+	IF IN_Latched_Ex_Status > 0 THEN
+		VAR_Mem_Latched_Ex		:=	TRUE;
+	END_IF
+	IF IN_Latched_Man_War_Det > 0 THEN
+		VAR_Mem_Latched_Man_War	:=	TRUE;
+	END_IF
+	IF IN_Latched_Man_Err_Det > 0 THEN
+		VAR_Mem_Latched_Man_Err	:=	TRUE;
+	END_IF
+(*______________________________________________________________*)]]></ST>
+    </Implementation>
+    <Action Name="ACT_DGZ" Id="{4509eee5-ba24-450b-b985-63b725702ff0}">
+      <Implementation>
+        <ST><![CDATA[OP_DGZ(
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:= 0);
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_DGZ.ETAPE = 0
+		THEN
+				OP_DGZ.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0 : reset ou pression supérieure à 100mbar mise à 0 du flag dgz ok)*)
+ELSIF	(RESET OR STATE_Pression > 100)
+		THEN
+				OP_DGZ.ETAPE := 0;			(*RAZ grafcet*)
+				OP_DGZ.ETAPE.0:=TRUE;
+(*étape 0-1 : demande manuelle ou gestion automatique (si option) avec pression < 5e-6 mbar, jauge ok et autorisation externe*)
+ELSIF 	OP_DGZ.ETAPE.0
+		AND( (MANUAL AND RCP_M_DGZ)
+			OR (NOT MANUAL AND (STATE_Pression < 5E-6) AND STATE_Ok AND EN_Dgz_EXT AND CONF_degas_auto)
+			)
+		THEN
+				OP_DGZ.ETAPE.1:=TRUE;
+				OP_DGZ.ETAPE.0:=FALSE;
+
+(*étape 1-2 ==> envoi de la commande de mise en dgz réussie (au niveau de twincat)*)
+ELSIF	OP_DGZ.Etape.1
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND NOT WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_DGZ.ETAPE.2:=TRUE;
+				OP_DGZ.ETAPE.1:=FALSE;
+
+(*étape 1-10 ==> envoi de la commande de mise en dgz échouée, on va en étape défaut *)
+ELSIF	OP_DGZ.Etape.1
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_DGZ.ETAPE.10:=TRUE;
+				OP_DGZ.ETAPE.1:=FALSE;
+
+(*étape 2-3 ==> libre *)
+ELSIF	OP_DGZ.Etape.2
+		THEN
+				OP_DGZ.ETAPE.3:=TRUE;
+				OP_DGZ.ETAPE.2:=FALSE;
+
+(*étape 3-4 ==> attente temporisatrion de dégazage *)
+ELSIF	OP_DGZ.Etape.3
+		AND TIMER_Degas.Q
+		THEN
+				OP_DGZ.ETAPE.4:=TRUE;
+				OP_DGZ.ETAPE.3:=FALSE;
+
+(*étape 4-5 ==> envoi de la commande de arret dgz réussie (au niveau de twincat)*)
+ELSIF	OP_DGZ.Etape.4
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND NOT WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_DGZ.ETAPE.5:=TRUE;
+				OP_DGZ.ETAPE.4:=FALSE;
+
+(*étape 4-10 ==> envoi de la commande de mise en dgz échouée, on va en étape défaut *)
+ELSIF	OP_DGZ.Etape.4
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_DGZ.ETAPE.10:=TRUE;
+				OP_DGZ.ETAPE.4:=FALSE;
+
+(*étape 5-6 ==> libre *)
+ELSIF	OP_DGZ.Etape.5
+		THEN
+				OP_DGZ.ETAPE.6:=TRUE;
+				OP_DGZ.ETAPE.5:=FALSE;
+
+(*étape 6-1 ==> nouvel ordre de degazage manuel , en auto on ne relance pas, on fait aussi retomber le flag *)
+ELSIF	OP_DGZ.Etape.6
+		AND (MANUAL AND RCP_M_DGZ)
+		THEN
+				OP_DGZ.ETAPE.1:=TRUE;
+				OP_DGZ.ETAPE.6:=FALSE;
+				VAR_Degas_Ok := FALSE;
+
+(*étape 10- 0 ==> pb envoi de la commande*)
+ELSIF	OP_DGZ.Etape.10
+		THEN
+				OP_DGZ.Etape.0 := TRUE;
+				OP_DGZ.Etape.10 := FALSE;
+
+END_IF
+
+OP_DGZ.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_RAH" Id="{23197e0c-42b1-4dfc-a879-c8fd403ee9a4}">
+      <Implementation>
+        <ST><![CDATA[OP_RAH(
+	N_STEP_OP_OK:= 0,
+	N_STEP_OP_NOK:= 0);
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_RaH.ETAPE = 0
+		THEN
+				OP_RaH.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0 : reset *)
+ELSIF	RESET
+		THEN
+				OP_RAH.ETAPE := 0;			(*RAZ grafcet*)
+				OP_RAH.ETAPE.0:=TRUE;
+(*étape 0-1 : demande manuelle ou gestion automatique (si option) avec pression < 6.6e-2 mbar, jauge ok et autorisation externe*)
+ELSIF 	OP_RAH.ETAPE.0
+		AND I_Stop_Rah
+		AND STATE_Pression < 0.02
+		THEN
+				OP_RAH.ETAPE.1:=TRUE;
+				OP_RAH.ETAPE.0:=FALSE;
+
+(*étape 1-2 ==> envoi de la commande de mise en mode manuel du pilotage filament (au niveau de twincat)*)
+ELSIF	OP_RAH.Etape.1
+		AND NOT WRITE_CoE_BOOL.STATE_Busy
+		AND NOT WRITE_CoE_BOOL.STATE_Error
+		THEN
+				OP_RAH.ETAPE.2:=TRUE;
+				OP_RAH.ETAPE.1:=FALSE;
+
+(*étape 1-12 ==> envoi de la commande de mise en manuel échouée, on va en étape défaut *)
+ELSIF	OP_RAH.Etape.1
+		AND NOT WRITE_CoE_BOOL.STATE_Busy
+		AND WRITE_CoE_BOOL.STATE_Error
+		THEN
+				OP_RAH.ETAPE.12:=TRUE;
+				OP_RAH.ETAPE.1:=FALSE;
+
+(*étape 2-3 ==> libre *)
+ELSIF	OP_RAH.Etape.2
+		THEN
+				OP_RAH.ETAPE.3:=TRUE;
+				OP_RAH.ETAPE.2:=FALSE;
+
+(*étape 3-4 ==> envoi de la commande d'arrêt filament réussie *)
+ELSIF	OP_RAH.Etape.3
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND NOT WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_RAH.ETAPE.4:=TRUE;
+				OP_RAH.ETAPE.3:=FALSE;
+
+(*étape 3-4 ==> envoi de la commande d'arrêt filament échouée *)
+ELSIF	OP_RAH.Etape.3
+		AND NOT WRITE_CoE_WORD.STATE_Busy
+		AND WRITE_CoE_WORD.STATE_Error
+		THEN
+				OP_RAH.ETAPE.12:=TRUE;
+				OP_RAH.ETAPE.3:=FALSE;
+
+(*étape 4-5 ==> libre *)
+ELSIF	OP_RAH.Etape.4
+		THEN
+				OP_RAH.ETAPE.5:=TRUE;
+				OP_RAH.ETAPE.4:=FALSE;
+
+(*étape 5-6 ==> temporisation d'arrêt jauge *)
+ELSIF	OP_RAH.Etape.5
+		AND TIMER_Stop_Jauge.Q
+		THEN
+				OP_RAH.ETAPE.6:=TRUE;
+				OP_RAH.ETAPE.5:=FALSE;
+
+(*étape 6-7 ==> après envoi de l'information O_Pret_RaH, on attend retour VH ouverte ou P>= 0.02*)
+ELSIF	OP_RAH.Etape.6
+		AND (I_VHxx OR (STATE_Pression >= 0.02))
+		THEN
+				OP_RAH.ETAPE.7:=TRUE;
+				OP_RAH.ETAPE.6:=FALSE;
+
+(*etape 6-8 ==> on va en 8 pour remettre le filament en auto si on n'a pas LE retour de VH ouverte, ça veut dire qu'on est passé en isolement ou en repompage*)
+ELSIF	OP_RAH.Etape.6
+		AND Timer_Reprise_Pompage.Q
+		THEN
+				OP_RAH.Etape.8 := TRUE;
+				OP_RAH.Etape.6 := FALSE;
+
+(*étape 7-8 ==> tempo de redémarrage - doit être courte, pusiqu'on ne fait que la remettre en auto, sans redémarrer le filament*)
+ELSIF	OP_RAH.Etape.7
+		AND TIMER_Restart_Jauge.Q
+		THEN
+				OP_RAH.ETAPE.8:=TRUE;
+				OP_RAH.ETAPE.7:=FALSE;
+
+(*étape 8-9 ==> envoi de mise en auto du filament réussi*)
+ELSIF	OP_RAH.Etape.8
+		AND NOT WRITE_CoE_BOOL.STATE_Busy
+		AND NOT WRITE_CoE_BOOL.STATE_Error
+		THEN
+				OP_RAH.ETAPE.9:=TRUE;
+				OP_RAH.ETAPE.8:=FALSE;
+
+(*étape 8-12 ==> envoi de mise en auto du filament échoué*)
+ELSIF	OP_RAH.Etape.8
+		AND NOT WRITE_CoE_BOOL.STATE_Busy
+		AND WRITE_CoE_BOOL.STATE_Error
+		THEN
+				OP_RAH.ETAPE.12:=TRUE;
+				OP_RAH.ETAPE.8:=FALSE;
+
+(*étape 9-10 ==> libre*)
+ELSIF	OP_RAH.Etape.9
+		THEN
+				OP_RAH.ETAPE.10:=TRUE;
+				OP_RAH.ETAPE.9:=FALSE;
+
+(*étape 10-0 ==> libre*)
+ELSIF	OP_RAH.Etape.10
+		THEN
+				OP_RAH.ETAPE.0:=TRUE;
+				OP_RAH.ETAPE.10:=FALSE;
+
+(*étape 12-0 ==> pb envoi de la commande*)
+ELSIF	OP_RaH.Etape.12
+		THEN
+				OP_RaH.Etape.0 := TRUE;
+				OP_RaH.Etape.12 := FALSE;
+
+END_IF
+
+OP_RAH.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_BCG450_ETHERCAT">
+      <LineId Id="158" Count="4" />
+      <LineId Id="519" Count="0" />
+      <LineId Id="164" Count="2" />
+      <LineId Id="168" Count="23" />
+      <LineId Id="193" Count="37" />
+      <LineId Id="232" Count="25" />
+      <LineId Id="262" Count="51" />
+      <LineId Id="316" Count="45" />
+    </LineIds>
+    <LineIds Name="BLOCK_BCG450_ETHERCAT.ACT_DGZ">
+      <LineId Id="0" Count="90" />
+    </LineIds>
+    <LineIds Name="BLOCK_BCG450_ETHERCAT.ACT_RAH">
+      <LineId Id="0" Count="130" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

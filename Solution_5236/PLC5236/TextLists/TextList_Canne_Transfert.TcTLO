@@ -1,0 +1,116 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Canne_Transfert" Id="{0c11cbd1-66e4-4dec-bac1-2e1fcad1e4dd}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Canne	"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Canne de transfert</v>
+                <v>Transfer arm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Position"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Position</v>
+                <v>Position</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Speed"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vitesse</v>
+                <v>Speed</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Poste"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Position correspondante</v>
+                <v>Corresponding position</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Poste choisi"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Position sélectionnée</v>
+                <v>Selected position</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Distance"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Distance</v>
+                <v>Distance</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"vitesse"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vitesse</v>
+                <v>Speed</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"controle"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Opération</v>
+                <v>Operation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Durée"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée : </v>
+                <v>Duration:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"ecoulée"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée écoulée :</v>
+                <v>Elapsed time:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{e13a5d79-e278-4db6-a030-9b89b38bb4d1}</v>
+          <v n="GuidReInit">{6f6ba604-ac59-4964-b668-8ad9467ef8b2}</v>
+          <v n="GuidExitX">{d875f0b5-f87b-4607-a559-c8fa532b5a7b}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

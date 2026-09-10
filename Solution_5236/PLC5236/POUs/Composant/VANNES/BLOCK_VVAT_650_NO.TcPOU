@@ -1,0 +1,378 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_VVAT_650_NO" Id="{eaea82c9-b222-48aa-897c-ff5285d6a08f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_VVAT_650_NO
+
+(* Gestion d'une vanne 3 positions VAT*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INITIALE*)
+(* Version 1-1 - AB - VERSION INTERFACE STANDARD - 6970*)
+(* Version 1-2 - JPC - OFFSET AUTO ADAPTATIF POUR REGULATION PRESSION *)
+(* Version 2-0 - 05/2026 - MS - Adaptation pour journal des évènements externe*)
+
+(*************************************************************************)
+
+
+VAR_INPUT
+(*paramètre standard*)
+	RESET:   					BOOL; 											(*Condition RAZ actionneur*)
+	MANUAL:  					BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Mode manuel*)
+	//MNEMO:						STRING;				(* ~ (OPC : 1 : available for OPC-clients) *)
+
+
+(*entrée externe*)
+	IN_OFF:						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*E.TOR vanne fermée*)
+	IN_ON:						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*E.TOR vanne ouverte*)
+	IN_POSITION:				ANALOG_INPUT;						 			(*E.Analogique retour position de la vanne*)
+	I_PRESSION:					REAL;											(*Mesure de pression externe*)
+
+(*Paramètres*)
+	PRM_Mode:					BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Mode FALSE = Position / TRUE = Pression*)
+	PRM_Pression:				REAL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Consigne de pression - en unité cohérente avec la mesure*)
+	PRM_Position:				REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Consigne de position de la vanne en %*)
+	PRM_W_Pr_HI:				REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Tolérance haute de stabilisation de pression pour obtention de l'état stab pression ok*)
+	PRM_W_Pr_LO:				REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Tolérance basse de dtabilisation de pression pour obtention de l'état stab pression ok*)
+	PRM_Tim_W_Pr:				TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Temps de validation de stabilisation de la pression*)
+
+(*défaut du bloc*)
+	DEF_On:  					PRCDEF; 										(*00 - Défaut d'ouverture de la vanne*)
+	DEF_Off:   					PRCDEF; 										(*01 - Défaut de fermeture de la vanne*)
+	DEF_On_Imposs:				PRCDEF;										(*03 - Défaut d'ouverture ou de mise en laminage non autorisée en mode automatique*)
+	DEF_Off_Imposs:				PRCDEF;										(*04 - Défaut de fermeture non autorisée en mode automatique*)
+	DEF_Off_auto:				PRCDEF;										(*05 - Défaut de fermeture automatique de la vanne*)
+	DEF_Position:				PRCDEF;										(*06 - Défaut d'obtention de la position*)
+	DEF_Pression:				PRCDEF;										(*07 - Défaut d'obtention de la pression*)
+	DEF_Surv_Pression:			PRCDEF;										(*08 - Défaut de surveillance de la pression - perte du critère de stabilisation*)
+	ALA_Surv_Pression:			PRCDEF;										(*09 - Alarme de surveillance de la rpession - perte du critère de stabilisation*)
+
+(*parametre de pilotage en entrée*)
+	CO_On:   						BOOL; 											(*Ordre mode automatique ouverture*)
+	CO_Lam:						BOOL;											(*Ordre mode automatique laminage*)
+	EN_On_INT:   				BOOL;											(*Condition d'autorisation d'ouverture ou de laminage donnée par le bloc qui instancie le bloc actuator*)
+	EN_Off_INT:  					BOOL; 											(*Condition d'autorisation de fermeture donnée par le bloc qui instacie le bloc actuator*)
+	EN_On_EXT:					BOOL:=TRUE;									(*condition d'autorisation d'ouverture ou de laminage externe*)
+	EN_Off_EXT:					BOOL:=TRUE;									(*condition d'autorisation de fermeture externe*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+(*parametre de configuration constructeur*)
+(*les parametres suivants dépendent de la configuration de la machine*)
+	CONF_Tim_Valid_On:  			TIME:=T#100ms; 			(*Temps validation de la position ouverte *)
+	CONF_Tim_Valid_Off:   		TIME:=T#100ms; 			(*Temps validation de la position fermée *)
+	CONF_EN_On:				USINT:=0;				(*définit la réaction du système en cas de perte des conditions d'autorisation d'activation EN_On*)
+														(* 0 = désactivation automatique  en cas de perte des conditions d'autorisation d'activation uniquement en manuel*)
+														(* 1 = désactivation automatique en cas de perte des conditions d'autorisation d'activation en auto et en manuel*)
+														(* 2 = Pas de déscativation automatique*)
+	CONF_Pr_Max_SP:			REAL;					(* Consigne max. de pression en pleine echelle 10V - correspond à la pleine échelle du capteur connecté au coffret*)
+	CONF_WPos:				REAL;					(*Tolérance de positionnement pour obtention de l'état STATE_POS_ok*)
+	CONF_Tim_WPos:			TIME;					(*Temps de validation de l'état STATE_POS_Ok*)
+	PRM_Max_Tim_W:			TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Temps Max d'obtention de l'état stabilisation pression ok*)
+	PRM_Tim_Def_Pr:				TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Temps d'enveloppe du défaut de surveillance de la pression*)
+	PRM_Tim_Ala_Pr:				TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Temps d'enveloppe de l'alarme de surveillance de la pression*)
+	
+	(*Entité*)
+	IsComponent:				BOOL;		(*entité : composant*)
+	IdXML:						STRING;		(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:						UINT;		(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:					STRING;		(*MNEMO de l'appelant*)
+	MNEMO:						STRING;		(*MNEMO de l'entité*)
+
+END_VAR
+
+VAR_OUTPUT
+	OUT_On: 					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*SORTIE Ouverture vanne*)
+	OUT_Off:						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*SORTIE Fermeture vanne*)
+	OUT_Mode:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*SORTIE sélection mode: FALSE = Position / TRUE = Pression *)
+	OUT_SetPoint:				ANALOG_OUTPUT;								(*SORTIE ANA consigne position ou pression*)
+
+	STATE_On:	   				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur ouverture ok*)
+	STATE_Off:  					BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur fermeture ok*)
+	STATE_Nok:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur défaut sur la vanne*)
+	STATE_Lam:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur mise en laminage ok *)
+	STATE_Pos_Ok:				BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur de positionnement de la vanne ok *)
+	STATE_Press_Ok:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur de stabilisation de la pression ok *)
+	STATE_Ok:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur de stabilisation autour du point de consigne de pression
+																				ou de positionnement ok si le controle est en mode position*)
+	STATE_Position:				REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Retour de position de la vanne*)
+	STATE_Setpoint:				REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Valeur de la consigne de pression ou position demandée*)
+	STATE_Mode:				BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Mode de régulation en cours*)
+
+	AUTOR_On_IHM:				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*etat ouverture autorisée depuis la supervision en mode manuel*)
+	AUTOR_Off_IHM:				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*etat fermeture autorisée depuis la supervision en mode manuel*)
+	AUTOR_Lam_IHM:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*etat laminage autorisée depuis la supervision en mode manuel*)
+	AUTOR_On_PLC:				BOOL;											(*etat ouverture autorisée depuis l'automate*)
+	AUTOR_Off_PLC:				BOOL;											(*etat fermeture autorisée depuis l'automate*)
+END_VAR
+
+
+VAR
+	TIMER_Valid_On:				TON;
+	TIMER_Valid_Off:				TON;
+	TIMER_Valid_Pos_ok:			TON;
+	TIMER_Valid_Press_ok:		TON;
+
+	M_On:  						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre mode manuel ouverture de la vanne*)
+	M_Off:   						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre mode manuel fermeture de la vanne*)
+	M_Lam:   					BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre mode manuel de mise en position laminage*)
+	RCP_M_On:   					BOOL;
+	RCP_M_Off:  					BOOL;
+	RCP_M_Lam:					BOOL;
+	VAR_On:						BOOL;											(*bit intermédiaire de demande d'ouverture de la vanne*)
+	VAR_Lam:					BOOL;											(*bit intermédiaire de demande de mise en laminage de la vanne*)
+	VAR_Mem_PRM_Pression:		REAL;											(*variable de mémorisation de la consigne de pression*)
+	VAR_Prm_Pression_modifie:	BOOL;											(*variable activée à chaque changement de consigne de pression*)
+	VAR_Attente_Stab:			BOOL;											(*variable activée aprés chaque demande de changement de consigne lorsque
+																				la stabilisation de pression est attendue*)
+	VAR_Surv_Pression:			BOOL;(*variable indiquant que la pression doit être surveillée - stabilisation atteinte*)
+
+	VAR_OFFSET:				REAL;
+	TEMPO_OFFSET:				TON;
+	test:							BOOL;
+END_VAR
+
+VAR_EXTERNAL
+	MANUAL_SAFETY_OFF:		BOOL;											(*desactive les sécurités en mode manuel*)
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+DEF_On.IdXml					:=	'3';
+DEF_On.TagXml					:=	2;
+
+DEF_Off.IdXml					:=	'3';
+DEF_Off.TagXml					:=	4;
+
+DEF_On_Imposs.IdXml				:=	'3';
+DEF_On_Imposs.TagXml			:=	7;
+
+DEF_Off_Imposs.IdXml				:=	'3';
+DEF_Off_Imposs.TagXml			:=	9;
+
+DEF_Off_auto.IdXml				:=	'3';
+DEF_Off_auto.TagXml				:=	11;
+
+DEF_Position.IdXml				:=	'1';
+DEF_Position.TagXml				:=	9;
+
+DEF_Pression.IdXml				:=	'1';
+DEF_Pression.TagXml				:=	8;
+
+DEF_Surv_Pression.IdXml			:=	'1';
+DEF_Surv_Pression.TagXml		:=	11;
+
+ALA_Surv_Pression.IdXml			:=	'1';
+ALA_Surv_Pression.TagXml		:=	10;
+ALA_Surv_Pression.Groupe		:=	1;
+
+(*Affectation des constantes*)
+IN_Position.CONF_Min 		:=	0.0;				(*position min retour vanne*)
+IN_Position.CONF_Max	:=	100.0;			(*position max retour vanne*)
+IN_Position();
+
+IF VAR_OFFSET = 0.0 THEN
+	VAR_OFFSET := 1.0;
+END_IF
+
+(*Mémorisation de la consigne et détection de changement de consigne*)
+
+VAR_Prm_Pression_modifie :=  (PRM_Pression <> VAR_Mem_PRM_pression) AND VAR_Lam AND PRM_MODE AND NOT MANUAL AND NOT RESET;;
+IF VAR_Lam AND PRM_mode THEN
+	VAR_Mem_PRM_Pression	:= PRM_Pression;
+ELSE
+	VAR_Mem_PRM_Pression := 0.0;
+END_IF;
+(*positionnement du bit d'attente de la stabilisation de pression aprés modification de la consigne de pression*)
+IF VAR_Prm_Pression_modifie AND NOT MANUAL AND NOT RESET  THEN
+	VAR_Attente_Stab := TRUE;
+END_IF;
+
+(* Réception des ordres en mode manuel*)
+	RCP_M_On 			:=	M_On;
+	RCP_M_Off			:=	M_Off;
+	RCP_M_Lam			:=	M_Lam;
+
+(*Autorisation*)
+	AUTOR_On_IHM		:= 	MANUAL AND ((EN_On_INT AND EN_On_EXT)
+							OR MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_On;
+	AUTOR_Off_IHM		:= 	MANUAL AND ((EN_Off_INT AND EN_Off_EXT)  OR
+							MANUAL_SAFETY_OFF) AND NOT RESET AND  (VAR_On OR VAR_Lam);
+	AUTOR_Lam_IHM	:=	MANUAL AND ((EN_On_INT AND EN_On_EXT)
+							OR MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_Lam;
+	AUTOR_On_PLC		:=	NOT MANUAL AND (EN_On_INT AND EN_On_EXT)
+							AND NOT RESET;
+	AUTOR_Off_PLC		:= 	NOT MANUAL AND (EN_Off_INT AND EN_Off_EXT)
+							AND NOT RESET;
+(*defaut ouverture ou laminage impossible en mode automatique*)
+	DEF_On_Imposs.CONDITION:=	(CO_On OR CO_Lam) AND NOT AUTOR_On_PLC AND NOT MANUAL;
+	DEF_On_Imposs.DELAY := T#0ms;
+	DEF_On_Imposs();
+(*Defaut fermeture impossible en mode automatique*)
+	DEF_Off_Imposs.CONDITION:=	NOT CO_On AND NOT CO_Lam AND NOT AUTOR_Off_PLC AND NOT MANUAL
+								AND (VAR_Lam OR VAR_On);
+	DEF_Off_Imposs.DELAY := T#0ms;
+	DEF_Off_Imposs();
+(*defaut de fermeture automatique de la vanne*)
+	DEF_Off_Auto.CONDITION :=             (NOT EN_On_INT OR NOT EN_On_EXT) AND  (VAR_On OR VAR_Lam)
+								     AND ((CONF_En_ON=1) OR ((CONF_EN_On=0) AND MANUAL)) AND NOT RESET;
+	DEF_Off_auto.DELAY:=T#0ms;
+	DEF_Off_Auto();
+(*gestion des sorties*)
+IF 		(RCP_M_On AND AUTOR_On_IHM) OR
+		(CO_On AND AUTOR_On_PLC) THEN
+				VAR_On		:= 	TRUE;
+				VAR_Lam	:= 	FALSE;
+ELSIF 	(RCP_M_Lam AND AUTOR_Lam_IHM) OR
+	    	(CO_Lam AND AUTOR_On_PLC) THEN
+				VAR_On		:=	FALSE;
+				VAR_LAm	:=	TRUE;
+ELSIF 	RESET  OR DEF_Off_Auto.DEF OR
+		(RCP_M_Off AND AUTOR_Off_IHM) OR
+	    	((NOT CO_Lam AND NOT CO_On) AND AUTOR_Off_PLC) THEN
+				VAR_On		:= 	FALSE;
+				VAR_Lam	:=	FALSE;
+END_IF;
+
+OUT_On		:=	VAR_On;
+OUT_Mode	:=	(VAR_Lam AND PRM_Mode);
+OUT_Off		:=	VAR_Lam OR VAR_On;
+
+(*Gestion de la consigne analogique pression ou position*)
+IF 		PRM_Mode AND VAR_Lam THEN
+			OUT_SetPoint.CONF_Max 	:= CONF_Pr_MAX_SP;
+			OUT_SetPoint.CONF_Min	:= 0.0;
+
+			IF NOT (I_PRESSION  <=  PRM_Pression * 1.03  AND I_PRESSION  >=  PRM_Pression *0.97) THEN
+				TEMPO_OFFSET.PT	:=	T#1s;
+				TEMPO_OFFSET.IN	:=	TRUE;
+				IF TEMPO_OFFSET.Q THEN
+					IF I_PRESSION  < PRM_Pression THEN
+						VAR_OFFSET	:=	VAR_OFFSET + 0.01;
+					ELSIF I_PRESSION  > PRM_Pression THEN
+						VAR_OFFSET	:=	VAR_OFFSET - 0.01;
+					ELSIF TRUE THEN
+						VAR_OFFSET	:=	1.0;
+					END_IF
+					TEMPO_OFFSET.IN	:=	FALSE;
+				END_IF
+			ELSE
+				TEMPO_OFFSET.IN	:=	FALSE;
+			END_IF
+			TEMPO_OFFSET();
+			IF VAR_OFFSET > 2.0 OR VAR_OFFSET < 0.0 THEN
+				VAR_OFFSET := 1.0;
+			END_IF
+			(*IF PRM_Pression < 0.1 AND PRM_Pression > 0.01 THEN
+				OUT_SetPoint.Value		:= PRM_Pression*0.95;
+			END_IF
+			IF PRM_Pression < 0.01 AND PRM_Pression > 0.001 THEN
+				OUT_SetPoint.Value		:= PRM_Pression*0.80;
+			END_IF*)
+			OUT_SetPoint.Value		:= PRM_Pression*VAR_OFFSET;
+ELSIF 	NOT PRM_Mode AND VAR_Lam THEN
+			OUT_SetPoint.CONF_Max 	:= 100.0;
+			OUT_SetPoint.CONF_Min	:= 0.0;
+			OUT_SetPoint.Value		:= PRM_Position;
+ELSIF NOT VAR_Lam	THEN
+			OUT_SetPoint.CONF_Max 	:= 100.0;
+			OUT_SetPoint.CONF_Min	:= 0.0;
+			OUT_SetPoint.Value		:= 0.0;
+END_IF;
+OUT_Setpoint();
+
+
+
+
+(*indicateur actionneur activé STATE_ON*)
+TIMER_Valid_On.IN	:=	VAR_ON AND IN_On;
+TIMER_Valid_On(PT:=CONF_Tim_Valid_On);
+STATE_ON			:=	TIMER_Valid_On.Q;
+(*indicateur actionneur activé STATE_OFF*)
+TIMER_Valid_Off.IN	:=	NOT VAR_Lam AND NOT VAR_On AND IN_off;
+TIMER_Valid_Off(PT:=CONF_Tim_Valid_Off);
+STATE_Off			:=	TIMER_Valid_Off.Q;
+(*indicateur STATE_NOK*)
+STATE_Nok			:=	DEF_ON.DEF OR DEF_Off.DEF OR DEF_Off_auto.DEF OR DEF_On_Imposs.DEF OR
+						DEF_Off_Imposs.DEF OR DEF_pression.DEF OR DEF_Position.DEF;
+
+(*temporisation de validation de la stabilisation à la consigne de position*)
+TIMER_Valid_Pos_OK.IN		:=	VAR_Lam AND NOT PRM_Mode AND(  (ABS(IN_Position.Value - PRM_position) <= CONF_WPos) OR (CONF_WPos = 0.0));
+TIMER_Valid_Pos_OK.PT		:=	CONF_Tim_WPos;
+Timer_Valid_pos_OK();
+STATE_Pos_OK				:= 	TIMER_Valid_Pos_OK.Q;
+
+
+(*temporisation de validation de la stabilisation à la consigne de pression*)
+TIMER_Valid_Press_OK.IN		:=	VAR_Lam AND PRM_Mode AND (((I_Pression >= PRM_W_Pr_LO) AND (I_Pression <= PRM_W_Pr_HI))
+								OR (PRM_Tim_W_Pr = T#0ms))
+								AND NOT VAR_Prm_Pression_modifie ;
+TIMER_Valid_Press_OK.PT		:=	PRM_Tim_W_Pr;
+TIMER_Valid_Press_OK();
+STATE_Press_OK				:=	TIMER_Valid_Press_ok.Q;
+
+(*indicateur actionneur activé STATE_LAM*)
+STATE_Lam						:=	(VAR_Lam AND PRM_Mode) OR (VAR_LAM AND NOT PRM_Mode AND STATE_Pos_ok);
+
+
+
+STATE_Position		:=	IN_position.Value;
+STATE_Setpoint		:=	OUT_Setpoint.Value;
+STATE_Mode		:=	OUT_Mode;
+STATE_Ok  			:= 	STATE_Pos_Ok OR STATE_Press_Ok;
+
+(*positionnement du bit de validation de la surveillance de la pression
+si la stabilisation de pression est obtenue*)
+IF (VAR_Lam AND PRM_MODE AND STATE_Press_ok) AND NOT MANUAL AND NOT RESET  THEN
+	VAR_Surv_Pression :=	TRUE;
+END_IF;
+(*RAZ du bit d'attente de la stabilisation de pression lorsque l'état de stabilisation pression a été atteint ou
+que le mode régulation de pression n'est plus demandé*)
+IF (VAR_Attente_stab AND STATE_Press_ok) OR RESET OR NOT (VAR_Lam AND PRM_Mode)  THEN
+	VAR_Attente_Stab := FALSE;
+END_IF;
+
+(*RAZ du bit de surveillance de la stabilisation si pas en mode régulation de pression ou si un changement de consigne est apparu*)
+IF VAR_Prm_Pression_modifie  OR RESET OR NOT (VAR_Lam AND PRM_Mode)  THEN
+	VAR_Surv_Pression := FALSE;
+END_IF;
+
+(*défaut d'ouverture*)
+	DEF_On.Condition			:= 	VAR_On AND NOT STATE_On;
+	DEF_On();
+(*défaut de fermeture*)
+	DEF_Off.Condition			:= 	NOT VAR_on AND NOT VAR_Lam AND NOT STATE_Off;
+	DEF_Off();
+(*défaut d'obtention de la position*)
+	DEF_Position.Condition	:= 	VAR_Lam AND NOT PRM_Mode AND NOT STATE_Pos_Ok;
+	DEF_position();
+(*défaut d'obtention de la pression - le défaut n'est plus surveillé lorsque l'état STATE_Press_ok a été atteint  et est
+surveillé de nouveau aprés un changement de consigne*)
+	DEF_Pression.Condition	:= 	VAR_Lam AND PRM_Mode AND NOT STATE_Press_Ok AND VAR_Attente_Stab
+								AND NOT MANUAL AND NOT RESET;
+	DEF_Pression(DELAY		:=	PRM_Max_Tim_W);
+
+(*défaut de surveillance de la pression - l'état STATE_Press_Ok est perdu pendant un temps supérieur à PRM_TIM_SURV_PR *)
+DEF_Surv_Pression.CONDITION	:=	VAR_Lam AND PRM_Mode AND NOT State_Press_OK AND VAR_Surv_Pression
+								AND NOT MANUAL AND NOT RESET;
+DEF_Surv_Pression (DELAY:=PRM_Tim_Def_Pr);
+
+
+(*défaut de surveillance de la pression - l'état STATE_Press_Ok est perdu pendant un temps supérieur à PRM_ALA_SURV_PR*)
+ALA_Surv_Pression.CONDITION 	:=	VAR_Lam AND PRM_Mode AND NOT State_Press_OK AND VAR_Surv_Pression
+									AND NOT MANUAL AND NOT RESET;
+ALA_Surv_Pression (DELAY:=PRM_Tim_Ala_Pr);
+(* Reset des ordres *)
+	IF M_On AND RCP_M_On THEN
+		M_On 	:= FALSE;
+	END_IF;
+	IF M_Off AND RCP_M_Off THEN
+		M_Off		 := FALSE;
+	END_IF;
+	IF M_Lam AND RCP_M_Lam THEN
+		M_Lam		 := FALSE;
+	END_IF;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

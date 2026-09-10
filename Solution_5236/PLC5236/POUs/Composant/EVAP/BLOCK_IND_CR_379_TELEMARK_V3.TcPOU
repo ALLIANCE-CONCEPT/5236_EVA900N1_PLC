@@ -1,0 +1,208 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_IND_CR_379_TELEMARK_V3" Id="{7817c202-5b32-4583-ac96-dc299e8dc195}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_IND_CR_379_TELEMARK_V3
+
+(* Pour utilisation d'un indexeur de creuset telemark 379 à 6 creusets max *)
+
+(****************historique des versions*****************************)
+
+(* Version 0 - 05/01/12 - JPC *)
+(* Version 1 - 01/15 - GV - Adaptation pour journal des évenements + Ajout compteurs d'utilisation + Ajout Co_Change + M_Change *)
+(* Version 2 - 07/15 - GV - Ajout temporisation pour obtention STATE_POS_OK*)
+(* Version 3 - 09/22 - GV - Ajout condition d'inhibition des défauts*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;		(*Mode de pilotage manuel *)
+	RESET:					BOOL;		(*Condition de réiinitialisation de la fonction *)
+
+	CO_Change:				BOOL;		(*Demande de changement de creuset en automatique*)
+
+	I_FIL_ON:				BOOL;
+	PRM_NCR:				USINT:=1;	(*Commande de position*)
+
+	IN_POWER:				REAL;		(*Puissance appliquée au creuset*)
+
+	IN_POS1:				BOOL;		(*position de l'indexeur*)
+	IN_POS2:				BOOL;
+	IN_POS3:				BOOL;
+	IN_POS4:				BOOL;		(*position de l'indexeur*)
+	IN_POS5:				BOOL;
+	IN_POS6:				BOOL;
+
+	DEF_POSITIONNEMENT:	PRCDEF;	(*Défaut de positionnement*)
+	I_Inhibe_Def:		BOOL;	(*Inhibition des défauts*)
+END_VAR
+
+VAR
+	VAR_Cpt_Temps:				ARRAY[0..6] OF BLOCK_CPT_TEMPS;		(*Compteur de fonctionnement pour chaque creuset*)
+	VAR_Cpt_Puissance:			ARRAY[0..6] OF BLOCK_CPT_INTEG;		(*Compteur pour chaque creuset*)
+	VAR_Cpt_Epaisseur:			ARRAY[0..6] OF BLOCK_CPT_INTEG;		(*Compteur d'épaisseur pour chaque creuset*)
+	I:							USINT;									(*Variable d'itération*)
+
+	M_Change:					BOOL;	(* Ordre de changement de creuset en manuel *)
+	RCP_M_Change:				BOOL;	(* Bit de reception de l'ordre de Marche/Arrêt du module de balayage *)
+	VAR_Change:					BOOL;	(* Variable intermédiaire de marche du module de balayage*)
+
+	TIMER_Valid_Pos_Creuset:		TON;	(*Attentede validation du positionnement du creuset*)
+END_VAR
+
+VAR_OUTPUT
+	AUTOR_Change_IHM:			BOOL;		(*indique que le changement de creuset est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Change_PLC:			BOOL;		(*indique que le changement de creuset est autorisée en mode automatique depuis l'automate*)
+
+	OUT_SEL1:					BOOL;		(*sélection  des creusets*)
+	OUT_SEL2:					BOOL;
+	OUT_SEL3:					BOOL;
+	OUT_SEL4:					BOOL;		(*sélection  des creusets *)
+	OUT_SEL5:					BOOL;
+	OUT_SEL6:					BOOL;
+	STATE_ROT:					BOOL;		(*Creuset en rotation*)
+	STATE_NOK:					BOOL;		(*Positionnement nok*)
+	STATE_POS_OK:				BOOL;		(*Positionnement ok*)
+	STATE_POS:					USINT;
+	STATE_MAT:					STRING;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_NCR:		USINT;	(*Nombre de creuset disponible*)
+
+	PRM_MAT: 		ARRAY[0..8] OF STRING;		(*nom de la matière associée au creuset*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Défaut*)
+DEF_POSITIONNEMENT.IdXml		:=	'14';
+DEF_POSITIONNEMENT.TagXml		:=	2;
+
+(* Gestion des ordres en mode manuel *)
+	RCP_M_Change			:=	M_Change;
+
+(*gestion des bits d'autorisation en mode manuel*)
+	AUTOR_Change_IHM		:=	NOT RESET AND NOT Var_Change AND NOT I_FIL_ON AND MANUAL;
+	AUTOR_Change_PLC		:=	NOT RESET AND NOT I_FIL_ON AND NOT MANUAL;
+
+(*gestion des variables intermédiare*)
+(*Changement Creuset*)
+	IF	(CO_Change AND AUTOR_Change_PLC)
+			 OR 	( RCP_M_Change AND AUTOR_Change_IHM) THEN
+				Var_Change 		:= 	TRUE;
+	ELSIF (VAR_Change AND STATE_POS_OK) THEN
+				Var_Change		:=	FALSE;
+	END_IF;
+
+IF PRM_NCR > CONF_NCR THEN
+	PRM_NCR := CONF_NCR;
+END_IF
+
+IF VAR_Change THEN
+	CASE PRM_NCR OF
+			6:
+				OUT_SEL1 := FALSE;
+				OUT_SEL2 := FALSE;
+				OUT_SEL3 := FALSE;
+				OUT_SEL4 := FALSE;
+				OUT_SEL5 := FALSE;
+				OUT_SEL6 := TRUE;
+			5:
+				OUT_SEL1 := FALSE;
+				OUT_SEL2 := FALSE;
+				OUT_SEL3 := FALSE;
+				OUT_SEL4 := FALSE;
+				OUT_SEL5 := TRUE;
+				OUT_SEL6 := FALSE;
+			4:
+				OUT_SEL1 := FALSE;
+				OUT_SEL2 := FALSE;
+				OUT_SEL3 := FALSE;
+				OUT_SEL4 := TRUE;
+				OUT_SEL5 := FALSE;
+				OUT_SEL6 := FALSE;
+			3:
+				OUT_SEL1 := FALSE;
+				OUT_SEL2 := FALSE;
+				OUT_SEL3 := TRUE;
+				OUT_SEL4 := FALSE;
+				OUT_SEL5 := FALSE;
+				OUT_SEL6 := FALSE;
+			2:
+				OUT_SEL1 := FALSE;
+				OUT_SEL2 := TRUE;
+				OUT_SEL3 := FALSE;
+				OUT_SEL4 := FALSE;
+				OUT_SEL5 := FALSE;
+				OUT_SEL6 := FALSE;
+			1:
+				OUT_SEL1 := TRUE;
+				OUT_SEL2 := FALSE;
+				OUT_SEL3 := FALSE;
+				OUT_SEL4 := FALSE;
+				OUT_SEL5 := FALSE;
+				OUT_SEL6 := FALSE;
+	END_CASE;
+END_IF
+
+IF IN_POS1 THEN
+		STATE_POS := 1;
+ELSIF IN_POS2 THEN
+		STATE_POS := 2;
+ELSIF IN_POS3 THEN
+		STATE_POS := 3 ;
+ELSIF IN_POS4 THEN
+		STATE_POS := 4;
+ELSIF IN_POS5 THEN
+		STATE_POS := 5;
+ELSIF IN_POS6 THEN
+		STATE_POS := 6;
+END_IF;
+
+(*Attente de validation positionnement creuset*)
+TIMER_Valid_Pos_Creuset.IN	:=	(IN_POS1 = OUT_SEL1) AND (IN_POS2 = OUT_SEL2) AND (IN_POS3 = OUT_SEL3) AND
+								(IN_POS4 = OUT_SEL4) AND (IN_POS5 = OUT_SEL5) AND (IN_POS6 = OUT_SEL6);
+TIMER_Valid_Pos_Creuset(PT:=T#500ms);
+STATE_POS_OK	:= TIMER_Valid_Pos_Creuset.Q;
+
+
+STATE_ROT:=	(IN_POS1 <> OUT_SEL1) OR ( IN_POS2 <> OUT_SEL2) OR (IN_POS3 <> OUT_SEL3 ) OR
+				(IN_POS4 <> OUT_SEL4) OR (IN_POS5 <> OUT_SEL5) OR (IN_POS6 <> OUT_SEL6);
+
+DEF_POSITIONNEMENT.CONDITION :=  ((IN_POS1 <> OUT_SEL1) OR ( IN_POS2 <> OUT_SEL2) OR (IN_POS3 <> OUT_SEL3 ) OR
+										 (IN_POS4 <> OUT_SEL4) OR (IN_POS5 <> OUT_SEL5) OR (IN_POS6 <> OUT_SEL6)) AND NOT I_Inhibe_Def;
+DEF_POSITIONNEMENT.DELAY := T#180s;
+DEF_POSITIONNEMENT();
+
+(*gestion compteur d'utilisation*)
+FOR I := 1 TO 6 BY 1 DO
+	VAR_Cpt_Puissance[I].CONF_Coeff:=1;
+	VAR_Cpt_Puissance[I].CONF_TimeUnit:=2;
+	VAR_Cpt_Puissance[I].I_Value := IN_POWER;
+	VAR_Cpt_Puissance[I].I_On := (STATE_POS = I);
+	VAR_Cpt_Puissance[I]();
+
+	VAR_Cpt_Temps[I].I_On := (STATE_POS = I) AND I_FIL_ON;		(*Compteur d'utilisation des creusets*)
+	VAR_Cpt_Temps[I]();
+END_FOR
+
+STATE_NOK:= DEF_POSITIONNEMENT.DEF;
+
+IF STATE_POS > 0 AND STATE_POS <= CONF_NCR THEN
+	STATE_MAT:= PRM_MAT[STATE_POS];
+ELSE
+	STATE_MAT:= '';
+END_IF
+
+(* Reset des ordres*)
+IF M_Change	AND RCP_M_Change THEN
+	M_Change			:=	FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

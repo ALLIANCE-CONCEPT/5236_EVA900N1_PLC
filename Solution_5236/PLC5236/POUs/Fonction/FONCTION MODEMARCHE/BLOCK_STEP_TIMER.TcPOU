@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_STEP_TIMER" Id="{4e4b1079-1279-4786-a479-f5115f4016f9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_STEP_TIMER
+VAR_INPUT
+	I_ON:					BOOL;
+	PRM_TIME:				DINT;
+	OP_RUN:					BLOCK_G7;				(*Grafcet de gestion de l'étape timer*)
+	I_ROTATION_OK:			BOOL;					(*Condition rotation ok*)
+	I_STOP_ROT_PS_OK:		BOOL;					(*Retour rotation PS à l'arrêt*)
+	I_NO_ROTATION_PS:		BOOL;					(*Pas de rotation PS si consigne nulle*)
+END_VAR
+VAR_OUTPUT
+	RQ_ROTATION_PS:			BOOL;
+	RQ_STOP_ROTATION_PS:	BOOL;
+	STATE_OK:				BOOL;
+END_VAR
+VAR
+	FM_ETAPE1:		R_TRIG;
+	FM_ETAPE2:		R_TRIG;
+	FM_ETAPE3:		R_TRIG;
+	FM_ETAPE4:		R_TRIG;
+	TIMER:					TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[FM_ETAPE1(CLK:=OP_RUN.Etape.1);
+FM_ETAPE2(CLK:=OP_RUN.Etape.2);
+FM_ETAPE3(CLK:=OP_RUN.Etape.3);
+FM_ETAPE4(CLK:=OP_RUN.Etape.4);
+
+
+RQ_ROTATION_PS:= FM_ETAPE1.Q AND NOT I_NO_ROTATION_PS;
+RQ_STOP_ROTATION_PS := (FM_ETAPE1.Q AND I_NO_ROTATION_PS) OR FM_ETAPE3.Q;
+
+TIMER( PT:= DINT_TO_TIME(PRM_TIME*1000),
+		IN:=OP_RUN.Etape.2);
+		
+STATE_OK := OP_RUN.OK;
+
+RUN_STEP();]]></ST>
+    </Implementation>
+    <Action Name="RUN_STEP" Id="{f91ab6c2-d249-4020-a9b8-d24bc409f6ff}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET ETAPE EFFLUVAGE*)
+(* initialisation du grafcet*)
+OP_RUN(
+	N_STEP_OP_OK:=4 ,
+	N_STEP_OP_NOK:= 0);
+
+(* initialisation du grafcet*)
+IF 		OP_RUN.Etape = 0 THEN
+				OP_RUN.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF  NOT I_ON THEN
+		OP_RUN.Etape:= 0;			(*RAZ grafcet*)
+		OP_RUN.Etape.0:= TRUE;
+(*étape 0-1 *)
+ELSIF OP_RUN.Etape.0 AND I_ON  THEN
+		OP_RUN.Etape.1 	:= TRUE;
+		OP_RUN.Etape.0 	:= FALSE;
+(*étape 2-1*)
+ELSIF OP_RUN.Etape.1 AND ((I_ROTATION_OK AND NOT I_NO_ROTATION_PS) OR (I_STOP_ROT_PS_OK AND I_NO_ROTATION_PS)) THEN
+		OP_RUN.Etape.2 	:= TRUE;
+		OP_RUN.Etape.1 	:= FALSE;
+(*étape 2-3*)
+ELSIF OP_RUN.Etape.2 AND TIMER.Q THEN 
+		OP_RUN.Etape.3	:= TRUE;
+		OP_RUN.Etape.2	:= FALSE;
+(*étape 3-4*)
+ELSIF OP_RUN.Etape.3 AND I_STOP_ROT_PS_OK THEN 
+		OP_RUN.Etape.4	:= TRUE;
+		OP_RUN.Etape.3	:= FALSE;
+END_IF
+
+OP_RUN.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_STEP_TIMER">
+      <LineId Id="41" Count="2" />
+      <LineId Id="38" Count="2" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="35" Count="1" />
+      <LineId Id="11" Count="1" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="33" Count="0" />
+    </LineIds>
+    <LineIds Name="BLOCK_STEP_TIMER.RUN_STEP">
+      <LineId Id="2" Count="8" />
+      <LineId Id="16" Count="6" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="32" Count="1" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="39" Count="2" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="45" Count="2" />
+      <LineId Id="42" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="48" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

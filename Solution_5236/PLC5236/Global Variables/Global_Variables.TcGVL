@@ -1,0 +1,94 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <GVL Name="Global_Variables" Id="{2f84d764-16b2-416e-86a1-1cf3a71ad672}">
+    <Declaration><![CDATA[{attribute 'Tc2GvlVarNames'}
+VAR_GLOBAL
+
+	(*Variable de vérification de chargement des variables persistentes ok*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	STATE_Charg_Persistentes_Ok:	BOOL;
+
+	(*Général*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	MACHINE:						BLOCK_MODE_MARCHE_V2_0;
+	{attribute 'OPC.UA.DA'  := '1'}
+	INIT_MACHINE:					BLOCK_INIT_MACHINE;
+	{attribute 'OPC.UA.DA'  := '1'}
+	EXECPROC:						BLOCK_EXEC_PROC;
+	{attribute 'OPC.UA.DA'  := '1'}
+	MODE_QUARTZ_PROD:				BLOCK_1RUN_1QUARTZ;
+
+	(*Instances des PRG*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_USER:						BLOCK_USER;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_EFFLUVAGE:					BLOCK_PRG_EFFLUVAGE;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_EVAP:						BLOCK_PRG_EVAP;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_MOUVEMENT_PS:				BLOCK_PRG_MOUVEMENT_PS;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_POMPAGE:					BLOCK_PRG_POMPAGE;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_SERVITUDES:					BLOCK_PRG_SERVITUDES;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_GAZ:						BLOCK_PRG_GAZ;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_VERRINE:					BLOCK_PRG_VERRINE;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PRG_INFO_CLIENT:				BLOCK_PRG_INFO_CLIENT;
+
+	(*Securisation du mode manuel*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	STATE_PROGRESS_BAR_MANU: 		USINT;
+	{attribute 'OPC.UA.DA'  := '1'}
+	TIMER_SECU_OFF:					TON;
+	{attribute 'OPC.UA.DA'  := '1'}
+	IHM_SHUNT_SECU:					BOOL;		(*apui sur bouton de shunt des sécu*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	IHM_SECU_ON:					BOOL;		(*appui sur bouton de reprise du mode manu securisé*)
+
+
+	(*variable générale de securités désactivées*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	MANUAL_SAFETY_OFF:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)
+
+	(*variables liées à la gestion des paramètres persistents*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	RQ_PARAM_SYSTEM:				BOOL;
+	{attribute 'OPC.UA.DA'  := '1'}
+	PARAM_SYSTEM_OK:				BOOL;		(*drapeau indiquant que le paramètrage du système est OK*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	RQ_SAV_PERSISTENT:				BOOL;		(*Demande de sauvegarde des variables persistants*)
+
+
+	(*Variables de navigation*)
+	{attribute 'OPC.UA.DA'  := '1'}
+	SHOW_SM_SA:					BOOL;
+	{attribute 'OPC.UA.DA'  := '1'}
+	SHOW_CONFIRM_REGEN:			BOOL;
+	{attribute 'OPC.UA.DA'  := '1'}
+	SHOW_MODIF_RAMPE:			BOOL;
+	{attribute 'OPC.UA.DA'  := '1'}
+	VISU_INDEX_MANU:			USINT;
+
+	DEBUG_BOOL1:	BOOL;
+	DEBUG_BOOL2: 	BOOL;
+	DEBUG_BOOL3:	BOOL;
+	DEBUG_BOOL4:	BOOL;
+	DEBUG_BOOL5:	BOOL;
+	DEBUG_BOOL6:	BOOL;
+	DEBUG_BOOL7:	BOOL;
+	DEBUG_BOOL8:	BOOL;
+	DEBUG_BOOL9:	BOOL;
+	DEBUG_BOOL10:	BOOL;
+	DEBUG_BOOL11:	BOOL;
+	DEBUG_BOOL12:	BOOL;
+	DEBUG_REAL1:	REAL;
+	DEBUG_REAL2:	REAL;
+	VAR_Mem_ECO:	BOOL;
+	
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>

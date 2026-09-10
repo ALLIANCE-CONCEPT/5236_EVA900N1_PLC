@@ -1,0 +1,270 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_STEP_EFFLUVAGE" Id="{eded0eda-0943-4c32-ad6c-dfd8ca606733}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_STEP_EFFLUVAGE
+
+(* Gestion etape d'effluvage avec injection de gaz par vanne microfuite*)
+
+(****************historique des versions*****************************)
+
+(* Version 0-0 - GV - VERSION INITIALE EVA760 n°113 - 9070*)
+(* Version 1-0 - GV - VERSION EVA760 n°119 - 13375 - Modification pour gestion avec 2 lignes de gaz *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	I_ON:							BOOL;					(*Condition de déclenchement du grafcet d'étape d'effluvage*)
+	I_POMPAGE_PRIM_OK:				BOOL;					(*Condition de pompage primaire ok*)
+	I_POMPAGE_SEC_OK:				BOOL;					(*Condition pompage secondaire ok*)
+	I_ROTATION_OK:					BOOL;					(*Condition rotation ok*)
+	I_STOP_ROT_PS_OK:				BOOL;					(*Retour rotation PS à l'arrêt*)
+	I_NO_ROTATION_PS:				BOOL;					(*Pas de rotation PS si consigne nulle*)
+	I_ISOLEMENT_OK:					BOOL;					(*Condition isolement ok*)
+	I_MARCHE_GAZ1_OK:				BOOL;					(*Mise en gaz ligne 1 ok*)
+	I_ARRET_GAZ1_OK:				BOOL;					(*Arret gaz ligne 1 ok*)
+	I_MARCHE_GAZ2_OK:				BOOL;					(*Mise en gaz ligne 2 ok*)
+	I_ARRET_GAZ2_OK:				BOOL;					(*Arret gaz ligne 2 ok*)
+	I_MARCHE_EFFLUVAGE_OK:			BOOL;					(*Retour effluvage ok*)
+	I_ARRET_EFFLUVAGE_OK:			BOOL;					(*Retour arret effluvage ok*)
+	TH_PPRIM_AUTOR:					BOOL;					(*Pression d'autorisation de pompage primaire atteinte*)
+	TH_EFFLUVAGE:					BOOL;					(*Seuil de vide avant effluvage*)
+	OP_RUN:							BLOCK_G7;				(*Grafcet de gestion de l'execution procede*)
+	I_MODE_REPRISE:					BOOL;					(*indicateur de mode reprise en cours*)
+	M_NEXT_STEP:					BOOL;					(*Demande externe de passage à l'étape suivante*)
+	DEF_SEUIL_POMPAGE_PRIM: 		PRCDEF;				(*Défaut d'obtention du seuil de pompage primaire*)
+	DEF_SEUIL_VIDE_EFFLUVAGE:		PRCDEF;				(*Défaut d'obtention du seuil de vide avant effluvage*)
+	
+	PRM_FLOW_GAZ1:				REAL;					(*Consigne de débit de gaz ligne 1*)
+	PRM_FLOW_GAZ2:				REAL;					(*Consigne de débit de gaz ligne 2*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	PRM_PR_EFFLUVAGE:			REAL;				(*Pression d'effluvage*)
+	PRM_TEMPS_EFF:				TIME;				(*Temps de l'étape d'effluvage*)
+	PRM_TPS_STABILISATION:		DINT;				(*Temps de stabilisation avant effluvage*)
+
+	IsFunction:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	RQ_POMPAGE_PRIM:				BOOL;					(*Demande de pompage primaire*)
+	RQ_POMPAGE_SEC:					BOOL;					(*Demande de pompage secondaire*)
+	RQ_ISOLEMENT:					BOOL;					(*Demande d'isolement de l'enceinte*)
+	RQ_MARCHE_GAZ:					ARRAY[0..2] OF BOOL;	(*Demande marche des lignes de gaz*)
+	RQ_ARRET_GAZ:					BOOL;					(*Demande arrêt des lignes de gaz*)
+	RQ_MARCHE_EFFLUVAGE:			BOOL;
+	RQ_ARRET_EFFLUVAGE:				BOOL;
+	RQ_ROTATION_PS:					BOOL;
+	RQ_STOP_ROTATION_PS:			BOOL;
+	STATE_OK:						BOOL;
+	STATUS:							UINT;					(*Etat du grafcet*)
+	AUTOR_NEXT_STEP:				BOOL;
+END_VAR
+
+VAR_IN_OUT
+	CONS_TPS_EFFLUVAGE:				TIME;
+	
+	CONS_FLOW_GAZ_1:			REAL;	(*Consigne de débit de la mise en gaz*)
+	CONS_FLOW_GAZ_2:			REAL;	(*Consigne de débit de la mise en gaz*)
+END_VAR
+VAR
+	FM_ETAPE1:		R_TRIG;
+	FM_ETAPE2:		R_TRIG;
+	FM_ETAPE3:		R_TRIG;
+	FM_ETAPE4:		R_TRIG;
+	FM_ETAPE5:		R_TRIG;
+	FM_ETAPE6:		R_TRIG;
+	FM_ETAPE7:		R_TRIG;
+	FM_ETAPE8:		R_TRIG;
+	FM_ETAPE9:		R_TRIG;
+	FM_ETAPE11:		R_TRIG;
+	RCP_NEXT_STEP:	BOOL;
+	TIMER_Stabilisation:			TON;			(*Temporisation de stabilisation*)
+	
+	VAR_Util_Gaz:					ARRAY[0..2] OF BOOL;		(*Indicateur des lignes de gaz utilisées*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_SEUIL_POMPAGE_PRIM.IdXML := '1';
+DEF_SEUIL_POMPAGE_PRIM.TagXML := 24;
+
+DEF_SEUIL_VIDE_EFFLUVAGE.IdXML := '1';
+DEF_SEUIL_VIDE_EFFLUVAGE.TagXML := 25;
+
+IdXML :='19';
+TagXML := 4;
+
+(*Reception des ordres*)
+RCP_NEXT_STEP:= M_NEXT_STEP;
+
+FM_ETAPE1(CLK:=OP_RUN.Etape.1);
+FM_ETAPE2(CLK:=OP_RUN.Etape.2);
+FM_ETAPE3(CLK:=OP_RUN.Etape.3);
+FM_ETAPE4(CLK:=OP_RUN.Etape.4);
+FM_ETAPE5(CLK:=OP_RUN.Etape.5);
+FM_ETAPE6(CLK:=OP_RUN.Etape.6);
+FM_ETAPE7(CLK:=OP_RUN.Etape.7);
+FM_ETAPE8(CLK:=OP_RUN.Etape.8);
+FM_ETAPE9(CLK:=OP_RUN.Etape.9);
+FM_ETAPE11(CLK:=OP_RUN.Etape.11);
+
+
+AUTOR_NEXT_STEP		:=	OP_RUN.Etape.1 OR OP_RUN.Etape.2 OR OP_RUN.Etape.3 OR OP_RUN.Etape.4 OR OP_RUN.Etape.5 OR OP_RUN.Etape.6 OR OP_RUN.Etape.7 OR OP_RUN.Etape.11;
+
+(*Variable indiquant les lignes de gaz utilisées*)
+VAR_Util_Gaz[1]:= (PRM_FLOW_GAZ1 > 0);
+VAR_Util_Gaz[2]:= (PRM_FLOW_GAZ2 > 0);
+
+
+RQ_POMPAGE_PRIM:= FM_ETAPE11.Q;
+RQ_POMPAGE_SEC:= FM_ETAPE9.Q;
+RQ_MARCHE_GAZ[1]:= (OP_RUN.Etape.3 OR OP_RUN.Etape.5) AND VAR_Util_Gaz[1];
+RQ_MARCHE_GAZ[2]:= (OP_RUN.Etape.3 OR OP_RUN.Etape.5) AND VAR_Util_Gaz[2];
+RQ_ISOLEMENT:=FM_ETAPE2.Q;
+RQ_ROTATION_PS:= FM_ETAPE6.Q AND NOT I_NO_ROTATION_PS;
+RQ_STOP_ROTATION_PS := (FM_ETAPE6.Q AND I_NO_ROTATION_PS) OR FM_ETAPE8.Q;
+RQ_MARCHE_EFFLUVAGE:=FM_ETAPE7.Q;
+RQ_ARRET_EFFLUVAGE:=FM_ETAPE8.Q;
+
+RQ_ARRET_GAZ:= FM_ETAPE4.Q OR FM_ETAPE8.Q;
+
+IF FM_ETAPE7.Q THEN
+	CONS_TPS_EFFLUVAGE := PRM_TEMPS_EFF;
+END_IF
+
+(*Gestion de la consigne pour la ligne de gaz n°1*)
+IF RQ_MARCHE_GAZ[1] THEN
+	CONS_FLOW_GAZ_1 := PRM_FLOW_GAZ1;
+END_IF
+
+(*Gestion de la consigne pour la ligne de gaz n°2*)
+IF RQ_MARCHE_GAZ[2] THEN
+	CONS_FLOW_GAZ_2 := PRM_FLOW_GAZ2;
+END_IF
+
+(*Tempo de stabilisation de la pression*)
+TIMER_Stabilisation(
+					PT:=DINT_TO_TIME(PRM_TPS_STABILISATION*1000),
+					IN:=OP_RUN.Etape.6
+					);
+
+(*Défaut obtention seuil pompage primaire*)
+DEF_Seuil_Pompage_prim(
+	CONDITION:= OP_RUN.Etape.3,
+	DELAY:= T#3m);
+
+(*Défaut obtention seuil de vide avant effluvage*)
+DEF_Seuil_Vide_Effluvage(
+	CONDITION:= OP_RUN.Etape.11,
+	DELAY:= T#3m);
+
+
+STATE_OK:=OP_RUN.OK;
+STATUS:=OP_RUN.STATUS ;
+
+RUN_STEP();
+
+(*reset des ordres*)
+IF RCP_NEXT_STEP AND M_NEXT_STEP THEN
+	M_NEXT_STEP:=FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <Action Name="RUN_STEP" Id="{6027a303-a282-4be0-ae2e-b698b5b9428e}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET ETAPE EFFLUVAGE*)
+(* initialisation du grafcet*)
+OP_RUN(
+	N_STEP_OP_OK:=10 ,
+	N_STEP_OP_NOK:= 0);
+
+(* initialisation du grafcet*)
+IF 		OP_RUN.Etape = 0 THEN
+				OP_RUN.Etape.0 := TRUE;
+(*interruption du procédé - repositionnement sur étape 8 sur demande fin d'étape*)
+ELSIF (OP_RUN.Etape.1 OR OP_RUN.Etape.2 OR OP_RUN.Etape.3 OR OP_RUN.Etape.4 OR OP_RUN.Etape.5 OR OP_RUN.Etape.6 OR OP_RUN.Etape.7 OR OP_RUN.Etape.11)
+		AND RCP_NEXT_STEP THEN
+				OP_RUN.Etape := 0;
+				OP_RUN.Etape.8:=TRUE;
+(*repositionnement sur étape 0*)
+ELSIF  NOT I_ON THEN
+				OP_Run.Etape:= 0;			(*RAZ grafcet*)
+				OP_Run.Etape.0:=TRUE;
+(*étape 0-1 *)
+ELSIF OP_RUN.etape.0 AND I_ON  THEN
+				OP_RUN.Etape.1 	:=TRUE;
+				OP_RUN.Etape.0 	:=FALSE;
+(*étape 1-2*)
+ELSIF OP_RUN.etape.1 AND NOT TH_PPRIM_AUTOR THEN		(*Pression < Pression autorisation pompage primaire*)
+				OP_RUN.Etape.2 	:=TRUE;
+				OP_RUN.Etape.1 	:=FALSE;
+(*étape 1-4*)
+ELSIF OP_RUN.etape.1 AND TH_PPRIM_AUTOR THEN
+				OP_RUN.Etape.4 	:=TRUE;
+				OP_RUN.Etape.1 	:=FALSE;
+(*étape 2-3*)
+ELSIF OP_RUN.etape.2 AND I_ISOLEMENT_OK  THEN
+				OP_RUN.Etape.3 	:=TRUE;
+				OP_RUN.Etape.2 	:=FALSE;
+(*étape 3-4*)
+ELSIF OP_RUN.etape.3 AND (I_MARCHE_GAZ1_OK OR NOT VAR_Util_Gaz[1]) AND (I_MARCHE_GAZ2_OK OR NOT VAR_Util_Gaz[2]) AND TH_PPRIM_AUTOR  THEN
+				OP_RUN.Etape.4 	:=TRUE;
+				OP_RUN.Etape.3 	:=FALSE;
+(*étape 4-11*)
+ELSIF OP_RUN.Etape.4 AND I_ARRET_GAZ1_OK AND I_ARRET_GAZ2_OK THEN
+				OP_RUN.Etape.11 :=TRUE;
+				OP_RUN.Etape.4	 := FALSE;
+(*étape 11-5*)
+ELSIF OP_RUN.etape.11 AND I_POMPAGE_PRIM_OK AND TH_EFFLUVAGE  THEN
+				OP_RUN.Etape.5 	:=TRUE;
+				OP_RUN.Etape.11:=FALSE;
+(*étape 5-6*)
+ELSIF OP_RUN.etape.5 AND (I_MARCHE_GAZ1_OK OR NOT VAR_Util_Gaz[1]) AND (I_MARCHE_GAZ2_OK OR NOT VAR_Util_Gaz[2]) THEN
+				OP_RUN.Etape.6 	:=TRUE;
+				OP_RUN.Etape.5 	:=FALSE;
+(*étape 6-7*)
+ELSIF OP_RUN.etape.6 AND TIMER_Stabilisation.Q
+					  AND ((I_ROTATION_OK AND NOT I_NO_ROTATION_PS) OR (I_STOP_ROT_PS_OK AND I_NO_ROTATION_PS))
+					  THEN
+				OP_RUN.Etape.7 	:=TRUE;
+				OP_RUN.Etape.6 	:=FALSE;
+(*étape 7-8*)
+ELSIF OP_RUN.etape.7 AND I_MARCHE_EFFLUVAGE_OK   THEN
+				OP_RUN.Etape.8 	:=TRUE;
+				OP_RUN.Etape.7 	:=FALSE;
+(*étape 8-9*)
+ELSIF OP_RUN.etape.8 AND I_ARRET_EFFLUVAGE_OK AND I_STOP_ROT_PS_OK AND I_ARRET_GAZ1_OK AND I_ARRET_GAZ2_OK THEN
+				OP_RUN.Etape.9 	:=TRUE;
+				OP_RUN.Etape.8 	:=FALSE;
+(*étape 9-10*)
+ELSIF OP_RUN.etape.9 AND I_POMPAGE_SEC_OK   THEN
+				OP_RUN.Etape.10 :=TRUE;
+				OP_RUN.Etape.9 	 :=FALSE;
+END_IF
+
+OP_RUN.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_STEP_EFFLUVAGE">
+      <LineId Id="75" Count="11" />
+      <LineId Id="335" Count="2" />
+      <LineId Id="90" Count="9" />
+      <LineId Id="230" Count="2" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="100" Count="4" />
+      <LineId Id="235" Count="0" />
+      <LineId Id="105" Count="3" />
+      <LineId Id="237" Count="2" />
+      <LineId Id="112" Count="3" />
+      <LineId Id="241" Count="8" />
+      <LineId Id="240" Count="0" />
+      <LineId Id="116" Count="26" />
+    </LineIds>
+    <LineIds Name="BLOCK_STEP_EFFLUVAGE.RUN_STEP">
+      <LineId Id="0" Count="1" />
+      <LineId Id="3" Count="68" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

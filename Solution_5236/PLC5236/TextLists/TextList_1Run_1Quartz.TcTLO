@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <TextList Name="TextList_1Run_1Quartz" Id="{599755ab-b487-48ed-ac1b-951c047c47ca}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"1 Run = 1 Quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>1 Run = 1 Quartz</v>
+                <v>1 Run = 1 Quartz</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"yes"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Activé</v>
+                <v>Activated</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"no"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Désactivé</v>
+                <v>Disabled</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"raz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Forcage changement quartz</v>
+                <v>Quartz change forcing</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"next"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Quartz prévu pour le prochain run</v>
+                <v>Scheduled quartz for next run</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"change"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Changement de tous les quartz
+
+nécessaire pour le prochain run</v>
+                <v>Change all quartz is needed
+
+for next run</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{44a915c3-1fa0-4294-9d02-fc79ed7947d7}</v>
+          <v n="GuidReInit">{c644a9f0-ff3c-45c4-a4e7-25ea31446eec}</v>
+          <v n="GuidExitX">{4452f5d6-bf52-402d-bd48-76fd49f6224a}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="F_ReadMotorAbsPosition" Id="{6e01ce74-8d15-4ff4-b5a1-d4d5b12e9263}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_ReadMotorAbsPosition : LREAL			(* Fonction qui permet de lire la position absolue du moteur à codeur absolu avec AX5000 *)
+VAR_INPUT
+	fScalingFactor						: LREAL;		(* facteur de mise à l'échelle, nb mm/inc voir System Manager *)
+	dPositionFeedback					: DINT;			(* valeur de retour de position de l'AX5000 *)
+END_VAR
+VAR
+	dNbTours							: DINT;			(* nombre de tours du codeur *)
+	dNbInc								: DINT;			(* nombre d'inc sur le tour *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[dNbTours := SHR(dPositionFeedback, 20);	(* le nombre de tours est sur les 12 bits de poids fort *)
+dNbInc := DINT_TO_DWORD(dPositionFeedback) AND 2#00000000000011111111111111111111;	(* le nombre d'inc est sur 20 bits *)
+F_ReadMotorAbsPosition := (dNbTours * 1048576 * fScalingFactor) + (dNbInc * fScalingFactor);]]></ST>
+    </Implementation>
+    <LineIds Name="F_ReadMotorAbsPosition">
+      <LineId Id="9" Count="2" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

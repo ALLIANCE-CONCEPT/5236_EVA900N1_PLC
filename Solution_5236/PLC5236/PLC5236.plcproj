@@ -1,0 +1,1419 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <FileVersion>1.0.0.0</FileVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{b1867b72-b8f6-4138-bab2-0ac482858320}</ProjectGuid>
+    <SubObjectsSortedByName>True</SubObjectsSortedByName>
+    <DownloadApplicationInfo>true</DownloadApplicationInfo>
+    <WriteProductVersion>true</WriteProductVersion>
+    <GenerateTpy>false</GenerateTpy>
+    <Name>PLC5236</Name>
+    <ProgramVersion>3.1.4026.21</ProgramVersion>
+    <Application>{f14cfbd7-338a-4124-92fa-bf07b0eb729b}</Application>
+    <TypeSystem>{6972d65f-8e8e-44e4-8d0b-47badfe3c22b}</TypeSystem>
+    <Implicit_Task_Info>{c1a07282-d486-4299-9fc0-7e218c6ae4bf}</Implicit_Task_Info>
+    <Implicit_KindOfTask>{f8138350-d2b2-4201-b2d0-e3639976bd76}</Implicit_KindOfTask>
+    <Implicit_Jitter_Distribution>{b34848e6-0872-4e97-bab1-19ee6c76a165}</Implicit_Jitter_Distribution>
+    <LibraryReferences>{d871ba89-a27f-4119-8a64-5922ede4bf26}</LibraryReferences>
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="Data types" />
+    <Folder Include="Data types\DATA_user" />
+    <Folder Include="Data types\STRUCT COM TCPIP" />
+    <Folder Include="Data types\STRUCTURE_STD" />
+    <Folder Include="Global Variables" />
+    <Folder Include="POUs" />
+    <Folder Include="POUs\Composant" />
+    <Folder Include="POUs\Composant\AXES" />
+    <Folder Include="POUs\Composant\EVAP" />
+    <Folder Include="POUs\Composant\GAZ" />
+    <Folder Include="POUs\Composant\GENERATEURS" />
+    <Folder Include="POUs\Composant\JAUGES" />
+    <Folder Include="POUs\Composant\MVTS" />
+    <Folder Include="POUs\Composant\POMPES" />
+    <Folder Include="POUs\Composant\POMPES\CRYO CTI" />
+    <Folder Include="POUs\Composant\SERVITUDES" />
+    <Folder Include="POUs\Composant\VANNES" />
+    <Folder Include="POUs\Composant\VERRINE" />
+    <Folder Include="POUs\Fonction" />
+    <Folder Include="POUs\FONCTION DE BASE" />
+    <Folder Include="POUs\FONCTION DE BASE\Format String" />
+    <Folder Include="POUs\Fonctions de base" />
+    <Folder Include="POUs\Fonctions de base\Format String" />
+    <Folder Include="POUs\Fonction\ETHER COM" />
+    <Folder Include="POUs\Fonction\FONCTION EFFLUVAGE" />
+    <Folder Include="POUs\Fonction\FONCTION EVAPORATION" />
+    <Folder Include="POUs\Fonction\FONCTION MODEMARCHE" />
+    <Folder Include="POUs\Fonction\FONCTION PS" />
+    <Folder Include="POUs\Fonction\FONCTIONS COMPTEUR" />
+    <Folder Include="POUs\Fonction\FONCTIONS GAZ" />
+    <Folder Include="POUs\Fonction\FONCTIONS MVTS" />
+    <Folder Include="POUs\Fonction\FONCTIONS POMPAGE" />
+    <Folder Include="POUs\Fonction\FONCTIONS PUISSANCE" />
+    <Folder Include="POUs\Fonction\FONCTIONS SERVITUDES" />
+    <Folder Include="POUs\Fonction\FONCTIONS UTILITAIRES" />
+    <Folder Include="POUs\Programme" />
+    <Folder Include="TextLists" />
+    <Folder Include="Visualizations" />
+    <Folder Include="Visualizations\Config" />
+    <Folder Include="Visualizations\Config\Bandeaux" />
+    <Folder Include="Visualizations\Config\ECOMODE" />
+    <Folder Include="Visualizations\Config\EFFLUVAGE" />
+    <Folder Include="Visualizations\Config\EVAP" />
+    <Folder Include="Visualizations\Config\GAZ" />
+    <Folder Include="Visualizations\Config\MOUVEMENTS" />
+    <Folder Include="Visualizations\Config\CRYO" />
+    <Folder Include="Visualizations\Config\POMPAGE" />
+    <Folder Include="Visualizations\Config\SERVITUDES" />
+    <Folder Include="Visualizations\Semi Auto" />
+    <Folder Include="Visualizations\Semi Auto\Elements" />
+    <Folder Include="Visualizations\Symbole" />
+    <Folder Include="Visualizations\Symbole\CACHE" />
+    <Folder Include="Visualizations\Symbole\Chauffage" />
+    <Folder Include="Visualizations\Symbole\DIVERS" />
+    <Folder Include="Visualizations\Symbole\Effluvage" />
+    <Folder Include="Visualizations\Symbole\EVAP" />
+    <Folder Include="Visualizations\Symbole\GAZ" />
+    <Folder Include="Visualizations\Symbole\IAD" />
+    <Folder Include="Visualizations\Symbole\JAUGES" />
+    <Folder Include="Visualizations\Symbole\MESURE" />
+    <Folder Include="Visualizations\Symbole\MODE_MARCHE" />
+    <Folder Include="Visualizations\Symbole\MOUVEMENTS PS" />
+    <Folder Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1" />
+    <Folder Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part" />
+    <Folder Include="Visualizations\Symbole\POMPAGE" />
+    <Folder Include="Visualizations\Symbole\POMPES" />
+    <Folder Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4" />
+    <Folder Include="Visualizations\Symbole\PROCEDE" />
+    <Folder Include="Visualizations\Symbole\PS" />
+    <Folder Include="Visualizations\Symbole\SERVITUDES" />
+    <Folder Include="Visualizations\Symbole\STACKER" />
+    <Folder Include="Visualizations\Symbole\VANNES" />
+    <Folder Include="Visualizations\Synoptique" />
+    <Folder Include="Visualizations\Users" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Data types\DATA_user\USER.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\DATA_user\USER_ACTU.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\DATA_user\USER_GROUP.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCT COM TCPIP\E_ClientSteps.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCT COM TCPIP\E_DataExchaSteps.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCT COM TCPIP\STRUCT_ClientConnect.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCT COM TCPIP\STRUCT_LOG_TCPIP_CLIENT.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCTURE_STD\STRUCT_JEV.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Data types\STRUCT_EVENT.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Global Variables\CONSTANT_COM_TCPIP_XTC.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Global Variables\Global_Variables.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Global Variables\Variable_Configuration.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="PlcTask.TcTTO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\AXES\BLOCK_VARIATEUR_MOTEUR.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\BLOCK_ACTUATOR.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\BLOCK_ACTUATOR2.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\BLOCK_VERRINE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_CANON_ST10.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_IND_CREUSET_GENIUS.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_IND_CR_379_TELEMARK_V4.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_IND_CR_379_TELEMARK_V3.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_IND_CR_396_TELEMARK.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_SOURCE_GENIUS.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_SOURCE_JOULE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_SWEEP_TELEMARK_PROG.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_TELEMARK_DIGITAL_SWEEP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_TELEMARK_CHEETAH_SWEEP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_XTAL.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\EVAP\BLOCK_XTAL6.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GAZ\BLOCK_CONTROL_GAZ.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GAZ\BLOCK_MFC_ANA2.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GAZ\BLOCK_MFC_BKH.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GAZ\BLOCK_MFC_BROOKS_NoCoE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GAZ\BLOCK_MFC_MKS_NoCoE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\GENERATEURS\ALIM_EFFLUVAGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\JAUGES\BLOCK_BCG450_ANA.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\JAUGES\BLOCK_BCG450_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\JAUGES\BLOCK_CDG_ANA.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\JAUGES\BLOCK_CDG_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\JAUGES\BLOCK_ZX1_ANA.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MC_Reset_AX5000.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MVTS\BLOCK_AXE_STD1.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MVTS\BLOCK_MOTEUR_ATV_ANA.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MVTS\BLOCK_MOTEUR_ATV_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MVTS\FB_WritePosBias.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\MVTS\F_ReadMotorAbsPosition.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\BLOCK_PCR_CTI_OB.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\BLOCK_PPM.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\BLOCK_PPM_DEF.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\BLOCK_PTM_OBCV4.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\BLOCK_RS232_ONBOARD.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\CRYO CTI\BLOCK_RS232_ONBOARD_V4.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\POMPES\CRYO CTI\Lecture_valeur.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\SERVITUDES\BLOCK_CHILLER.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\SERVITUDES\BLOCK_CTA_HOT_COLD.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\SERVITUDES\BLOCK_SV4200.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\VANNES\BLOCK_VVAT_3P.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\VANNES\BLOCK_VVAT_650_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\VANNES\BLOCK_VVAT_650_NO.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\VANNES\BLOCK_VVAT_653_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Composant\VERRINE\BLOCK_BUZZER.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\ANALOG_INPUT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\ANALOG_OUTPUT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_CLIGNOTANT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_CLIGNOTANT_V0_0.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_G7.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_OPERATION.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_RAMP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\BLOCK_USER.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\Format String\FORMAT_FLOAT_STRING.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\IEEE754_INPUT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\IEEE754_OUTPUT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\LOG_EVENT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\PRCDEF.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\SURVPRC.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\WRITE_CoE_BOOL.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FONCTION DE BASE\WRITE_CoE_WORD.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\ETHER COM\BLOCK_XTC3.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\ETHER COM\BLOCK_XTC_CLIENT_EXCHANGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION EFFLUVAGE\BLOCK_EFFLUVAGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION EVAPORATION\BLOCK_EVAP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION EVAPORATION\BLOCK_STEP_EMPILEMENT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_1RUN_1QUARTZ.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_EXEC_PROC.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_INIT_MACHINE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_MODE_MARCHE_V2_0.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_STEP_BOUCLE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_STEP_EFFLUVAGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_STEP_TIMER.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_SYNCHRO_HORAIRE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION MODEMARCHE\BLOCK_USER_ACK.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTION PS\BLOCK_ROTATION_PS.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS COMPTEUR\BLOCK_CPT_APP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS COMPTEUR\BLOCK_CPT_INTEG.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS COMPTEUR\BLOCK_CPT_TEMPS.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS GAZ\BLOCK_LIGNE_GAZ.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS GAZ\BLOCK_LIGNE_GAZ_2_VANNES.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS GAZ\BLOCK_LIGNE_GAZ_NO_DG.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS GAZ\BLOCK_REGUL_PR_GAZ.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS MVTS\BLOCK_ROTATION_CONTINUE_ATV.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS POMPAGE\BLOCK_POMP_1E_PCR_PPM_ASS_ETHERCAT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS POMPAGE\BLOCK_POMP_1E_PCR_PPM_ASS_ETHERCAT_SINGER.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS PUISSANCE\BLOCK_CPT_USURE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS PUISSANCE\BLOCK_CPT_USURE_OLD.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS SERVITUDES\BLOCK_LIGNE_REF.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS SERVITUDES\BLOCK_LIGNE_REF_FLOWTEMP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS SERVITUDES\BLOCK_WREFCH1.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Fonction\FONCTIONS UTILITAIRES\CHECKSUM.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_EFFLUVAGE.TcPOU">
+      <SubType>Code</SubType>
+      <ExcludeFromBuild>false</ExcludeFromBuild>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_EVAP.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_GAZ.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_INFO_CLIENT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_MOUVEMENT_PS.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_POMPAGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_SERVITUDES.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\BLOCK_PRG_VERRINE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\MAIN.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\PRG_DEF_MANAGEMENT.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\Programme\PRG_SEC.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\GlobalTextList.TcGTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_1Run_1Quartz.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Actuator_Type.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Basiques.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Canne_Transfert.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Chauffage.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_Chauffage.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_EFFLUVAGE.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_Evap.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_Gaz.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_IAD.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_Mouvements.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Config_Pompage.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_CryoPump.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Cryo_Relays_Parameters.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_EcoMode.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Effluvage.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Evap.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Gaz.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_IAD.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_IC6.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Infos.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Moteurs.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Navigation.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Orders.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Pompage.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Position_Canne.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Process.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_SA_Operations.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Servitudes.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_STATE_Mode_Marche.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Test_RP.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Type_Etape.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Type_Moteur.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Users_Menu.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Util_Defaut.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Util_Group.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_Util_Userlist.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_VVAT_3P.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TextLists\TextList_VVAT_650_ETHERCAT.TcTLO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Visualization Manager.TcVMO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Visualizations\Config\Bandeaux\VISU_BANDEAU_CFG.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\CRYO\VISU_CONFIG_REGEN.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\ECOMODE\VISU_CONFIG_ECOMODE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\EFFLUVAGE\VISU_CONFIG_EFFLUV.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+      <ExcludeFromBuild>true</ExcludeFromBuild>
+    </Compile>
+    <Compile Include="Visualizations\Config\EVAP\VISU_CONFIG_EVAP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\GAZ\VISU_CONFIG_GAZ.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\MOUVEMENTS\VISU_CONFIG_MOUVEMENTS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Config\POMPAGE\VISU_CONFIG_POMPAGE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\MesImages.TcIPO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_CACHE_ACTUATOR.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_CACHE_ACTUATOR2.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_EFFLUVAGE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_EVAP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_HEATING.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_IAD.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_LIGNE_GAZ_ANA_RAMPE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_LIGNE_GAZ_BROOKS_RAMPE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_LIGNE_GAZ_MKS_RAMPE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_1E_PCR_PPM.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_1E_PCR_PPM_ASS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_1E_PCR_PPM_ASS_M11.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_2E_PCR_PPM_ASS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_ENCEINTE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_POMP_SAS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_PS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+      <ExcludeFromBuild>true</ExcludeFromBuild>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_REGUL_GAZ.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_ROT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_TEST_RP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\Elements\SA_VERIN.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Semi Auto\VISU_SA.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\CACHE\SYM_CACHE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\CACHE\SYM_CACHE_ACTUATOR2.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\Chauffage\VISU_CHAUFF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\Chauffage\VISU_CONFIG_CHAUFF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\Chauffage\VISU_LAMPE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\DIVERS\CHRONO.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\Effluvage\VISU_CONFIG_EFF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\Effluvage\VISU_EFFLUVAGE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_ALIM_HT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_ALIM_HT_S10.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_BAL_MANU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CANON.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CANON_GENIUS_ETH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CANON_ST10.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CONF_BAL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CONF_MAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CREUSET_old.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CREUSET.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CREUSET_V3.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_CR_SW_GENIUS_ETH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_HT_CANON_ST10.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_HT_GENIUS_ETH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SOURCE_EFFET_JOULE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SOURCE_EVAP_COTE_GENIUS_ETH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SOURCE_EVAP_COTE_ST10.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SOURCE_EVAP_COTE_ST10_avec_emission.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SWEEP_DIGITAL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_SWEEP_CHEETAH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_XTAL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_XTAL6_ZOOM.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_XTAL6_PROD.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\EVAP\VISU_XTAL_6.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_CONFIG_LIGNE_GAZ_SEUIL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_CONFIG_LIGNE_GAZ_SEUIL_MFC_MKS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_CONFIG_LIGNE_GAZ_SURV.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_CONFIG_LIGNE_GAZ_SURV_MFC_MKS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_CONFIG_REGUL_GAZ.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_LIGNE_GAZ.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_LIGNE_GAZ_ANA.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_LIGNE_GAZ_VGAUCHE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_MFC_ANA.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_MFC_BROOKS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\GAZ\VISU_MFC_MKS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\IAD\VISU_MARK3_PLUS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\IAD\VISU_MARK3_PLUS_COTE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\JAUGES\VISU_JAUGE_BCG450_V_HAUT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\JAUGES\VISU_JAUGE_BCG450_V_HAUT_ETHERCAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\JAUGES\VISU_JAUGE_CDG045_ETHERCAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\JAUGES\VISU_JAUGE_PCG550_ETHERCAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MESURE\VISU_IC6.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MESURE\VISU_XTC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_BANDEAU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_BLANCK_MANUEL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_ECOMODE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_ECOMODE_EVAP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_EV_EXTRAIT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_FCTS_SA.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MODE_MARCHE\VISU_MODE_MARCHE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_MANU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_MANU_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_OP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_OP_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_TRF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_FCT_TRF_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_LIN_REL_FCT_ETAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_LIN_REL_FCT_ETAT_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_LIN_ROT_FCT_CONS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_LIN_ROT_FCT_CONS_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_ROT_ABS_FCT_ETAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\FCT_Part\VISU_AXE_STD1_ROT_ABS_FCT_ETAT_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\VISU_AXE_STD1_LIN_REL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\VISU_AXE_STD1_MANU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\VISU_AXE_STD1_MANU_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\VISU_AXE_STD1_ROT_ABS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\AXE STD1\VISU_AXE_STD1_ROT_ABS_OSC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\VISU_CANNE_TRANSFERT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\VISU_CLAPET_V.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\VISU_CONFIG_POSITION_REF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\VISU_ROT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\MOUVEMENTS PS\VISU_VERIN_VH.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPAGE\VISU_CONFIG_POMPAGE_CHAMBRE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPAGE\VISU_CONFIG_POMPAGE_SAS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPAGE\VISU_CONFIG_VANNE_ASS_VVAT650.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPAGE\VISU_CONFIG_VANNE_ASS_VVAT653_ETHERCAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPAGE\VISU_CONFIG_INTERJOINT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_ETAPE_REGEN.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_INFO.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_INFO_SUPP_POMPE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_MAINT_CRYO_AC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_MESSAGE_ALERTE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_PARAMETRAGE_RELAY.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_POMPE_CRYO_CTI.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_RECUPERATION_ETATS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_REGENERATION.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\CRYO_CTI_V4\VISU_TEMP_POMP_CRYO_SOLO.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\VISU_POMPE_PRIMAIRE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\VISU_POMPE_PRIMAIRE_DEF.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\VISU_POMPE_ROOTS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\VISU_POMPE_TURBO.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\POMPES\VISU_POMPE_TURBO_VPURGE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\PROCEDE\VISU_INFO_PROCESS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\PROCEDE\VISU_MODE_QUARTZ.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\PS\VISU_PS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_CONF_LIGNE_EAU_FLOWTEMP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_LIGNE_EAU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_LIGNE_EAU_NO_DEXT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_LIGNE_EAU_FLOWTEMP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_LIGNE_EAU_No_VE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\SERVITUDES\VISU_TEMPRO_PLUS_90.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\STACKER\VISU_SUBSTRAT_NO_NUM.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_2P_H.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_2P_H_ACT2.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_2P_V.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_2P_V_ACT2.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_2P_V_NoPilot.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_3P_H.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_ASS_H.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_ASS_H_MANU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_ASS_VAT653_ETHERCAT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Symbole\VANNES\VISU_VANNE_ASS_VAT653_ETHERCAT_MANU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_EXEC_PROC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_INFOS.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_MANUEL.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_POMPAGE.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_PROC.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Synoptique\SYN_SERVITUDES.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_CONFIRM.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_DEFAUT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_DELOG.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_GROUP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_LOG.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_MENU.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_MOD_GROUP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_MOD_USER.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_NEW_GROUP.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_NEW_USER.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_OPT.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="Visualizations\Users\UTIL_USER.TcVIS">
+      <SubType>Code</SubType>
+      <DependentUpon>Visualization Manager.TcVMO</DependentUpon>
+    </Compile>
+    <Compile Include="VISU_TASK.TcTTO">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <PlaceholderReference Include="System_VisuElemMeter">
+      <DefaultResolution>VisuElemMeter, 3.5.13.0 (System)</DefaultResolution>
+      <Namespace>VisuElemMeter</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="System_VisuElems">
+      <DefaultResolution>VisuElems, 3.5.13.40 (System)</DefaultResolution>
+      <Namespace>VisuElems</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="System_VisuElemsSpecialControls">
+      <DefaultResolution>VisuElemsSpecialControls, 3.5.13.0 (System)</DefaultResolution>
+      <Namespace>VisuElemsSpecialControls</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="System_VisuElemsWinControls">
+      <DefaultResolution>VisuElemsWinControls, 3.5.13.20 (System)</DefaultResolution>
+      <Namespace>VisuElemsWinControls</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="System_VisuElemTextEditor">
+      <DefaultResolution>VisuElemTextEditor, 3.5.13.0 (System)</DefaultResolution>
+      <Namespace>VisuElemTextEditor</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="system_visuinputs">
+      <DefaultResolution>visuinputs, 3.5.13.0 (system)</DefaultResolution>
+      <Namespace>visuinputs</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="System_VisuNativeControl">
+      <DefaultResolution>VisuNativeControl, 3.5.13.0 (System)</DefaultResolution>
+      <Namespace>VisuNativeControl</Namespace>
+      <SystemLibrary>true</SystemLibrary>
+      <ResolverGuid>2717eb6a-dd07-4c66-8d8d-cacebd7b18ae</ResolverGuid>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_EtherCAT">
+      <DefaultResolution>Tc2_EtherCAT, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_EtherCAT</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_SerialCom">
+      <DefaultResolution>Tc2_SerialCom, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_SerialCom</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_Standard">
+      <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_Standard</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_System">
+      <DefaultResolution>Tc2_System, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_System</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_TcpIp">
+      <DefaultResolution>Tc2_TcpIp, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_TcpIp</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_Utilities">
+      <DefaultResolution>Tc2_Utilities, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_Utilities</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_Module">
+      <DefaultResolution>Tc3_Module, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_Module</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="VisuDialogs">
+      <DefaultResolution>VisuDialogs, * (System)</DefaultResolution>
+      <Namespace>VisuDialogs</Namespace>
+    </PlaceholderReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="PLC5236.tmc">
+      <SubType>Content</SubType>
+    </None>
+  </ItemGroup>
+  <ProjectExtensions>
+    <PlcProjectOptions>
+      <XmlArchive>
+        <Data>
+          <o xml:space="preserve" t="OptionKey">
+      <v n="Name">"&lt;ProjectRoot&gt;"</v>
+      <d n="SubKeys" t="Hashtable" ckt="String" cvt="OptionKey">
+        <v>{192FAD59-8248-4824-A8DE-9177C94C195A}</v>
+        <o>
+          <v n="Name">"{192FAD59-8248-4824-A8DE-9177C94C195A}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" />
+        </o>
+        <v>{246001F4-279D-43AC-B241-948EB31120E1}</v>
+        <o>
+          <v n="Name">"{246001F4-279D-43AC-B241-948EB31120E1}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" ckt="String" cvt="Boolean">
+            <v>UnicodeStrings</v>
+            <v>False</v>
+          </d>
+        </o>
+        <v>{29BD8D0C-3586-4548-BB48-497B9A01693F}</v>
+        <o>
+          <v n="Name">"{29BD8D0C-3586-4548-BB48-497B9A01693F}"</v>
+          <d n="SubKeys" t="Hashtable" ckt="String" cvt="OptionKey">
+            <v>NamingConventions</v>
+            <o>
+              <v n="Name">"NamingConventions"</v>
+              <d n="SubKeys" t="Hashtable" />
+              <d n="Values" t="Hashtable" />
+            </o>
+            <v>Rules</v>
+            <o>
+              <v n="Name">"Rules"</v>
+              <d n="SubKeys" t="Hashtable" />
+              <d n="Values" t="Hashtable" />
+            </o>
+          </d>
+          <d n="Values" t="Hashtable" />
+        </o>
+        <v>{40450F57-0AA3-4216-96F3-5444ECB29763}</v>
+        <o>
+          <v n="Name">"{40450F57-0AA3-4216-96F3-5444ECB29763}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" ckt="String" cvt="String">
+            <v>ActiveVisuProfile</v>
+            <v>IR0whWr8bwfwBwAAiD2qpQAAAABVAgAA37x72QAAAAABAAAAAAAAAAEaUwB5AHMAdABlAG0ALgBTAHQAcgBpAG4AZwACTHsAZgA5ADUAYgBiADQAMgA2AC0ANQA1ADIANAAtADQAYgA0ADUALQA5ADQAMAAwAC0AZgBiADAAZgAyAGUANwA3AGUANQAxAGIAfQADCE4AYQBtAGUABDBUAHcAaQBuAEMAQQBUACAAMwAuADEAIABCAHUAaQBsAGQAIAA0ADAAMgA0AC4ANwAFFlAAcgBvAGYAaQBsAGUARABhAHQAYQAGTHsAMQA2AGUANQA1AGIANgAwAC0ANwAwADQAMwAtADQAYQA2ADMALQBiADYANQBiAC0ANgAxADQANwAxADMAOAA3ADgAZAA0ADIAfQAHEkwAaQBiAHIAYQByAGkAZQBzAAhMewAzAGIAZgBkADUANAA1ADkALQBiADAANwBmAC0ANABkADYAZQAtAGEAZQAxAGEALQBhADgAMwAzADUANgBhADUANQAxADQAMgB9AAlMewA5AGMAOQA1ADgAOQA2ADgALQAyAGMAOAA1AC0ANAAxAGIAYgAtADgAOAA3ADEALQA4ADkANQBmAGYAMQBmAGUAZABlADEAYQB9AAoOVgBlAHIAcwBpAG8AbgALBmkAbgB0AAwKVQBzAGEAZwBlAA0KVABpAHQAbABlAA4aVgBpAHMAdQBFAGwAZQBtAE0AZQB0AGUAcgAPDkMAbwBtAHAAYQBuAHkAEAxTAHkAcwB0AGUAbQARElYAaQBzAHUARQBsAGUAbQBzABIwVgBpAHMAdQBFAGwAZQBtAHMAUwBwAGUAYwBpAGEAbABDAG8AbgB0AHIAbwBsAHMAEyhWAGkAcwB1AEUAbABlAG0AcwBXAGkAbgBDAG8AbgB0AHIAbwBsAHMAFCRWAGkAcwB1AEUAbABlAG0AVABlAHgAdABFAGQAaQB0AG8AcgAVIlYAaQBzAHUATgBhAHQAaQB2AGUAQwBvAG4AdAByAG8AbAAWFHYAaQBzAHUAaQBuAHAAdQB0AHMAFwxzAHkAcwB0AGUAbQAYGFYAaQBzAHUARQBsAGUAbQBCAGEAcwBlABkmRABlAHYAUABsAGEAYwBlAGgAbwBsAGQAZQByAHMAVQBzAGUAZAAaCGIAbwBvAGwAGyJQAGwAdQBnAGkAbgBDAG8AbgBzAHQAcgBhAGkAbgB0AHMAHEx7ADQAMwBkADUAMgBiAGMAZQAtADkANAAyAGMALQA0ADQAZAA3AC0AOQBlADkANAAtADEAYgBmAGQAZgAzADEAMABlADYAMwBjAH0AHRxBAHQATABlAGEAcwB0AFYAZQByAHMAaQBvAG4AHhRQAGwAdQBnAGkAbgBHAHUAaQBkAB8WUwB5AHMAdABlAG0ALgBHAHUAaQBkACBIYQBmAGMAZAA1ADQANAA2AC0ANAA5ADEANAAtADQAZgBlADcALQBiAGIANwA4AC0AOQBiAGYAZgBlAGIANwAwAGYAZAAxADcAIRRVAHAAZABhAHQAZQBJAG4AZgBvACJMewBiADAAMwAzADYANgBhADgALQBiADUAYwAwAC0ANABiADkAYQAtAGEAMAAwAGUALQBlAGIAOAA2ADAAMQAxADEAMAA0AGMAMwB9ACMOVQBwAGQAYQB0AGUAcwAkTHsAMQA4ADYAOABmAGYAYwA5AC0AZQA0AGYAYwAtADQANQAzADIALQBhAGMAMAA2AC0AMQBlADMAOQBiAGIANQA1ADcAYgA2ADkAfQAlTHsAYQA1AGIAZAA0ADgAYwAzAC0AMABkADEANwAtADQAMQBiADUALQBiADEANgA0AC0ANQBmAGMANgBhAGQAMgBiADkANgBiADcAfQAmFk8AYgBqAGUAYwB0AHMAVAB5AHAAZQAnVFUAcABkAGEAdABlAEwAYQBuAGcAdQBhAGcAZQBNAG8AZABlAGwARgBvAHIAQwBvAG4AdgBlAHIAdABpAGIAbABlAEwAaQBiAHIAYQByAGkAZQBzACgQTABpAGIAVABpAHQAbABlACkUTABpAGIAQwBvAG0AcABhAG4AeQAqHlUAcABkAGEAdABlAFAAcgBvAHYAaQBkAGUAcgBzACs4UwB5AHMAdABlAG0ALgBDAG8AbABsAGUAYwB0AGkAbwBuAHMALgBIAGEAcwBoAHQAYQBiAGwAZQAsEnYAaQBzAHUAZQBsAGUAbQBzAC1INgBjAGIAMQBjAGQAZQAxAC0AZAA1AGQAYwAtADQAYQAzAGIALQA5ADAANQA0AC0AMgAxAGYAYQA3ADUANgBhADMAZgBhADQALihJAG4AdABlAHIAZgBhAGMAZQBWAGUAcgBzAGkAbwBuAEkAbgBmAG8AL0x7AGMANgAxADEAZQA0ADAAMAAtADcAZgBiADkALQA0AGMAMwA1AC0AYgA5AGEAYwAtADQAZQAzADEANABiADUAOQA5ADYANAAzAH0AMBhNAGEAagBvAHIAVgBlAHIAcwBpAG8AbgAxGE0AaQBuAG8AcgBWAGUAcgBzAGkAbwBuADIMTABlAGcAYQBjAHkAMzBMAGEAbgBnAHUAYQBnAGUATQBvAGQAZQBsAFYAZQByAHMAaQBvAG4ASQBuAGYAbwA0MEwAbwBhAGQATABpAGIAcgBhAHIAaQBlAHMASQBuAHQAbwBQAHIAbwBqAGUAYwB0ADUaQwBvAG0AcABhAHQAaQBiAGkAbABpAHQAeQDQAAIaA9ADAS0E0AUGGgfQBwgaAUUHCQjQAAkaBEUKCwQDAAAABQAAAA0AAAAAAAAA0AwLrQIAAADQDQEtDtAPAS0Q0AAJGgRFCgsEAwAAAAUAAAANAAAAKAAAANAMC60BAAAA0A0BLRHQDwEtENAACRoERQoLBAMAAAAFAAAADQAAAAAAAADQDAutAgAAANANAS0S0A8BLRDQAAkaBEUKCwQDAAAABQAAAA0AAAAUAAAA0AwLrQIAAADQDQEtE9APAS0Q0AAJGgRFCgsEAwAAAAUAAAANAAAAAAAAANAMC60CAAAA0A0BLRTQDwEtENAACRoERQoLBAMAAAAFAAAADQAAAAAAAADQDAutAgAAANANAS0V0A8BLRDQAAkaBEUKCwQDAAAABQAAAA0AAAAAAAAA0AwLrQIAAADQDQEtFtAPAS0X0AAJGgRFCgsEAwAAAAUAAAANAAAAKAAAANAMC60EAAAA0A0BLRjQDwEtENAZGq0BRRscAdAAHBoCRR0LBAMAAAAFAAAADQAAAAAAAADQHh8tINAhIhoCRSMkAtAAJRoFRQoLBAMAAAADAAAAAAAAAAoAAADQJgutAAAAANADAS0n0CgBLRHQKQEtENAAJRoFRQoLBAMAAAADAAAAAAAAAAoAAADQJgutAQAAANADAS0n0CgBLRHQKQEtEJoqKwFFAAEC0AABLSzQAAEtF9AAHy0t0C4vGgPQMAutAQAAANAxC60XAAAA0DIarQDQMy8aA9AwC60CAAAA0DELrQMAAADQMhqtANA0Gq0A0DUarQA=</v>
+          </d>
+        </o>
+        <v>{8A0FB252-96EB-4DCC-A5B4-B4804D05E2D6}</v>
+        <o>
+          <v n="Name">"{8A0FB252-96EB-4DCC-A5B4-B4804D05E2D6}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" ckt="String" cvt="Boolean">
+            <v>WriteLineIDs</v>
+            <v>True</v>
+          </d>
+        </o>
+        <v>{8F99A816-E488-41E4-9FA3-846536012284}</v>
+        <o>
+          <v n="Name">"{8F99A816-E488-41E4-9FA3-846536012284}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" />
+        </o>
+        <v>{eeeeeeee-3909-4298-8022-501ac3238667}</v>
+        <o>
+          <v n="Name">"{eeeeeeee-3909-4298-8022-501ac3238667}"</v>
+          <d n="SubKeys" t="Hashtable" />
+          <d n="Values" t="Hashtable" />
+        </o>
+      </d>
+      <d n="Values" t="Hashtable" />
+    </o>
+        </Data>
+        <TypeList>
+          <Type n="Boolean">System.Boolean</Type>
+          <Type n="Hashtable">System.Collections.Hashtable</Type>
+          <Type n="OptionKey">{54dd0eac-a6d8-46f2-8c27-2f43c7e49861}</Type>
+          <Type n="String">System.String</Type>
+        </TypeList>
+      </XmlArchive>
+    </PlcProjectOptions>
+  </ProjectExtensions>
+</Project>

@@ -1,0 +1,420 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_PRG_SERVITUDES" Id="{5e4912e1-7d93-45ad-b9c9-b01b91b3afd5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_SERVITUDES
+
+(*****************************************************************)
+(* 		Programme servitudes
+		PRG_SERVITUDES_8LIGNES_SIMPLES
+		Gestion jusqu'à 8 lignes d'eau simple			      
+ 		Gestion de la commutation eau chaude / eau froide 
+		Version 0 - HG - 03/2011                                     
+		FAMILLE : CT200								     *)
+(*****************************************************************)
+VAR_INPUT
+	//IN_GF1OK		AT%I*:		BOOL;		(*Entrée défaut circulateur eau*)
+	//IN_GF1NivCh		AT%I*:		BOOL;		(*Entrée niveau haut eau chaude*)
+	//IN_C1T			AT%I*:		BOOL;		(*Entree de détection de fuite enceinte*)
+
+	IN_DE1T			AT%I*:		BOOL;
+	IN_DE2T			AT%I*:		BOOL;
+	IN_DE3T			AT%I*:		BOOL;
+	IN_DE5T			AT%I*:		BOOL;
+	IN_DE4T			AT%I*:		BOOL;
+	IN_DE6T			AT%I*:		BOOL;
+	IN_DE7T			AT%I*:		BOOL;
+	IN_DE8T			AT%I*:		BOOL;
+
+	
+	LIGNE_REF:				ARRAY[1..8] OF BLOCK_LIGNE_REF;	
+
+	EAU:						BLOCK_WREFCH1;
+
+	DEF_Groupe:					PRCDEF;	(*Défaut du groupe chaud/froid*)
+	DEF_Fuite:					PRCDEF;	(*Défaut de détection d'une fuite dans l'enceinte*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_CO_ON:			ARRAY[0..8] OF USINT;	(*Indique quelle condition déclenche la mise en marche de la circulation d'eau froide
+															0 = condition de mise en marche = condition de refroidissement impératif
+															1 = condition de vide dans l'enceinte
+															2 = reserve 
+															3 = mise en marche de la machine
+															*)
+	PRM_Pr_REF_ENC:			REAL;					(* I_STANDARD --- Pression de mise en marche du refroidissement pour les élément lié à l'enceinte *)
+	PRM_Forcage_Chaud:		BOOL;					(*Forcage circulation eau chaude*)
+
+	PRM_tps_att_chaud:		TIME;					(*temps d'attente avant obtention état chaud*)
+
+	CONF_eau_chaude:		BOOL;					(*indique la présence d'un commutateur eau chaude / eau froide*)
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : assembly*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_VE1			AT%Q*:		BOOL;
+	OUT_VE2			AT%Q*:		BOOL;
+	OUT_VE3			AT%Q*:		BOOL;
+	OUT_VE4			AT%Q*:		BOOL;
+	OUT_VE5			AT%Q*:		BOOL;
+	OUT_VE6			AT%Q*:		BOOL;
+	OUT_VE7			AT%Q*:		BOOL;
+	OUT_VE8			AT%Q*:		BOOL;
+
+	(*vannes circulation eau chaude eau froide*)
+	OUT_VEC11			AT%Q*:		BOOL;
+	OUT_VEF11			AT%Q*:		BOOL;
+	OUT_VEC12			AT%Q*:		BOOL;
+	OUT_VEF12			AT%Q*:		BOOL;
+
+	OUT_GF1			AT%Q*:		BOOL;	(*Mise en marche compresseur eau chaude*)
+	OUT_MGF1		AT%Q*:		BOOL;	(*Mise en puissance compresseur pour eco-mode*)
+
+	WATER:		ARRAY[0..8] OF BOOL;			(* I_STANDARD --- information de débit d'eau pour chaque ligne*)
+	STATE_AR:	ARRAY[0..8] OF BOOL;			(* I_STANDARD ---information de débit d'eau stoppé pour chaque ligne*)
+END_VAR
+
+VAR
+	I:						USINT;
+	TIMER_chaud:			TON;		(*timer obtention état chaud*)
+	FM_state_chaud:			R_TRIG;		(*front montant etat chaud*)
+	var_mem_prep_ventil:	BOOL;		(*mémorisation de la demande de préparation de ventilation*)
+	var_state_froid:		BOOL;		(*état eau froide en cours, utile si pas eau chaude (ds ce cas state froid n'est pas maj par EAU)*)
+	STATE_Manu:				BOOL;		(*Recopie de l'information ENCEINTE.STATE_Manu*)
+	FM_Etape_Pompage_OK: 	R_TRIG;
+	FM_RQ_Start_Prod:		R_TRIG;
+	FM_RQ_Stop_Prod:		R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Recopie*)
+STATE_Manu			:=	MACHINE.STATE_Manu;
+
+(*Reset des ordres de forçage eau chaude*)
+FM_Etape_Pompage_OK(clk:= PRG_POMPAGE.O_STEP_PUMPING_OK );
+FM_RQ_Start_Prod(clk:= MACHINE.RQ_Start_Prod);
+FM_RQ_Stop_Prod(clk:= MACHINE.RQ_Stop_Prod);
+
+IF FM_RQ_Start_Prod.Q OR FM_RQ_Stop_Prod.Q OR MACHINE.STATE_Off OR MACHINE.STATE_Manu
+OR FM_Etape_Pompage_OK.Q OR EAU.OP_CHAUD.DEF_AUTO_ON.DEF OR EAU.OP_CHAUD.DEF_ON_REJECTED.DEF  THEN
+	PRM_Forcage_Chaud 	:= 	FALSE;
+END_IF
+
+(*General*)
+IdXML								:=		'6';
+TagXML								:=		0;
+
+(*Parametre statique*)
+CONF_eau_chaude						:=		FALSE;
+PRM_Pr_REF_ENC						:=		0.1;
+
+LIGNE_REF[1].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[2].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[3].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[4].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[5].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[6].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[7].DEF_Ref.DELAY			:=		T#5S;
+LIGNE_REF[8].DEF_Ref.DELAY			:=		T#5S;
+
+LIGNE_REF[1].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[2].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[3].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[4].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[5].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[6].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[7].CONF_TIM_OFF			:=		T#60S;
+LIGNE_REF[8].CONF_TIM_OFF			:=		T#60S;
+
+
+LIGNE_REF[1].CONF_NO_DexT			:=		FALSE;
+LIGNE_REF[2].CONF_NO_DexT			:=		FALSE;
+LIGNE_REF[3].CONF_NO_DexT			:=		FALSE;
+LIGNE_REF[4].CONF_NO_DexT			:=		FALSE;
+LIGNE_REF[5].CONF_NO_DexT			:=		TRUE;
+LIGNE_REF[6].CONF_NO_DexT			:=		TRUE;
+LIGNE_REF[7].CONF_NO_DexT			:=		TRUE;
+LIGNE_REF[8].CONF_NO_DexT			:=		TRUE;
+
+LIGNE_REF[1].CONF_No_Def_Dex		:= 		TRUE;
+LIGNE_REF[2].CONF_No_Def_Dex		:=		TRUE;
+LIGNE_REF[3].CONF_No_Def_Dex		:= 		TRUE;
+LIGNE_REF[4].CONF_No_Def_Dex		:=		TRUE;
+LIGNE_REF[5].CONF_No_Def_Dex		:=		TRUE;
+LIGNE_REF[6].CONF_No_Def_Dex		:=		TRUE;
+LIGNE_REF[7].CONF_No_Def_Dex		:=		TRUE;
+LIGNE_REF[8].CONF_No_Def_Dex		:=		TRUE;
+
+LIGNE_REF[1].MNEMO_Dex				:=		'DE1T';
+LIGNE_REF[2].MNEMO_Dex				:=		'DE2T';
+LIGNE_REF[3].MNEMO_Dex				:=		'DE3T';
+LIGNE_REF[4].MNEMO_Dex				:=		'DE4T';
+LIGNE_REF[5].MNEMO_Dex				:=		'DE5T';
+LIGNE_REF[6].MNEMO_Dex				:=		'DE6T';
+LIGNE_REF[7].MNEMO_Dex				:=		'DE7T';
+LIGNE_REF[8].MNEMO_Dex				:=		'DE8T';
+
+LIGNE_REF[1].VEx.MNEMO				:=		'VE1';
+LIGNE_REF[2].VEx.MNEMO				:=		'VE2';
+LIGNE_REF[3].VEx.MNEMO				:=		'VE3';
+LIGNE_REF[4].VEx.MNEMO				:=		'VE4';
+LIGNE_REF[5].VEx.MNEMO				:=		'VE5';
+LIGNE_REF[6].VEx.MNEMO				:=		'VE6';
+LIGNE_REF[7].VEx.MNEMO				:=		'VE7';
+LIGNE_REF[8].VEx.MNEMO				:=		'VE8';
+
+LIGNE_REF[1].MNEMO					:=		'Quartz';
+LIGNE_REF[2].MNEMO					:=		'EJ-Gauche';
+LIGNE_REF[3].MNEMO					:=		'EJ-Droite';
+LIGNE_REF[4].MNEMO					:=		'Canon e-';
+LIGNE_REF[5].MNEMO					:=		'ACG600';
+LIGNE_REF[6].MNEMO					:=		'Ligne 6';
+LIGNE_REF[7].MNEMO					:=		'Ligne 7';
+LIGNE_REF[8].MNEMO					:=		'Ligne 8';
+
+LIGNE_REF[1].TagXML					:=		3;
+LIGNE_REF[2].TagXML					:=		4;
+LIGNE_REF[3].TagXML					:=		5;
+LIGNE_REF[4].TagXML					:=		6;
+LIGNE_REF[5].TagXML					:=		7;
+LIGNE_REF[6].TagXML					:=		8;
+LIGNE_REF[7].TagXML					:=		9;
+LIGNE_REF[8].TagXML					:=		10;
+
+FOR I:= 1 TO 7 DO
+	LIGNE_REF[I].IdXML					:=	'6';
+END_FOR;
+
+DEF_Groupe.IdXML						:=	'8';
+DEF_Groupe.TagXML						:=	3;
+
+DEF_Fuite.IdXML							:=	'14';
+DEF_Fuite.TagXML						:=	18;
+
+CONF_CO_ON[1]							:=	3;
+CONF_CO_ON[2]							:=	0;
+CONF_CO_ON[3]							:=	0;
+CONF_CO_ON[4]							:=	0;
+CONF_CO_ON[5]							:=	0;
+CONF_CO_ON[6]							:=	0;
+CONF_CO_ON[7]							:=	0;
+CONF_CO_ON[8]							:=	0;
+
+EAU.VEC_IN.MNEMO						:=	'VEH1';
+EAU.VEC_OUT.MNEMO						:=	'VEH2';
+EAU.VEF_IN.MNEMO						:=	'VEC1';
+EAU.VEF_OUT.MNEMO						:=	'VEC2';
+
+(*************************************************************************************)
+(*                          Gestion eau chaude / eau froide                          *)
+(*************************************************************************************)
+ (*mise en eau chaude en demande de préparation à la ventilation ou lorsque l'enceinte est à atmosphère*)
+IF 	(PRG_POMPAGE.RQ_PREP_VENTIL OR PRG_POMPAGE.M11.STATE_Seuil[1] OR PRM_Forcage_Chaud) AND NOT STATE_Manu AND CONF_eau_chaude THEN
+	EAU.OP_CHAUD.ON_PLC		:=	TRUE;
+	EAU.OP_FROID.ON_PLC		:=	FALSE;
+(*mise en eau froide à partir du seuil de pression défini par PRM_Pr_ref_enc (passé dans M11) *)
+ELSIF PRG_POMPAGE.O_REF_ENC AND NOT PRM_Forcage_Chaud  AND NOT STATE_Manu AND CONF_eau_chaude THEN
+	EAU.OP_CHAUD.ON_PLC	:= 	FALSE;
+	EAU.OP_FROID.ON_PLC	:= 	TRUE;
+END_IF
+(*EAU(
+	RESET:= 			MACHINE.STATE_off,
+	MANUAL:= 			STATE_Manu,
+	CTRL_PLC:=			TRUE ,						(*toujours piloté par l'automate*)
+	CONF_Tim_Step:= 	T#5s,
+	IN_NIV:=			IN_GF1NivCh,
+	);
+*)
+(*mémorisation de la demande de préparation de ventilation*)
+IF PRG_POMPAGE.RQ_PREP_VENTIL OR PRM_Forcage_Chaud THEN  (*mémo à la réception de la demande*)
+	var_mem_prep_ventil := TRUE;
+ELSIF NOT PRG_POMPAGE.POMPAGE.OP_Ventilation.EC AND NOT PRM_Forcage_Chaud THEN (*annulation lorsque plus ventilation en cours ou reset*)
+	var_mem_prep_ventil := FALSE;
+END_IF
+
+(*renseignement de l'état eau froide*)
+IF CONF_eau_chaude THEN
+	var_state_froid := EAU.STATE_Froid;
+ELSE
+	var_state_froid := TRUE;
+END_IF
+
+(* 	Paramètre contextuel	*)
+LIGNE_REF[1].I_Cond_need_Ref		:=		PRG_POMPAGE.RQ_REF[1];
+LIGNE_REF[2].I_Cond_need_Ref		:=		PRG_EVAP.EVAPS2.RQ_Ref_source;
+LIGNE_REF[3].I_Cond_need_Ref		:=		PRG_EVAP.EVAPS3.RQ_Ref_source;
+LIGNE_REF[4].I_Cond_need_Ref		:=		PRG_EVAP.EVAPS1.RQ_Ref_source;
+LIGNE_REF[5].I_Cond_need_Ref		:=		PRG_POMPAGE.RQ_REF[5];
+LIGNE_REF[6].I_Cond_need_Ref		:=		PRG_POMPAGE.RQ_REF[6];
+LIGNE_REF[7].I_Cond_need_Ref		:=		PRG_POMPAGE.RQ_REF[7];
+LIGNE_REF[8].I_Cond_need_Ref		:=		PRG_POMPAGE.RQ_REF[8];
+
+FOR I:=1 TO 8 DO
+	//LIGNE_REF[I].I_Cond_need_Ref	:=		PRG_POMPAGE.RQ_REF[I];
+	LIGNE_REF[I].CO_On				:=		((CONF_CO_ON[I] = 0) AND LIGNE_REF[I].I_Cond_need_Ref) OR
+											((CONF_CO_ON[I] = 1) AND (PRG_POMPAGE.O_REF_ENC
+											OR (var_mem_prep_ventil AND CONF_eau_chaude))) OR (CONF_CO_ON[I] = 3 AND OUT_MGF1);	
+END_FOR;
+
+
+(*************************************************************************************)
+(*                                       Groupe froid					                              *)
+(*************************************************************************************)
+(*DEF_Groupe(
+	CONDITION:= 	NOT IN_GF1OK AND NOT MACHINE.STATE_Off AND FALSE, //SPEC 14035
+	DELAY:= 		T#5s
+);
+*)
+(*************************************************************************************)
+(*                                       Fuite enceinte					                              *)
+(*************************************************************************************)
+(*DEF_Fuite.CONDITION	:=	NOT IN_C1T AND NOT MACHINE.STATE_Off AND FALSE; //SPEC 14035
+DEF_Fuite.DELAY		:=	T#2S;
+DEF_Fuite();
+
+*)
+(*************************************************************************************)
+(*                                       Ligne 1						                              *)
+(*************************************************************************************)
+LIGNE_REF[1].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[1]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	IN_DExT:=				IN_DE1T,
+	);
+
+(*************************************************************************************)
+(*                                       		Ligne 2							           *)
+(*************************************************************************************)
+LIGNE_REF[2].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[2]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	IN_DExT:=				IN_DE2T,
+	);
+
+(*************************************************************************************)
+(*                                     		 Ligne 3								 *)
+(*************************************************************************************)
+LIGNE_REF[3].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[3]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	IN_DExT:=				IN_DE3T,
+	);
+
+(*************************************************************************************)
+(*                                     		 Ligne 4								 *)
+(*************************************************************************************)
+LIGNE_REF[4].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[4]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	IN_DExT:=				IN_DE4T,
+	);
+
+(*************************************************************************************)
+(*                                     		 Ligne 5								 *)
+(*************************************************************************************)
+LIGNE_REF[5].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[5]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	//IN_DExT:=				IN_DE5T,
+	);
+	
+(*************************************************************************************)
+(*                                     		 Ligne 6								 *)
+(*************************************************************************************)
+LIGNE_REF[6].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[6]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	//IN_DExT:=				IN_DE6T,
+	);
+	
+(*************************************************************************************)
+(*                                     		 Ligne 7								 *)
+(*************************************************************************************)
+LIGNE_REF[7].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[7]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	//IN_DExT:=				IN_DE7T,
+	);
+	
+(*************************************************************************************)
+(*                                     		 Ligne 8								 *)
+(*************************************************************************************)
+LIGNE_REF[8].VEx.EN_On_EXT := NOT DEF_Fuite.DEF; (*Arrêt automatique si fuite détectée d'eau dans l'enceinte*)
+LIGNE_REF[8]
+	(
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:=				STATE_Manu ,
+	I_inhibe_surv_ref:=		NOT var_state_froid ,
+	I_Cond_Ref_Ok:=			var_state_froid AND NOT DEF_Groupe.DEF,
+	//IN_DExT:=				IN_DE8T,
+	);
+
+(*	Affectation des sorties	*)
+OUT_VE1		:=	LIGNE_REF[1].VEx.OUT_On;
+OUT_VE2		:=	LIGNE_REF[2].VEx.OUT_On;
+OUT_VE3		:=	LIGNE_REF[3].VEx.OUT_On;
+OUT_VE4		:=	LIGNE_REF[4].VEx.OUT_On;
+OUT_VE5		:=	LIGNE_REF[5].VEx.OUT_On;
+OUT_VE6		:=	LIGNE_REF[6].VEx.OUT_On;
+OUT_VE7		:=	LIGNE_REF[7].VEx.OUT_On;
+OUT_VE8		:=	LIGNE_REF[8].VEx.OUT_On;
+
+OUT_VEC11		:=	EAU.VEC_IN.OUT_On;
+OUT_VEC12		:=	EAU.VEC_OUT.OUT_On;
+OUT_VEF11		:=	EAU.VEF_IN.OUT_On;
+OUT_VEF12		:=	EAU.VEF_OUT.OUT_On;
+
+OUT_GF1			:=	(OUT_VEC11 AND OUT_VEC12) OR (OUT_VEC11 AND OUT_VEF12);																										(*Mise en marche du compresseur eau chaude*)
+OUT_MGF1		:=	NOT PRG_EVAP.ECO_MODE OR NOT PRG_POMPAGE.POMPAGE.PP11.STATE_Off OR NOT PRG_POMPAGE.POMPAGE.PS11.STATE_Ar OR NOT PRG_POMPAGE.POMPAGE.OP_Marche_Pompes.AR; 	(*Mise en puissance compresseur*)
+
+(*timer*)
+FM_state_chaud(clk:=EAU.STATE_Chaud);
+TIMER_chaud.PT		:=	PRM_tps_att_chaud;
+TIMER_chaud.IN		:=	EAU.STATE_Chaud; (*FM_state_chaud.Q;*)
+TIMER_chaud();
+
+(* Affectation du tableau d'état des lignes d'eau *)
+WATER[0]	:= TRUE;
+FOR I:=1 TO 5 DO
+	WATER[I]		:=	(LIGNE_REF[I].STATE_Ok AND EAU.STATE_Froid AND CONF_eau_chaude) OR
+						(LIGNE_REF[I].STATE_Ok AND NOT CONF_eau_chaude);
+	STATE_AR[I]		:=	(LIGNE_REF[I].STATE_Ar AND EAU.STATE_Froid AND CONF_eau_chaude) OR
+						((*LIGNE_REF[I].STATE_Ok AND*) EAU.STATE_Chaud AND TIMER_chaud.Q AND CONF_eau_chaude) OR
+						(LIGNE_REF[I].STATE_Ar AND NOT CONF_eau_chaude);
+END_FOR;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

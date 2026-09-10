@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CLIGNOTANT" Id="{feb5943c-c1ba-4f2d-9054-011dbdc85015}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CLIGNOTANT
+VAR_INPUT
+	PRM_PERIOD:	TIME;
+END_VAR
+VAR_OUTPUT
+	STATE: 		BOOL;
+END_VAR
+VAR
+	TIMER_ON:	TP;
+	TIMER_OFF:	TP;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[TIMER_ON(IN:=NOT TIMER_OFF.Q ,PT:= PRM_PERIOD);
+TIMER_OFF(IN:=NOT TIMER_ON.Q,PT:=PRM_PERIOD);
+STATE := TIMER_ON.Q;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CLIGNOTANT">
+      <LineId Id="11" Count="2" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

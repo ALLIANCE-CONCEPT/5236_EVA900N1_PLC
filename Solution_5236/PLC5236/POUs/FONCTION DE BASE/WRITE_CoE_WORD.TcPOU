@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="WRITE_CoE_WORD" Id="{37de6c20-3429-4cd9-a7de-2667e6aa63ef}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK WRITE_CoE_WORD
+(* Fonction standard AC d'écriture d'un paramètre CoE de type MOT (2 bytes) *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - Version initiale - aff 8760*)
+(* Codage selon exemple d'utilisation de  FB_EcCoESdoWrite dans InfoSystem *)
+(*************************************************************************)
+
+VAR_INPUT
+	IN_NetId 		: T_AmsNetId; 				(* NetId of EtherCAT Master : on le trouve dans le .tsm, sur le device ethercat , onglet ethercat, champ NetId *)
+	IN_SlaveAddr 	: UINT; 						(* Port Number of EtherCAT Slave *)
+	IN_Index 		: WORD; 						(* CoE Object Index *)
+	IN_SubIndex	 	: BYTE; 						(* Subindex of CoE Object *)
+	IN_Value 		: WORD;						(* variable to be written to the CoE Object *)
+	IN_ON		 	: BOOL;						(* rising edge starts writing to the CoE Object *)
+END_VAR
+
+
+VAR
+	fbSdoWrite 	: FB_EcCoESdoWrite;
+END_VAR
+
+VAR_OUTPUT
+	STATE_Busy:		BOOL;					(*en cours de traitement*)
+	STATE_Error:	BOOL;					(* envoi raté si valeur à 1*)
+	STATE_ErrId:	UDINT;					(* code erreur de l'échec de l'envoi*)
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbSdoWrite(
+	sNetId 		:= IN_NetId,
+	nSlaveAddr 	:= IN_SlaveAddr,
+	nIndex 		:= IN_Index,
+	nSubIndex 	:= IN_SubIndex,
+	pSrcBuf 		:= ADR(IN_Value),
+	cbBufLen 	:= SIZEOF(IN_Value),
+	bExecute 	:= IN_ON
+);
+
+STATE_Busy := fbSdoWrite.bBusy;
+
+IF NOT fbSdoWrite.bBusy THEN
+	IN_ON := FALSE;
+	IF NOT STATE_Error THEN
+		(* write successful *)
+		STATE_Error := FALSE;
+		STATE_ErrId := 0;
+	ELSE 
+		(* write failed *)
+		STATE_Error := fbSdoWrite.bError;
+		STATE_ErrId := fbSdoWrite.nErrId;
+	END_IF
+
+	fbSdoWrite(bExecute := FALSE);
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="WRITE_CoE_WORD">
+      <LineId Id="30" Count="25" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

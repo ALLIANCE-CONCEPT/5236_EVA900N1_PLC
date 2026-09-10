@@ -1,0 +1,876 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_PRG_EVAP" Id="{62a7662b-72f1-4cf0-9897-b8be6924e339}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_EVAP
+VAR_INPUT
+(*Quartz*)
+	QZ1:				BLOCK_XTAL6; 	(*Tête Quartz*)
+	XTC3:				BLOCK_XTC3;	(*Contrôleur de dépôt XTC3*)
+
+(*Evenement*)
+	EV_SHUTTER1_OPEN:	PRCDEF;		(*Evenement cache source 1 ouvert*)
+	EV_SHUTTER1_CLOSE:	PRCDEF;		(*Evenement cache source 1 fermé*)
+
+	EV_SHUTTER2_OPEN:	PRCDEF;		(*Evenement cache source 2 ouvert*)
+	EV_SHUTTER2_CLOSE:	PRCDEF;		(*Evenement cache source 2 fermé*)
+
+	EV_SHUTTER3_OPEN:	PRCDEF;		(*Evenement cache source 3 ouvert*)
+	EV_SHUTTER3_CLOSE:	PRCDEF;		(*Evenement cache source 3 fermé*)
+
+(*Entrées*)
+	(*Creuset*)
+	IN_CR11T		AT%I*:		BOOL;		(*Creuset en position 1*)
+	IN_CR12T		AT%I*:		BOOL;		(*Creuset en position 2*)
+	IN_CR13T		AT%I*:		BOOL;		(*Creuset en position 3*)
+	IN_CR14T		AT%I*:		BOOL;		(*Creuset en position 4*)
+
+	(*Balayage*)
+	IN_SW_REM		AT%I*:		BOOL;		(*Balayage en mode remote*)
+	IN_SW_RUN		AT%I*:		BOOL;		(*Balayage en marche*)
+	IN_SW_RDY		AT%I*:		BOOL;		(*Balayage prêt*)
+
+	VISU_STOP_ECO_MANU:			BOOL;
+END_VAR
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : ensemble*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+
+	CONF_QUARTZ_CC_SRCE:	ARRAY[0..4] OF BOOL;	(*Indique si un Quartz se trouve sous le cache source pour contrôle vitesse pendant phase de préfusion*)
+	CONF_CHAUFFAGE:			BOOL; 	(*Indique s'il y a du chauffage*)
+	CONF_IAD:				BOOL;	(*Indique s'il y a un IAD*)
+
+	PRM_Seuil_Crystal_Life:			REAL;	(*Seuil d'alarme pour la vie des quartz*)
+	PRM_Seuil_Crystal_Activity:		REAL;	(*Seuil d'alarme pour l'activité des quartz*)
+
+	PRM_Forcage_Crucible:		BOOL;	(*Option de forçage du creuset en semi-auto*)
+	PRM_Forcage_Cache_Source1:	BOOL;	(*Option de forçage du cache source 1 en semi-auto*)
+	PRM_Forcage_Cache_Source2:	BOOL;	(*Option de forçage du cache source 2 en semi-auto*)
+	PRM_Forcage_Cache_Source3:	BOOL;	(*Option de forçage du cache source 3 en semi-auto*)
+	PRM_Forcage_Cache_Quartz:	BOOL;	(*Option de forçage du cache quartz en semi-auto*)
+
+	PRM_Adresse_IP_XTC:			STRING(15) := '192.168.0.20'; (*Addresse IP de l'XTC affecté depuis l'IHM*)
+
+	PRM_Mat_Source2:			STRING; (*Nom du matériau utilisé sur la source 2*)
+	PRM_Mat_Source3:			STRING; (*Nom du matériau utilisé sur la source 3*)
+END_VAR
+
+VAR
+	EVAPS1:			BLOCK_EVAP;
+	EVAPS2:			BLOCK_EVAP;
+	EVAPS3:			BLOCK_EVAP;
+	CC11:			BLOCK_ACTUATOR;
+	CC12:			BLOCK_ACTUATOR;
+	CC13:			BLOCK_ACTUATOR;
+	SOURCE1:		BLOCK_CANON_ST10;
+	SOURCE2:		BLOCK_SOURCE_JOULE;
+	SOURCE3:		BLOCK_SOURCE_JOULE;
+	SWEEP1:			BLOCK_TELEMARK_CHEETAH_SWEEP;
+	CRUCIBLE1:		BLOCK_IND_CR_396_TELEMARK;
+
+	VAR_Idx:		INT;				(*Variable d'itération*)
+
+	(*Variable Bidon*)
+	VAR_NCR:				USINT;
+	VAR_NBAL:				USINT;
+	VAR_HT:					REAL;
+END_VAR
+
+VAR_OUTPUT
+	STATE_AR:						BOOL;
+	STATE_Def_IProc:   				BOOL;		(*Etat de défaut*)
+	(*Caches*)
+	OUT_OCC11			AT%Q*:		BOOL;		(*Ouverture cache source 1*)
+	OUT_ICC11			AT%Q*:		BOOL;		(*Fermeture cache source 1*)
+	OUT_OCC12			AT%Q*:		BOOL;		(*Ouverture cache source 2*)
+	OUT_ICC12			AT%Q*:		BOOL;		(*Fermeture cache source 2*)
+	OUT_OCC13			AT%Q*:		BOOL;		(*Ouverture cache source 3*)
+	OUT_ICC13			AT%Q*:		BOOL;		(*Fermeture cache source 3*)
+	(*Creuset*)
+	OUT_CR11			AT%Q*:		BOOL;		(*Sélection du creuset 1*)
+	OUT_CR12			AT%Q*:		BOOL;		(*Sélection du creuset 2*)
+	OUT_CR13			AT%Q*:		BOOL;		(*Sélection du creuset 3*)
+	OUT_CR14			AT%Q*:		BOOL;		(*Sélection du creuset 4*)
+	OUT_CR_RMT			AT%Q*:		BOOL;		(*remote indexeur de creuset*)
+	(*Sweep*)
+	OUT_SWB1			AT%Q*:		BOOL;		(*Sélection programme de balayage bit 1*)
+	OUT_SWB2			AT%Q*:		BOOL;		(*Sélection programme de balayage bit 2*)
+	OUT_SWB3			AT%Q*:		BOOL;		(*Sélection programme de balayage bit 3*)
+	OUT_SWB4			AT%Q*:		BOOL;		(*Sélection programme de balayage bit 4*)
+	//OUT_SWITLK			AT%Q*:		BOOL;		(*Interlock module balayage*)
+	OUT_SWP_ON			AT%Q*:		BOOL;		(*activation balayage*)
+	OUT_SW_RMT			AT%Q*:		BOOL;		(*remote module de balayage*)
+	(*Effet joule*)
+	OUT_MEJ1			AT%Q*:		BOOL;
+	OUT_MEJ2			AT%Q*:		BOOL;
+	OUT_QEJ1			AT%Q*:		INT;
+	OUT_QEJ2			AT%Q*:		INT;
+	
+	(*Divers*)
+	OUT_MEG1			AT%Q*:		BOOL;		(*Sécurité vide canon pour mise en puissance canons + ECO-MODE*)
+	OUT_MPR230			AT%Q*:		BOOL;		(*230V Module Balayage + Module Indexage + XTC ECO-MODE*)
+	ECO_MODE:						BOOL;
+
+	O_END_PROCESS_PFIXE:			BOOL;		(**)
+END_VAR
+
+VAR
+	TIMER_ECO_MODE:					TOF;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*General*)
+IdParent					:=	MACHINE.MNEMO;
+MNEMO						:=	CONCAT(IdParent,'_EVAP');
+IdXML						:=	'17';
+TagXML						:=	0;
+
+(*XTC3*)
+XTC3.MNEMO					:=	'XTC3';
+XTC3.IdXML					:=	'19';
+XTC3.TagXML					:=	1;
+
+(*Quartz*)
+QZ1.MNEMO					:=	'QZ1';
+QZ1.IdParent				:=	MNEMO;
+
+(*Source1*)
+SOURCE1.IdParent			:=	MNEMO;
+SOURCE1.MNEMO				:=	'Canon e-';
+SOURCE1.IdXML				:=	'16';
+SOURCE1.TagXML 				:= 	3;
+
+(*Source2*)
+SOURCE2.IdParent			:=	MNEMO;
+SOURCE2.MNEMO				:=	'Source J-Gauche';
+SOURCE2.IdXML				:=	'16';
+SOURCE2.TagXML				:=	4;
+
+(*Source3*)
+SOURCE3.IdParent			:=	MNEMO;
+SOURCE3.MNEMO				:=	'Source J-Droite';
+SOURCE3.IdXML				:=	'16';
+SOURCE3.TagXML				:=	5;
+
+(*Balayage*)
+SWEEP1.IdParent				:=	SOURCE1.MNEMO;
+SWEEP1.MNEMO				:=	'SWP1';
+SWEEP1.IdXML				:=	'16';
+SWEEP1.TagXML				:=	8;
+
+(*Indexeur*)
+CRUCIBLE1.IdParent 			:=	SOURCE1.MNEMO;
+CRUCIBLE1.MNEMO 			:=	'INDCR1';
+CRUCIBLE1.IdXML				:=	'16';
+CRUCIBLE1.TagXML 			:=  7;
+
+CRUCIBLE1.CONF_NCR			:= 	4;			(*Nombre de creuset de l'indexeur*)
+
+(*Cache CC11*)
+CC11.CONF_Tim_Valid_Off			:=	T#0ms;
+CC11.CONF_Tim_Valid_On			:=	T#0ms;
+CC11.DEF_Off.DELAY				:=	T#10s;
+CC11.DEF_On.DELAY				:=	T#10s;
+CC11.DEF_Sensor.DELAY			:=	T#10s;
+CC11.CONF_DI_Off				:=	FALSE;
+CC11.CONF_DI_On					:=	FALSE;
+CC11.CONF_No_Safety_Auto		:=	TRUE;
+CC11.CONF_Type_Actuator			:=	0;
+CC11.MNEMO						:=	'Canon e-';
+CC11.CONF_EN_On					:=	0;
+CC11.CONF_No_Safety_Auto		:=	FALSE;
+CC11.IdXML						:=	'4';
+CC11.TagXML						:=	1;
+CC11.IdParent					:=	Source1.MNEMO;
+CC11.DEF_Off_auto.IdXML			:=	'3';
+CC11.DEF_Off_auto.TagXML		:=	11;
+CC11.DEF_Off_Imposs.IdXML		:=	'3';
+CC11.DEF_Off_Imposs.TagXML		:=	9;
+CC11.DEF_On_Imposs.IdXML		:=	'3';
+CC11.DEF_On_Imposs.TagXML		:=	6;
+CC11.DEF_Off.IdXML				:=	'3';
+CC11.DEF_Off.TagXML 			:=	4;
+CC11.DEF_On.IdXML				:=	'3';
+CC11.DEF_On.TagXML 				:=	2;
+CC11.DEF_Sensor.IdXML			:=	'3';
+CC11.DEF_Sensor.TagXML 			:=	13;
+
+(*Cache CC12*)
+CC12.CONF_Tim_Valid_Off			:=	T#0ms;
+CC12.CONF_Tim_Valid_On			:=	T#0ms;
+CC12.DEF_Off.DELAY				:=	T#10s;
+CC12.DEF_On.DELAY				:=	T#10s;
+CC12.DEF_Sensor.DELAY			:=	T#10s;
+CC12.CONF_DI_Off				:=	FALSE;
+CC12.CONF_DI_On					:=	FALSE;
+CC12.CONF_No_Safety_Auto		:=	TRUE;
+CC12.CONF_Type_Actuator			:=	0;
+CC12.MNEMO						:=	'SJ-Gauche';
+CC12.CONF_EN_On					:=	0;
+CC12.CONF_No_Safety_Auto		:=	FALSE;
+CC12.IdXML						:=	'4';
+CC12.TagXML						:=	1;
+CC12.IdParent					:=	Source2.MNEMO;
+CC12.DEF_Off_auto.IdXML			:=	'3';
+CC12.DEF_Off_auto.TagXML		:=	11;
+CC12.DEF_Off_Imposs.IdXML		:=	'3';
+CC12.DEF_Off_Imposs.TagXML		:=	9;
+CC12.DEF_On_Imposs.IdXML		:=	'3';
+CC12.DEF_On_Imposs.TagXML		:=	6;
+CC12.DEF_Off.IdXML				:=	'3';
+CC12.DEF_Off.TagXML 			:=	4;
+CC12.DEF_On.IdXML				:=	'3';
+CC12.DEF_On.TagXML 				:=	2;
+CC12.DEF_Sensor.IdXML			:=	'3';
+CC12.DEF_Sensor.TagXML 			:=	13;
+
+(*Cache CC13*)
+CC13.CONF_Tim_Valid_Off			:=	T#0ms;
+CC13.CONF_Tim_Valid_On			:=	T#0ms;
+CC13.DEF_Off.DELAY				:=	T#10s;
+CC13.DEF_On.DELAY				:=	T#10s;
+CC13.DEF_Sensor.DELAY			:=	T#10s;
+CC13.CONF_DI_Off				:=	FALSE;
+CC13.CONF_DI_On					:=	FALSE;
+CC13.CONF_No_Safety_Auto		:=	TRUE;
+CC13.CONF_Type_Actuator			:=	0;
+CC13.MNEMO						:=	'SJ-Droite';
+CC13.CONF_EN_On					:=	0;
+CC13.CONF_No_Safety_Auto		:=	FALSE;
+CC13.IdXML						:=	'4';
+CC13.TagXML						:=	1;
+CC13.IdParent					:=	Source3.MNEMO;
+CC13.DEF_Off_auto.IdXML			:=	'3';
+CC13.DEF_Off_auto.TagXML		:=	11;
+CC13.DEF_Off_Imposs.IdXML		:=	'3';
+CC13.DEF_Off_Imposs.TagXML		:=	9;
+CC13.DEF_On_Imposs.IdXML		:=	'3';
+CC13.DEF_On_Imposs.TagXML		:=	6;
+CC13.DEF_Off.IdXML				:=	'3';
+CC13.DEF_Off.TagXML 			:=	4;
+CC13.DEF_On.IdXML				:=	'3';
+CC13.DEF_On.TagXML 				:=	2;
+CC13.DEF_Sensor.IdXML			:=	'3';
+CC13.DEF_Sensor.TagXML 			:=	13;
+
+EVAPS1.IdXML 				:=	'17';
+EVAPS1.TagXML				:=	1;
+EVAPS1.CONF_No_Sweep		:=	FALSE;
+EVAPS1.DEF_Pmax.DELAY		:=	T#10S;
+EVAPS1.DEF_Pmin.DELAY		:=	T#10s;
+
+EVAPS2.IdXML				:=	'17';
+EVAPS2.TagXML				:=	2;
+EVAPS2.CONF_No_Sweep		:=	TRUE;
+EVAPS2.DEF_Pmax.DELAY		:=	T#10S;
+EVAPS2.DEF_Pmin.DELAY		:=	T#10s;
+
+EVAPS3.IdXML				:=	'17';
+EVAPS3.TagXML				:=	3;
+EVAPS3.CONF_No_Sweep		:=	TRUE;
+EVAPS3.DEF_Pmax.DELAY		:=	T#10S;
+EVAPS3.DEF_Pmin.DELAY		:=	T#10s;
+
+
+EV_SHUTTER1_OPEN.IdXML			:=	'14';
+EV_SHUTTER1_OPEN.TagXML			:=	20;
+EV_SHUTTER1_OPEN.Groupe			:=	3;
+
+EV_SHUTTER1_CLOSE.IdXML			:=	'14';
+EV_SHUTTER1_CLOSE.TagXML		:=	21;
+EV_SHUTTER1_CLOSE.Groupe		:=	3;
+
+EV_SHUTTER2_OPEN.IdXML			:=	'14';
+EV_SHUTTER2_OPEN.TagXML			:=	24;
+EV_SHUTTER2_OPEN.Groupe			:=	3;
+
+EV_SHUTTER2_CLOSE.IdXML			:=	'14';
+EV_SHUTTER2_CLOSE.TagXML		:=	25;
+EV_SHUTTER2_CLOSE.Groupe		:=	3;
+
+EV_SHUTTER3_OPEN.IdXML			:=	'14';
+EV_SHUTTER3_OPEN.TagXML			:=	26;
+EV_SHUTTER3_OPEN.Groupe			:=	3;
+
+EV_SHUTTER3_CLOSE.IdXML			:=	'14';
+EV_SHUTTER3_CLOSE.TagXML		:=	27;
+EV_SHUTTER3_CLOSE.Groupe		:=	3;
+
+
+CONF_CHAUFFAGE:= FALSE;
+CONF_IAD:=FALSE;
+
+CONF_QUARTZ_CC_SRCE[0]:= FALSE;
+CONF_QUARTZ_CC_SRCE[1]:= FALSE;
+CONF_QUARTZ_CC_SRCE[2]:= FALSE;
+CONF_QUARTZ_CC_SRCE[3]:= FALSE;
+CONF_QUARTZ_CC_SRCE[4]:= FALSE;
+
+
+(*mode de controle des fonctions*)
+IF MACHINE.RQ_Ctrl_Ihm THEN
+	QZ1.CTRL_PLC := FALSE;
+ELSIF MACHINE.RQ_Ctrl_Plc THEN
+	QZ1.CTRL_PLC := TRUE;
+END_IF
+
+(*Configuration Adresse IP XTC*)
+XTC3.CONF_sRemoteHost:= PRM_Adresse_IP_XTC;
+XTC3.CONF_nRemotePort := 2101;
+
+
+(*Evenement ouverture cache source 1*)
+EV_SHUTTER1_OPEN.CONDITION	:= MACHINE.STATE_Prod AND CC11.STATE_On;
+EV_SHUTTER1_OPEN();
+(*Evenement fermeture cache source 1*)
+EV_SHUTTER1_CLOSE.CONDITION:= MACHINE.STATE_Prod AND CC11.STATE_Off;
+EV_SHUTTER1_CLOSE();
+
+(*Evenement ouverture cache source 2*)
+EV_SHUTTER2_OPEN.CONDITION	:= MACHINE.STATE_Prod AND CC12.STATE_On;
+EV_SHUTTER2_OPEN();
+(*Evenement fermeture cache source 2*)
+EV_SHUTTER2_CLOSE.CONDITION:= MACHINE.STATE_Prod AND CC12.STATE_Off;
+EV_SHUTTER2_CLOSE();
+
+(*Evenement ouverture cache source 3*)
+EV_SHUTTER3_OPEN.CONDITION	:= MACHINE.STATE_Prod AND CC13.STATE_On;
+EV_SHUTTER3_OPEN();
+(*Evenement fermeture cache source 3*)
+EV_SHUTTER3_CLOSE.CONDITION:= MACHINE.STATE_Prod AND CC13.STATE_Off;
+EV_SHUTTER3_CLOSE();
+
+
+(*Reset des ordres de forçage*)
+IF MACHINE.RQ_Start_Prod OR MACHINE.STATE_Off OR MACHINE.STATE_Manu THEN
+	PRM_Forcage_Crucible 		:= 	FALSE;
+	PRM_Forcage_Cache_Source1	:= 	FALSE;
+	PRM_Forcage_Cache_Source2	:=	FALSE;
+	PRM_Forcage_Cache_Source3  	:=	FALSE;
+	PRM_Forcage_Cache_Quartz	:=	FALSE;
+END_IF
+IF CRUCIBLE1.DEF_POSITIONNEMENT.DEF THEN
+	PRM_Forcage_Crucible		:= FALSE;
+END_IF
+IF CC11.DEF_Off_auto.DEF THEN
+	PRM_Forcage_Cache_Source1:= FALSE;
+END_IF
+IF CC12.DEF_Off_auto.DEF	THEN
+	PRM_Forcage_Cache_Source2:= FALSE;
+END_IF
+IF CC13.DEF_Off_auto.DEF	THEN
+	PRM_Forcage_Cache_Source3:= FALSE;
+END_IF
+
+
+(******************* SOURCE 1 **********************)
+
+SOURCE1.HV.EN_Off_EXT := TRUE;
+SOURCE1.HV.EN_On_EXT := (SWEEP1.STATE_REM AND SWEEP1.STATE_ON);
+
+SOURCE1(
+	DOOR:= PRG_POMPAGE.DOOR,
+	VAC:= (PRG_POMPAGE.VAC AND PRG_POMPAGE.M11.STATE_Seuil[13] AND NOT PRG_POMPAGE.POMPAGE.VS11.STATE_Off),
+	WATER:= PRG_SERVITUDES.WATER[4] AND PRG_SERVITUDES.WATER[5],	(*Refroidissement canon à électrons*)
+	MANUAL:= MACHINE.STATE_Manu,
+	I_CR_OK:= CRUCIBLE1.STATE_POS_OK,
+	RESET:= MACHINE.STATE_Off,
+	I_COURANT:= EVAPS1.OUT_Power,
+	CO_HV:= EVAPS1.RQ_marche_HT,
+	CO_SRC:=EVAPS1.RQ_marche_FIL ,);
+
+SWEEP1(
+	MANUAL:= MACHINE.STATE_Manu,
+	RESET:= MACHINE.STATE_Off,
+	DOOR:= PRG_POMPAGE.DOOR,
+	CO_Remote:= MACHINE.STATE_Auto,
+	CO_balayage:= MACHINE.STATE_Auto AND EVAPS1.RQ_marche_SWEEP,
+	I_SW_RUN:= IN_SW_RUN,
+	I_SW_RDY:= IN_SW_RDY,
+	OUT_SWB1 => OUT_SWB1,
+	OUT_SWB2 => OUT_SWB2,
+	OUT_SWB3 => OUT_SWB3,
+	OUT_SWB4 => OUT_SWB4,
+	OUT_SWP_ON => OUT_SWP_ON,
+	OUT_RMT	=> OUT_SW_RMT);
+
+CRUCIBLE1(
+	MANUAL:= MACHINE.STATE_Manu,
+	RESET:= MACHINE.STATE_Off,
+	CO_Change:= EVAPS1.RQ_Switch_Crucible OR PRM_Forcage_Crucible,
+	I_FIL_ON:= SOURCE1.STATE_SRC_ON,
+	IN_POWER:= EVAPS1.OUT_Power,
+	IN_POS1:= IN_CR11T,
+	IN_POS2:= IN_CR12T,
+	IN_POS3:= IN_CR13T,
+	IN_POS4:= IN_CR14T,
+	OUT_SEL1=> OUT_CR11,
+	OUT_SEL2=> OUT_CR12,
+	OUT_SEL3=> OUT_CR13,
+	OUT_SEL4=> OUT_CR14);
+
+CC11(
+	RESET:= MACHINE.STATE_Off ,
+	MANUAL:=MACHINE.STATE_Manu,
+	IN_OFF:= ,
+	IN_ON:= ,
+	CO_On:= EVAPS1.RQ_Ouv_Cache_source OR PRM_Forcage_Cache_Source1,
+	CO_Off:= NOT EVAPS1.RQ_Ouv_Cache_source AND NOT PRM_Forcage_Cache_Source1 AND NOT MACHINE.STATE_Manu AND NOT MACHINE.STATE_Off,
+	EN_On_INT:= TRUE,
+	EN_Off_INT:= TRUE,
+	EN_On_EXT:=TRUE,
+	EN_Off_EXT:= TRUE,
+	OUT_On=> OUT_OCC11,
+	OUT_Off=> OUT_ICC11,);
+	
+
+(******************* SOURCE 2 **********************)
+
+SOURCE2.EJ.EN_Off_EXT	:=	TRUE;
+SOURCE2.EJ.EN_On_EXT	:=	NOT SOURCE3.OUT_MEJ;
+
+SOURCE2(
+	DOOR:=					PRG_POMPAGE.DOOR,
+	VAC:=					PRG_POMPAGE.VAC AND NOT PRG_POMPAGE.POMPAGE.VS11.STATE_Off,
+	WATER:=					PRG_SERVITUDES.WATER[2],					(*Refroidissement Source Joule n°1*)
+	MANUAL:=				MACHINE.STATE_Manu,
+	I_CR_OK:=				TRUE,										(*Positionnement du creuset ok*)
+	RESET:=					MACHINE.STATE_Off,
+	I_POWER:=				EVAPS2.OUT_Power,
+	CO_SRC:=				EVAPS2.RQ_marche_HT, );
+
+CC12(
+	RESET:= MACHINE.STATE_Off ,
+	MANUAL:=MACHINE.STATE_Manu,
+	IN_OFF:= ,
+	IN_ON:= ,
+	CO_On:= EVAPS2.RQ_Ouv_Cache_source OR PRM_Forcage_Cache_Source2,
+	CO_Off:= NOT EVAPS2.RQ_Ouv_Cache_source AND NOT PRM_Forcage_Cache_Source2 AND NOT MACHINE.STATE_Manu AND NOT MACHINE.STATE_Off,
+	EN_On_INT:= TRUE,
+	EN_Off_INT:= TRUE,
+	EN_On_EXT:=TRUE,
+	EN_Off_EXT:= TRUE,
+	OUT_On=> OUT_OCC12,
+	OUT_Off=> OUT_ICC12);
+
+(******************* SOURCE 3 **********************)
+
+SOURCE3.EJ.EN_Off_EXT	:=	TRUE;
+SOURCE3.EJ.EN_On_EXT	:=	NOT SOURCE2.OUT_MEJ;
+
+SOURCE3(
+	DOOR:=					PRG_POMPAGE.DOOR,
+	VAC:=					PRG_POMPAGE.VAC AND NOT PRG_POMPAGE.POMPAGE.VS11.STATE_Off,
+	WATER:=					PRG_SERVITUDES.WATER[3],					(*Refroidissement Source Joule n°2*)
+	MANUAL:=				MACHINE.STATE_Manu,
+	I_CR_OK:=				TRUE,										(*Positionnement du creuset ok*)
+	RESET:=					MACHINE.STATE_Off,
+	I_POWER:=				EVAPS3.OUT_Power,
+	CO_SRC:=				EVAPS3.RQ_marche_HT,	);
+
+	
+CC13(
+	RESET:= MACHINE.STATE_Off ,
+	MANUAL:= MACHINE.STATE_Manu,
+	IN_OFF:= ,
+	IN_ON:= ,
+	CO_On:= EVAPS3.RQ_Ouv_Cache_source OR PRM_Forcage_Cache_Source3,
+	CO_Off:= NOT EVAPS3.RQ_Ouv_Cache_source AND NOT PRM_Forcage_Cache_Source3 AND NOT MACHINE.STATE_Manu AND NOT MACHINE.STATE_Off,
+	EN_On_INT:= TRUE,
+	EN_Off_INT:= TRUE,
+	EN_On_EXT:=TRUE,
+	EN_Off_EXT:= TRUE,
+	OUT_On=> OUT_OCC13,
+	OUT_Off=> OUT_ICC13,);
+	
+(******************* QUARTZ **********************)
+
+(*Quartz QZ1*)
+IF MACHINE.STATE_Prod THEN
+	IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE1 THEN
+		QZ1.PRM_CONS_POSITION_QZ:= EVAPS1.OUT_Cons_Pos_Qz;
+	END_IF
+	IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE2 THEN
+		QZ1.PRM_CONS_POSITION_QZ:= EVAPS2.OUT_Cons_Pos_Qz;
+	END_IF
+	IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE3 THEN
+		QZ1.PRM_CONS_POSITION_QZ:= EVAPS3.OUT_Cons_Pos_Qz;
+	END_IF
+	IF MODE_QUARTZ_PROD.RQ_Pos_Quartz THEN
+		QZ1.PRM_CONS_POSITION_QZ:= MODE_QUARTZ_PROD.OUT_Quartz;
+	END_IF
+END_IF
+
+QZ1.OP_Scan_Quartz.ENABLE_EXT :=  NOT XTC3.STATE_NOK AND NOT MACHINE.STATE_Prod;
+QZ1.OP_Positionnement.ENABLE_EXT := NOT XTC3.STATE_NOK;
+
+QZ1.OP_Positionnement.ON_PLC:= EVAPS1.RQ_Switch_Crystal OR EVAPS2.RQ_Switch_Crystal OR EVAPS3.RQ_Switch_Crystal OR MODE_QUARTZ_PROD.RQ_Pos_Quartz;
+
+QZ1	(
+	RESET:= 					MACHINE.STATE_Off ,
+	MANUAL:=					MACHINE.STATE_Manu ,
+	CO_SWITCH_CRYSTAL:=			XTC3.OUT_CACHE_QUARTZ,
+	IN_QF:=						XTC3.STATE_Sensor_Fail,
+	IN_RATE:=					XTC3.STATE_Rate,
+	IN_FREQ:= 					XTC3.STATE_Frequency,
+	IN_THICKNESS:= 				XTC3.STATE_Thickness,
+	IN_LIFE:= 					XTC3.STATE_Crystal_Life,
+	IN_ACTIVITY:=				,
+	PRM_Seuil_Life:=			PRM_Seuil_Crystal_Life,
+	PRM_Seuil_Activity:=		,
+	RQ_SWITCH_CRYSTAL=>			XTC3.CO_Switch_Crystal,
+	);
+
+(******************* PILOTAGE DES QUARTZ **********************)
+
+IF MODE_QUARTZ_PROD.STATE_Mode THEN
+	EVAPS1.PRM_CRYSTAL_POSITION		:=	MODE_QUARTZ_PROD.OUT_Quartz;
+	EVAPS2.PRM_CRYSTAL_POSITION		:=	MODE_QUARTZ_PROD.OUT_Quartz;
+	EVAPS3.PRM_CRYSTAL_POSITION		:=	MODE_QUARTZ_PROD.OUT_Quartz;
+END_IF
+
+(******************* EVAPORATION  S1 **********************)
+
+EVAPS1.OP_Marche.ENABLE_EXT := TRUE;
+EVAPS1.OP_Stop.ENABLE_EXT := TRUE;
+(*Demande marche source par bloc empilement*)
+EVAPS1.OP_Marche.ON_PLC := MAIN.STEP_EMPILEMENT.RQ_PREP_S1;
+EVAPS1.OP_Stop.ON_PLC := MAIN.STEP_EMPILEMENT.RQ_STOP_EVAP_S1 OR INIT_MACHINE.RQ_STOP_EVAP ;
+
+EVAPS1(
+	RESET:=MACHINE.STATE_Off ,
+	MANUAL:= MACHINE.STATE_Manu ,
+	I_END_DEPOSITION:= NOT MAIN.STEP_EMPILEMENT.RQ_EVAP_S1 OR INIT_MACHINE.RQ_STOP_EVAP,
+	I_EVAP_ON:= MAIN.STEP_EMPILEMENT.RQ_EVAP_S1,
+	I_DEF_QZ_CTRL_RATE:= XTC3.STATE_Sensor_Fail,
+	I_TIME_POWER:= XTC3.I_Time_Power,
+	CO_FIN_ETAPE:= MAIN.STEP_EMPILEMENT.RQ_NEXT_LAYER,
+	I_THICKNESS:= XTC3.STATE_Thickness,		(*Epaisseur global déposé*)
+	I_cache_ouvert:= CC11.STATE_On,
+	I_cache_ferme:= CC11.STATE_Off,
+	I_ref_source_ok:= PRG_SERVITUDES.WATER[4] AND PRG_SERVITUDES.WATER[5],	(*Refroidissement Canon*)
+	I_ref_mesure_ok:= PRG_SERVITUDES.WATER[1],	(*Refroidissement Quartz*)
+	I_retour_pos_creuset_ok:= CRUCIBLE1.STATE_POS_OK ,
+	I_HT_ON:=SOURCE1.STATE_HV_ON,
+	I_HT_OFF:= NOT SOURCE1.STATE_HV_ON,
+	I_FIL_ON:= SOURCE1.STATE_SRC_ON,
+	I_FIL_OFF:= NOT SOURCE1.STATE_SRC_ON,
+	I_SWEEP_ON := SWEEP1.STATE_ON,
+	I_Power:= XTC3.STATE_Power,
+	I_SWITCH_XTAL_OK:= QZ1.STATE_SELECT_QZ_OK,
+	I_OUV_CACHE_SOURCE:= XTC3.OUT_CACHE_SRCE,
+	PRM_Quartz_Cache_Source:= CONF_QUARTZ_CC_SRCE[0],
+	PRM_THICKNESS := MAIN.STEP_EMPILEMENT.PRM_EPAISSEUR,
+	PRM_MULTI_QUARTZ:= TRUE,
+	CONS_NCR:= CRUCIBLE1.PRM_NCR,
+	CONS_NBAL:= SWEEP1.PRM_NbBal,
+	CONS_HT := SOURCE1.I_TENSION,
+	STATE_Segment=> ,
+	STATE_TEMPS_PREPARATION=> ,
+	STATE_TEMPS_CLOTURE=> ,
+	STATE_TEMPS_DEPOT=> ,
+	STATE_TEMPS_RESTANT_PREP=> ,
+	STATE_TEMPS_RESTANT_CLOT=> ,
+	STATE_TEMPS_RESTANT_DEPOT=> ,
+	OUT_Power=> ,
+	RQ_ouv_cache_IAD=> ,
+	RQ_Ref_source=> ,
+	RQ_Ref_mesure=> ,
+	RQ_Ouv_Cache_source=> ,
+	RQ_marche_HT=> ,
+	RQ_marche_FIL=> ,
+	STATE_PREP_OK=> ,
+	STATE_EVAP=> ,
+	STATE_CLOT_OK=> ,
+	STATE_AR=> );
+
+
+(******************* EVAPORATION  S2 **********************)
+
+EVAPS2.OP_Marche.ENABLE_EXT := 		TRUE;
+EVAPS2.OP_Stop.ENABLE_EXT := 		TRUE;
+(*Demande marche source par bloc empilement*)
+EVAPS2.OP_Marche.ON_PLC :=			MAIN.STEP_EMPILEMENT.RQ_PREP_S2;
+EVAPS2.OP_Stop.ON_PLC := 			MAIN.STEP_EMPILEMENT.RQ_STOP_EVAP_S2 OR INIT_MACHINE.RQ_STOP_EVAP;
+
+(*recopie*)
+EVAPS2.PRM_TPS_MIN_SURV_DEPOT	:=	EVAPS1.PRM_TPS_MIN_SURV_DEPOT;
+EVAPS2.PRM_FACTEUR_TEMPS_DEPOT	:=	EVAPS1.PRM_FACTEUR_TEMPS_DEPOT;	
+
+EVAPS2(
+	RESET:=						MACHINE.STATE_Off,
+	MANUAL:= 					MACHINE.STATE_Manu,
+	I_END_DEPOSITION:= 			NOT MAIN.STEP_EMPILEMENT.RQ_EVAP_S2 OR INIT_MACHINE.RQ_STOP_EVAP,
+	I_EVAP_ON:= 				MAIN.STEP_EMPILEMENT.RQ_EVAP_S2,
+	I_DEF_QZ_CTRL_RATE:= 		XTC3.STATE_Sensor_Fail ,
+	I_TIME_POWER:= 				XTC3.I_Time_Power,
+	CO_FIN_ETAPE:= 				MAIN.STEP_EMPILEMENT.RQ_NEXT_LAYER ,
+	I_THICKNESS:= 				XTC3.STATE_Thickness ,				(*Epaisseur global déposé*)
+	I_cache_ouvert:= 			CC12.STATE_On ,
+	I_cache_ferme:= 			CC12.STATE_Off ,
+	I_ref_source_ok:= 			PRG_SERVITUDES.WATER[2],			(*Refroidissement Source Joule*)
+	I_ref_mesure_ok:= 			PRG_SERVITUDES.WATER[1],			(*Refroidissement Quartz*)
+	I_retour_pos_creuset_ok:= 	TRUE ,
+	I_HT_ON:=  					SOURCE2.STATE_EJ_ON ,
+	I_HT_OFF:= 					NOT SOURCE2.STATE_EJ_ON ,
+	I_FIL_ON:= 					TRUE ,
+	I_FIL_OFF:= 				TRUE ,
+	I_Power:= 					XTC3.STATE_Power ,
+	I_SWITCH_XTAL_OK:= 			QZ1.STATE_SELECT_QZ_OK,
+	I_OUV_CACHE_SOURCE:= 		XTC3.OUT_CACHE_SRCE,
+	PRM_Quartz_Cache_Source:= 	CONF_QUARTZ_CC_SRCE[0],
+	PRM_THICKNESS := 			MAIN.STEP_EMPILEMENT.PRM_EPAISSEUR,
+	PRM_MULTI_QUARTZ:= 			TRUE,
+	PRM_HT:= 					10.0,
+	CONS_NCR:= 					VAR_NCR ,
+	CONS_NBAL:=					VAR_NBAL ,
+	CONS_HT := 					VAR_HT ,
+	);
+
+
+(******************* EVAPORATION  S3 **********************)
+
+EVAPS3.OP_Marche.ENABLE_EXT := 		TRUE;
+EVAPS3.OP_Stop.ENABLE_EXT := 		TRUE;
+(*Demande marche source par bloc empilement*)
+EVAPS3.OP_Marche.ON_PLC :=			MAIN.STEP_EMPILEMENT.RQ_PREP_S3;
+EVAPS3.OP_Stop.ON_PLC := 			MAIN.STEP_EMPILEMENT.RQ_STOP_EVAP_S3 OR INIT_MACHINE.RQ_STOP_EVAP;
+
+(*recopie*)
+EVAPS3.PRM_TPS_MIN_SURV_DEPOT	:=	EVAPS1.PRM_TPS_MIN_SURV_DEPOT;
+EVAPS3.PRM_FACTEUR_TEMPS_DEPOT	:=	EVAPS1.PRM_FACTEUR_TEMPS_DEPOT;	
+
+EVAPS3(
+	RESET:=						MACHINE.STATE_Off,
+	MANUAL:= 					MACHINE.STATE_Manu,
+	I_END_DEPOSITION:= 			NOT MAIN.STEP_EMPILEMENT.RQ_EVAP_S3 OR INIT_MACHINE.RQ_STOP_EVAP,
+	I_EVAP_ON:= 				MAIN.STEP_EMPILEMENT.RQ_EVAP_S3,
+	I_DEF_QZ_CTRL_RATE:= 		XTC3.STATE_Sensor_Fail ,
+	I_TIME_POWER:= 				XTC3.I_Time_Power,
+	CO_FIN_ETAPE:= 				MAIN.STEP_EMPILEMENT.RQ_NEXT_LAYER ,
+	I_THICKNESS:= 				XTC3.STATE_Thickness ,				(*Epaisseur global déposé*)
+	I_cache_ouvert:= 			CC13.STATE_On ,
+	I_cache_ferme:= 			CC13.STATE_Off ,
+	I_ref_source_ok:= 			PRG_SERVITUDES.WATER[3],			(*Refroidissement Source Joule*)
+	I_ref_mesure_ok:= 			PRG_SERVITUDES.WATER[1],			(*Refroidissement Quartz*)
+	I_retour_pos_creuset_ok:= 	TRUE ,
+	I_HT_ON:=  					SOURCE3.STATE_EJ_ON ,
+	I_HT_OFF:= 					NOT SOURCE3.STATE_EJ_ON ,
+	I_FIL_ON:= 					TRUE ,
+	I_FIL_OFF:= 				TRUE ,
+	I_Power:= 					XTC3.STATE_Power ,
+	I_SWITCH_XTAL_OK:= 			QZ1.STATE_SELECT_QZ_OK,
+	I_OUV_CACHE_SOURCE:= 		XTC3.OUT_CACHE_SRCE,
+	PRM_Quartz_Cache_Source:= 	CONF_QUARTZ_CC_SRCE[0],
+	PRM_THICKNESS := 			MAIN.STEP_EMPILEMENT.PRM_EPAISSEUR,
+	PRM_MULTI_QUARTZ:= 			TRUE,
+	PRM_HT:= 					10.0,
+	CONS_NCR:= 					VAR_NCR ,
+	CONS_NBAL:=					VAR_NBAL ,
+	CONS_HT := 					VAR_HT ,
+	);
+
+
+(**********Contrôleur de dépôt XTC3***********)
+(*transmission consignes depuis source utilisée*)
+IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE1 THEN
+	XTC3.I_Soak_Power_2		:=	EVAPS1.PRM_SOAK2_POWER;
+	XTC3.I_Deposition_Rate	:=	EVAPS1.PRM_Rate;
+	XTC3.I_Thick_SP			:=	EVAPS1.PRM_Thick_SP;
+	XTC3.I_New_Rate			:=	EVAPS1.PRM_New_Rate;
+	XTC3.I_Rate_Ramp_Time	:=	EVAPS1.PRM_Rate_Ramp_Time;
+	XTC3.I_Stab_Single		:=	EVAPS1.PRM_Stability_Single;
+	XTC3.I_Stab_Total		:=	EVAPS1.PRM_Stability_Total;
+	XTC3.I_Quality_Percent	:=	EVAPS1.PRM_Quality_Percent;
+	XTC3.I_Quality_Counts	:=	EVAPS1.PRM_Quality_Counts;
+	XTC3.I_PID_Gain			:=	EVAPS1.PRM_GAIN;
+	XTC3.I_PID_Ti			:=	EVAPS1.PRM_INTEGRAL;
+	XTC3.I_PID_Td			:=	EVAPS1.PRM_DERIVEE;
+	XTC3.I_Max_Power		:=	EVAPS1.PRM_PMAX;
+	IF EVAPS1.PRM_Quartz_Cache_Source AND EVAPS1.PRM_SHUTTER_Option THEN
+		IF EVAPS1.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	1; (*shutter*)
+		ELSE
+			XTC3.I_Delay_Option		:=	3; (*both*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS1.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	1;
+		XTC3.I_Transfer_Tool			:=	EVAPS1.PRM_Transfer_Tooling;	(*Pas de 2eme sensor sous cache *)
+		*)
+	ELSE
+		IF EVAPS1.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	0; (*none*)
+		ELSE
+			XTC3.I_Delay_Option		:=	2; (*controle*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS1.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	0;								(*Pas de 2eme sensor sous cache*)
+		*)
+	END_IF
+END_IF
+
+IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE2 THEN
+	XTC3.I_Soak_Power_2		:=	EVAPS2.PRM_SOAK2_POWER;
+	XTC3.I_Deposition_Rate	:=	EVAPS2.PRM_Rate;
+	XTC3.I_Thick_SP			:=	EVAPS2.PRM_Thick_SP;
+	XTC3.I_New_Rate			:=	EVAPS2.PRM_New_Rate;
+	XTC3.I_Rate_Ramp_Time	:=	EVAPS2.PRM_Rate_Ramp_Time;
+	XTC3.I_Stab_Single		:=	EVAPS2.PRM_Stability_Single;
+	XTC3.I_Stab_Total		:=	EVAPS2.PRM_Stability_Total;
+	XTC3.I_Quality_Percent	:=	EVAPS2.PRM_Quality_Percent;
+	XTC3.I_Quality_Counts	:=	EVAPS2.PRM_Quality_Counts;
+	XTC3.I_PID_Gain			:=	EVAPS2.PRM_GAIN;
+	XTC3.I_PID_Ti			:=	EVAPS2.PRM_INTEGRAL;
+	XTC3.I_PID_Td			:=	EVAPS2.PRM_DERIVEE;
+	XTC3.I_Max_Power		:=	EVAPS2.PRM_PMAX;
+	IF EVAPS2.PRM_Quartz_Cache_Source AND EVAPS2.PRM_SHUTTER_Option THEN
+		IF EVAPS2.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	1; (*shutter*)
+		ELSE
+			XTC3.I_Delay_Option		:=	3; (*both*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS2.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	1;
+		XTC3.I_Transfer_Tool			:=	EVAPS1.PRM_Transfer_Tooling;	(*Pas de 2eme sensor sous cache *)
+		*)
+	ELSE
+		IF EVAPS2.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	0; (*none*)
+		ELSE
+			XTC3.I_Delay_Option		:=	2; (*controle*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS2.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	0;								(*Pas de 2eme sensor sous cache*)
+		*)
+	END_IF
+END_IF
+
+IF MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE3 THEN
+	XTC3.I_Soak_Power_2		:=	EVAPS3.PRM_SOAK2_POWER;
+	XTC3.I_Deposition_Rate	:=	EVAPS3.PRM_Rate;
+	XTC3.I_Thick_SP			:=	EVAPS3.PRM_Thick_SP;
+	XTC3.I_New_Rate			:=	EVAPS3.PRM_New_Rate;
+	XTC3.I_Rate_Ramp_Time	:=	EVAPS3.PRM_Rate_Ramp_Time;
+	XTC3.I_Stab_Single		:=	EVAPS3.PRM_Stability_Single;
+	XTC3.I_Stab_Total		:=	EVAPS3.PRM_Stability_Total;
+	XTC3.I_Quality_Percent	:=	EVAPS3.PRM_Quality_Percent;
+	XTC3.I_Quality_Counts	:=	EVAPS3.PRM_Quality_Counts;
+	XTC3.I_PID_Gain			:=	EVAPS3.PRM_GAIN;
+	XTC3.I_PID_Ti			:=	EVAPS3.PRM_INTEGRAL;
+	XTC3.I_PID_Td			:=	EVAPS3.PRM_DERIVEE;
+	XTC3.I_Max_Power		:=	EVAPS3.PRM_PMAX;
+	IF EVAPS3.PRM_Quartz_Cache_Source AND EVAPS3.PRM_SHUTTER_Option THEN
+		IF EVAPS3.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	1; (*shutter*)
+		ELSE
+			XTC3.I_Delay_Option		:=	3; (*both*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS3.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	1;
+		XTC3.I_Transfer_Tool			:=	EVAPS1.PRM_Transfer_Tooling;	(*Pas de 2eme sensor sous cache *)
+		*)
+	ELSE
+		IF EVAPS3.PRM_CTRL_DELAY_TIME = 0 THEN
+			XTC3.I_Delay_Option		:=	0; (*none*)
+		ELSE
+			XTC3.I_Delay_Option		:=	2; (*controle*)
+			XTC3.I_Ctrl_Delay_Time	:=	EVAPS3.PRM_CTRL_DELAY_TIME;
+		END_IF
+		(*
+		XTC3.I_Transfer_Sensor		:=	0;								(*Pas de 2eme sensor sous cache*)
+		*)
+	END_IF
+END_IF
+
+TIMER_ECO_MODE(	IN:= ECO_MODE OR MACHINE.STATE_Off, 
+				PT:= T#1M30S); 		(*Temps inhibition défaut lors de la sortie de veille*)
+
+XTC3(
+	MANUAL:= MACHINE.STATE_Manu,
+	RESET:= MACHINE.STATE_Off,
+	CO_START:= (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE1 AND EVAPS1.OUT_Start_Controleur AND NOT EVAPS1.PRM_PFixe)
+					OR (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE2 AND EVAPS2.OUT_Start_Controleur AND NOT EVAPS2.PRM_PFixe)
+					OR (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE3 AND EVAPS3.OUT_Start_Controleur AND NOT EVAPS3.PRM_PFixe),
+	CO_STOP:= MAIN.STEP_EMPILEMENT.OUT_STOP_CONTROLEUR
+					OR EXECPROC.STATE_INTERRUPTED
+					OR INIT_MACHINE.RQ_STOP_CONTROLLER,
+	CO_RAZ_THICK:= MAIN.STEP_EMPILEMENT.OUT_RAZ_THICK_CONTROLEUR,
+	CO_RESET_Ctrl:= MAIN.STEP_EMPILEMENT.OUT_RESET_CONTROLEUR
+					(*OR (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE1 AND EVAPS1.OUT_Start_Controleur AND EVAPS1.PRM_PFixe)
+					OR (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE2 AND EVAPS2.OUT_Start_Controleur AND EVAPS2.PRM_PFixe)
+					OR (MAIN.STEP_EMPILEMENT.PRM_UTIL_SOURCE3 AND EVAPS3.OUT_Start_Controleur AND EVAPS3.PRM_PFixe)*),
+	CO_Enable:= MACHINE.STATE_On,
+	CO_Load_Param:= MAIN.STEP_EMPILEMENT.RQ_LOAD_PARAM,
+	I_Final_Thickness:= MAIN.STEP_EMPILEMENT.PRM_EPAISSEUR,
+	I_Tool_Factor1:= MAIN.STEP_EMPILEMENT.PRM_TOOLING_QZ[0],
+	I_Tool_Factor2:= MAIN.STEP_EMPILEMENT.PRM_TOOLING_QZ[1],
+	I_Densite:= MAIN.STEP_EMPILEMENT.PRM_DENSITE_QZ[0],
+	I_ZRatio:= MAIN.STEP_EMPILEMENT.PRM_ZRATIO_QZ[0],
+	I_Time_Power:= MAIN.STEP_EMPILEMENT.PRM_TIMEPOWER, 
+	I_Inhibe_Def:= TIMER_ECO_MODE.Q,);
+	
+(*Affectation des sorties*)
+IF EXECPROC.RQ_FM_EXEC_STEP[17] OR (VISU_STOP_ECO_MANU AND MACHINE.STATE_Manu) THEN					(*début étape standby*)
+	ECO_MODE := TRUE;
+ELSIF EXECPROC.RQ_FM_EXEC_STEP[18] OR (NOT VISU_STOP_ECO_MANU AND MACHINE.STATE_Manu) THEN			(*fin étape standby*)
+	ECO_MODE := FALSE;
+ELSIF EXECPROC.OP_RUN.AR THEN
+	ECO_MODE := MACHINE.RQ_Standby OR MACHINE.STATE_Standby;		(*dans ce cas c'est mode de marche qui prend la main*)
+END_IF
+
+OUT_MEG1 	:= NOT ECO_MODE AND PRG_POMPAGE.M11.STATE_Seuil[8];
+OUT_MEJ1	:= SOURCE2.OUT_MEJ;
+OUT_MEJ2	:= SOURCE3.OUT_MEJ;
+IF SOURCE2.OUT_MEJ THEN
+	OUT_QEJ1		:=	SOURCE2.OUT_QEJ;
+ELSIF SOURCE3.OUT_MEJ THEN
+	OUT_QEJ2		:=	SOURCE3.OUT_QEJ;
+ELSE
+	OUT_QEJ1		:=	0;
+	OUT_QEJ2		:=	0;
+END_IF
+OUT_MPR230 	:= NOT ECO_MODE;
+
+STATE_AR:= ((MACHINE.STATE_Auto OR MACHINE.STATE_Prod) AND EVAPS1.OP_Stop.OK AND EVAPS2.OP_Stop.OK AND EVAPS3.OP_Stop.OK) OR
+			(MACHINE.STATE_MANU AND NOT SOURCE1.STATE_SRC
+			AND NOT SOURCE1.STATE_HV AND NOT SOURCE2.STATE_EJ_ON AND NOT SOURCE3.STATE_EJ_ON  );
+
+(*Défauts venant interrompre le procédé*)
+STATE_Def_IProc := 	CC11.STATE_Nok OR
+					CC12.STATE_Nok OR
+					CC13.STATE_Nok OR
+					EVAPS1.DEF_QZ_CTRL_RATE.DEF OR
+					EVAPS1.DEF_Pmax.DEF OR
+					EVAPS1.DEF_Pmin.DEF OR
+					EVAPS1.DEF_TEMPS_MAX.DEF OR
+					EVAPS1.DEF_REF.DEF OR
+					EVAPS2.DEF_QZ_CTRL_RATE.DEF OR
+					EVAPS2.DEF_Pmax.DEF OR
+					EVAPS2.DEF_Pmin.DEF OR
+					EVAPS2.DEF_TEMPS_MAX.DEF OR
+					EVAPS2.DEF_REF.DEF OR
+					EVAPS3.DEF_QZ_CTRL_RATE.DEF OR
+					EVAPS3.DEF_Pmax.DEF OR
+					EVAPS3.DEF_Pmin.DEF OR
+					EVAPS3.DEF_TEMPS_MAX.DEF OR
+					EVAPS3.DEF_REF.DEF OR
+					SOURCE1.STATE_NOK OR
+					SOURCE2.STATE_NOK OR
+					SOURCE3.STATE_NOK OR
+					XTC3.DEF_COM_STATUS.DEF OR
+					XTC3.DEF_COM_PARAMETER.DEF OR
+					XTC3.DEF_COM_COMMAND.DEF OR
+					(QZ1.DEF_QZ.DEF AND NOT MODE_QUARTZ_PROD.STATE_Mode) OR //AND (NOT XTC3.I_Time_Power) OR //option time_power gérée dans l'XTC si tête rotary déclarée
+					QZ1.DEF_Positionnement.DEF OR
+					CRUCIBLE1.STATE_NOK;
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

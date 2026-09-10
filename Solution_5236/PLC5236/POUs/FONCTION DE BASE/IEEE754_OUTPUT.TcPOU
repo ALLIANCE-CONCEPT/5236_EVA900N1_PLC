@@ -1,0 +1,933 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="IEEE754_OUTPUT" Id="{ccedd2cc-119e-4c92-8e79-c4c094658770}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK IEEE754_OUTPUT
+
+(*fonction de conversion de trame de type IEEE754 (4 octets) en réel simple précision*)
+
+VAR_INPUT
+	IN_Value:				REAL;								(*valeur a convertir*)
+END_VAR
+
+VAR_OUTPUT
+	OUTPUT:				ARRAY[0..3] OF USINT;					(*trame de sortie*)
+END_VAR
+
+VAR
+	VAR_valeur_entiere:			DINT; 		(*valeur entiere du reel a convertir*)
+	VAR_value2:			DWORD;
+	VAR_valeur_decimal:			REAL;		(*partie decimal de la valeur a convertir*)
+	VAR_value_entiere_corrige:	DINT;
+	Var_value_corrige:	REAL;
+	VAR_calcul_mantisse_temp:	DINT;
+	VAR_calcul_mantisse_temp2:	DWORD;
+	VAR_signe:			BOOL;
+	VAR_calcul_exposant:	INT;
+	VAR_exposant:		INT;
+	VAR_mantisse:		REAL;
+	VAR_mantisse2:		ARRAY[0..32]	OF REAL;
+	VAR_CALCUL_SORTIE: DINT;
+	I:		INT;
+	J:		BYTE;
+	N:		BYTE;
+	Var_decalage_bit:	BYTE;
+	VAR_mantisse_decimal: DWORD;
+	VAR_mantisse_entier: DWORD;
+	VAR_mantisse_final: DWORD;
+	VAR_mantisse_final2: DWORD;
+	VAR_nb_zero: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*calcul de la pression*)
+
+IF IN_Value<0 THEN
+	VAR_SIGNE:=TRUE;
+ELSIF IN_Value>0 THEN
+	VAR_SIGNE:=FALSE;
+ELSIF IN_Value= 0 THEN
+	VAR_SIGNE:=FALSE;
+END_IF
+
+VAR_valeur_entiere:= ABS(REAL_TO_DINT (IN_Value));
+VAR_valeur_decimal := ABS(IN_Value) - VAR_valeur_entiere;
+
+IF VAR_valeur_decimal < 0 THEN
+Var_value_corrige := 1+ VAR_valeur_decimal;
+VAR_value_entiere_corrige:=VAR_valeur_entiere -1;
+ELSE Var_value_corrige := VAR_valeur_decimal;
+	VAR_value_entiere_corrige:=VAR_valeur_entiere;
+END_IF
+
+VAR_calcul_mantisse_temp:=0;
+I:=0;
+
+VAR_mantisse2[0]:= Var_value_corrige;
+
+FOR I:=1 TO 32 DO
+
+VAR_mantisse2[I]:= VAR_mantisse2[I-1]*2;
+
+IF VAR_mantisse2[1] >1 THEN
+VAR_calcul_mantisse_temp.31:=TRUE;
+VAR_mantisse2[1]:= VAR_mantisse2[1] -1;
+ELSIF VAR_mantisse2[1] =1 THEN
+VAR_calcul_mantisse_temp.31:=TRUE;
+VAR_mantisse2[2]:=0;
+VAR_mantisse2[3]:=0;
+VAR_mantisse2[4]:=0;
+VAR_mantisse2[5]:=0;
+VAR_mantisse2[6]:=0;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[2] >1 THEN
+VAR_calcul_mantisse_temp.30:=TRUE;
+VAR_mantisse2[2]:= VAR_mantisse2[2] -1;
+ELSIF VAR_mantisse2[2] =1 THEN
+VAR_calcul_mantisse_temp.30:=TRUE;
+VAR_mantisse2[3]:=0;
+VAR_mantisse2[4]:=0;
+VAR_mantisse2[5]:=0;
+VAR_mantisse2[6]:=0;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[3] >1 THEN
+VAR_calcul_mantisse_temp.29:=TRUE;
+VAR_mantisse2[3]:= VAR_mantisse2[3] -1;
+ELSIF VAR_mantisse2[3] =1 THEN
+VAR_calcul_mantisse_temp.29:=TRUE;
+VAR_mantisse2[4]:=0;
+VAR_mantisse2[5]:=0;
+VAR_mantisse2[6]:=0;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[4] >1 THEN
+VAR_calcul_mantisse_temp.28:=TRUE;
+VAR_mantisse2[4]:= VAR_mantisse2[4] -1;
+ELSIF VAR_mantisse2[4] =1 THEN
+VAR_calcul_mantisse_temp.28:=TRUE;
+VAR_mantisse2[5]:=0;
+VAR_mantisse2[6]:=0;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[5] >1 THEN
+VAR_calcul_mantisse_temp.27:=TRUE;
+VAR_mantisse2[5]:= VAR_mantisse2[5] -1;
+ELSIF VAR_mantisse2[5] =1 THEN
+VAR_calcul_mantisse_temp.27:=TRUE;
+VAR_mantisse2[6]:=0;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[6] >1 THEN
+VAR_calcul_mantisse_temp.26:=TRUE;
+VAR_mantisse2[6]:= VAR_mantisse2[6] -1;
+ELSIF VAR_mantisse2[6] =1 THEN
+VAR_calcul_mantisse_temp.26:=TRUE;
+VAR_mantisse2[7]:=0;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[7] >1 THEN
+VAR_calcul_mantisse_temp.25:=TRUE;
+VAR_mantisse2[7]:= VAR_mantisse2[7] -1;
+ELSIF VAR_mantisse2[7] =1 THEN
+VAR_calcul_mantisse_temp.25:=TRUE;
+VAR_mantisse2[8]:=0;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[8] >1 THEN
+VAR_calcul_mantisse_temp.24:=TRUE;
+VAR_mantisse2[8]:= VAR_mantisse2[8] -1;
+ELSIF VAR_mantisse2[8] =1 THEN
+VAR_calcul_mantisse_temp.24:=TRUE;
+VAR_mantisse2[9]:=0;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[9] >1 THEN
+VAR_calcul_mantisse_temp.23:=TRUE;
+VAR_mantisse2[9]:= VAR_mantisse2[9] -1;
+ELSIF VAR_mantisse2[9] =1 THEN
+VAR_calcul_mantisse_temp.23:=TRUE;
+VAR_mantisse2[10]:=0;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[10] >1 THEN
+VAR_calcul_mantisse_temp.22:=TRUE;
+VAR_mantisse2[10]:= VAR_mantisse2[10] -1;
+ELSIF VAR_mantisse2[10] =1 THEN
+VAR_calcul_mantisse_temp.22:=TRUE;
+VAR_mantisse2[11]:=0;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[11] >1 THEN
+VAR_calcul_mantisse_temp.21:=TRUE;
+VAR_mantisse2[11]:= VAR_mantisse2[11] -1;
+ELSIF VAR_mantisse2[11] =1 THEN
+VAR_calcul_mantisse_temp.21:=TRUE;
+VAR_mantisse2[12]:=0;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[12] >1 THEN
+VAR_calcul_mantisse_temp.20:=TRUE;
+VAR_mantisse2[12]:= VAR_mantisse2[12] -1;
+ELSIF VAR_mantisse2[12] =1 THEN
+VAR_calcul_mantisse_temp.20:=TRUE;
+VAR_mantisse2[13]:=0;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[13] >1 THEN
+VAR_calcul_mantisse_temp.19:=TRUE;
+VAR_mantisse2[13]:= VAR_mantisse2[13] -1;
+ELSIF VAR_mantisse2[13] =1 THEN
+VAR_calcul_mantisse_temp.19:=TRUE;
+VAR_mantisse2[14]:=0;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[14] >1 THEN
+VAR_calcul_mantisse_temp.18:=TRUE;
+VAR_mantisse2[14]:= VAR_mantisse2[14] -1;
+ELSIF VAR_mantisse2[14] =1 THEN
+VAR_calcul_mantisse_temp.18:=TRUE;
+VAR_mantisse2[15]:=0;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+
+IF VAR_mantisse2[15] >1 THEN
+VAR_calcul_mantisse_temp.17:=TRUE;
+VAR_mantisse2[15]:= VAR_mantisse2[15] -1;
+ELSIF VAR_mantisse2[15] =1 THEN
+VAR_calcul_mantisse_temp.17:=TRUE;
+VAR_mantisse2[16]:=0;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[16] >1 THEN
+VAR_calcul_mantisse_temp.16:=TRUE;
+VAR_mantisse2[16]:= VAR_mantisse2[16] -1;
+ELSIF VAR_mantisse2[16] =1 THEN
+VAR_calcul_mantisse_temp.16:=TRUE;
+VAR_mantisse2[17]:=0;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[17] >1 THEN
+VAR_calcul_mantisse_temp.15:=TRUE;
+VAR_mantisse2[17]:= VAR_mantisse2[17] -1;
+ELSIF VAR_mantisse2[17] =1 THEN
+VAR_calcul_mantisse_temp.15:=TRUE;
+VAR_mantisse2[18]:=0;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[18] >1 THEN
+VAR_calcul_mantisse_temp.14:=TRUE;
+VAR_mantisse2[18]:= VAR_mantisse2[18] -1;
+ELSIF VAR_mantisse2[18] =1 THEN
+VAR_calcul_mantisse_temp.14:=TRUE;
+VAR_mantisse2[19]:=0;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[19] >1 THEN
+VAR_calcul_mantisse_temp.13:=TRUE;
+VAR_mantisse2[19]:= VAR_mantisse2[19] -1;
+ELSIF VAR_mantisse2[19] =1 THEN
+VAR_calcul_mantisse_temp.13:=TRUE;
+VAR_mantisse2[20]:=0;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[20] >1 THEN
+VAR_calcul_mantisse_temp.12:=TRUE;
+VAR_mantisse2[20]:= VAR_mantisse2[20] -1;
+ELSIF VAR_mantisse2[20] =1 THEN
+VAR_calcul_mantisse_temp.12:=TRUE;
+VAR_mantisse2[21]:=0;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[21] >1 THEN
+VAR_calcul_mantisse_temp.11:=TRUE;
+VAR_mantisse2[21]:= VAR_mantisse2[21] -1;
+ELSIF VAR_mantisse2[21] =1 THEN
+VAR_calcul_mantisse_temp.11:=TRUE;
+VAR_mantisse2[22]:=0;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[22] >1 THEN
+VAR_calcul_mantisse_temp.10:=TRUE;
+VAR_mantisse2[22]:= VAR_mantisse2[22] -1;
+ELSIF VAR_mantisse2[22] =1 THEN
+VAR_calcul_mantisse_temp.10:=TRUE;
+VAR_mantisse2[23]:=0;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[23] >1 THEN
+VAR_calcul_mantisse_temp.9:=TRUE;
+VAR_mantisse2[23]:= VAR_mantisse2[23] -1;
+ELSIF VAR_mantisse2[23] =1 THEN
+VAR_calcul_mantisse_temp.9:=TRUE;
+VAR_mantisse2[24]:=0;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[24] >1 THEN
+VAR_calcul_mantisse_temp.8:=TRUE;
+VAR_mantisse2[24]:= VAR_mantisse2[24] -1;
+ELSIF VAR_mantisse2[24] =1 THEN
+VAR_calcul_mantisse_temp.8:=TRUE;
+VAR_mantisse2[25]:=0;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[25] >1 THEN
+VAR_calcul_mantisse_temp.7:=TRUE;
+VAR_mantisse2[25]:= VAR_mantisse2[25] -1;
+ELSIF VAR_mantisse2[25] =1 THEN
+VAR_calcul_mantisse_temp.7:=TRUE;
+VAR_mantisse2[26]:=0;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[26] >1 THEN
+VAR_calcul_mantisse_temp.6:=TRUE;
+VAR_mantisse2[26]:= VAR_mantisse2[26] -1;
+ELSIF VAR_mantisse2[26] =1 THEN
+VAR_calcul_mantisse_temp.6:=TRUE;
+VAR_mantisse2[27]:=0;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[27] >1 THEN
+VAR_calcul_mantisse_temp.5:=TRUE;
+VAR_mantisse2[27]:= VAR_mantisse2[27] -1;
+ELSIF VAR_mantisse2[27] =1 THEN
+VAR_calcul_mantisse_temp.5:=TRUE;
+VAR_mantisse2[28]:=0;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[28] >1 THEN
+VAR_calcul_mantisse_temp.4:=TRUE;
+VAR_mantisse2[28]:= VAR_mantisse2[28] -1;
+ELSIF VAR_mantisse2[28] =1 THEN
+VAR_calcul_mantisse_temp.4:=TRUE;
+VAR_mantisse2[29]:=0;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[29] >1 THEN
+VAR_calcul_mantisse_temp.3:=TRUE;
+VAR_mantisse2[29]:= VAR_mantisse2[29] -1;
+ELSIF VAR_mantisse2[29] =1 THEN
+VAR_calcul_mantisse_temp.3:=TRUE;
+VAR_mantisse2[30]:=0;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[30] >1 THEN
+VAR_calcul_mantisse_temp.2:=TRUE;
+VAR_mantisse2[30]:= VAR_mantisse2[30] -1;
+ELSIF VAR_mantisse2[30] =1 THEN
+VAR_calcul_mantisse_temp.2:=TRUE;
+VAR_mantisse2[31]:=0;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[31] >1 THEN
+VAR_calcul_mantisse_temp.1:=TRUE;
+VAR_mantisse2[31]:= VAR_mantisse2[31] -1;
+ELSIF VAR_mantisse2[31] =1 THEN
+VAR_calcul_mantisse_temp.1:=TRUE;
+VAR_mantisse2[32]:=0;
+END_IF;
+IF VAR_mantisse2[32] >1 THEN
+VAR_calcul_mantisse_temp.0:=TRUE;
+VAR_mantisse2[32]:= VAR_mantisse2[32] -1;
+ELSIF VAR_mantisse2[32] =1 THEN
+VAR_calcul_mantisse_temp.0:=TRUE;
+END_IF;
+END_FOR
+
+VAR_calcul_mantisse_temp2:=VAR_calcul_mantisse_temp;
+VAR_value2:=VAR_value_entiere_corrige;
+N:=0;
+FOR I:=1 TO 32 DO
+
+IF VAR_mantisse2[I] = 1 THEN
+	N:=INT_TO_BYTE(I);
+END_IF
+END_FOR
+
+Var_decalage_bit:=32-N;
+VAR_mantisse_decimal:=ROR(VAR_calcul_mantisse_temp2,Var_decalage_bit);
+VAR_mantisse_entier:=ROL(VAR_value2,N);
+
+VAR_mantisse_final:= VAR_mantisse_entier OR VAR_mantisse_decimal;
+
+IF VAR_mantisse_final.31=TRUE THEN
+VAR_nb_zero:=0;
+ELSIF VAR_mantisse_final.30=TRUE THEN
+VAR_nb_zero:=1;
+ELSIF VAR_mantisse_final.29=TRUE THEN
+VAR_nb_zero:=2;
+ELSIF VAR_mantisse_final.28=TRUE THEN
+VAR_nb_zero:=3;
+ELSIF VAR_mantisse_final.27=TRUE THEN
+VAR_nb_zero:=4;
+ELSIF VAR_mantisse_final.26=TRUE THEN
+VAR_nb_zero:=5;
+ELSIF VAR_mantisse_final.25=TRUE THEN
+VAR_nb_zero:=6;
+ELSIF VAR_mantisse_final.24=TRUE THEN
+VAR_nb_zero:=7;
+ELSIF VAR_mantisse_final.23=TRUE THEN
+VAR_nb_zero:=8;
+ELSIF VAR_mantisse_final.22=TRUE THEN
+VAR_nb_zero:=9;
+ELSIF VAR_mantisse_final.21=TRUE THEN
+VAR_nb_zero:=10;
+ELSIF VAR_mantisse_final.20=TRUE THEN
+VAR_nb_zero:=11;
+ELSIF VAR_mantisse_final.19=TRUE THEN
+VAR_nb_zero:=12;
+ELSIF VAR_mantisse_final.18=TRUE THEN
+VAR_nb_zero:=13;
+ELSIF VAR_mantisse_final.17=TRUE THEN
+VAR_nb_zero:=14;
+ELSIF VAR_mantisse_final.16=TRUE THEN
+VAR_nb_zero:=15;
+ELSIF VAR_mantisse_final.15=TRUE THEN
+VAR_nb_zero:=16;
+ELSIF VAR_mantisse_final.14=TRUE THEN
+VAR_nb_zero:=17;
+ELSIF VAR_mantisse_final.13=TRUE THEN
+VAR_nb_zero:=18;
+ELSIF VAR_mantisse_final.12=TRUE THEN
+VAR_nb_zero:=19;
+ELSIF VAR_mantisse_final.11=TRUE THEN
+VAR_nb_zero:=20;
+ELSIF VAR_mantisse_final.10=TRUE THEN
+VAR_nb_zero:=21;
+ELSIF VAR_mantisse_final.9=TRUE THEN
+VAR_nb_zero:=22;
+ELSIF VAR_mantisse_final.8=TRUE THEN
+VAR_nb_zero:=23;
+ELSIF VAR_mantisse_final.7=TRUE THEN
+VAR_nb_zero:=24;
+ELSIF VAR_mantisse_final.6=TRUE THEN
+VAR_nb_zero:=25;
+ELSIF VAR_mantisse_final.5=TRUE THEN
+VAR_nb_zero:=26;
+ELSIF VAR_mantisse_final.4=TRUE THEN
+VAR_nb_zero:=27;
+ELSIF VAR_mantisse_final.3=TRUE THEN
+VAR_nb_zero:=28;
+ELSIF VAR_mantisse_final.2=TRUE THEN
+VAR_nb_zero:=29;
+ELSIF VAR_mantisse_final.1=TRUE THEN
+VAR_nb_zero:=30;
+ELSIF VAR_mantisse_final.0=TRUE THEN
+VAR_nb_zero:=31;
+END_IF
+
+ VAR_calcul_exposant := (32 - VAR_nb_zero - N - 1) + 127;
+
+J:=INT_TO_BYTE(VAR_nb_zero);
+
+VAR_mantisse_final2:=ROL(VAR_mantisse_final ,J);
+
+VAR_calcul_sortie.31 := VAR_signe;
+
+VAR_calcul_sortie.30 := VAR_calcul_exposant.7;
+VAR_calcul_sortie.29 := VAR_calcul_exposant.6;
+VAR_calcul_sortie.28 := VAR_calcul_exposant.5;
+VAR_calcul_sortie.27 := VAR_calcul_exposant.4 ;
+VAR_calcul_sortie.26 := VAR_calcul_exposant.3;
+VAR_calcul_sortie.25 := VAR_calcul_exposant.2;
+VAR_calcul_sortie.24 := VAR_calcul_exposant.1 ;
+VAR_calcul_sortie.23 := VAR_calcul_exposant.0;
+
+VAR_calcul_sortie.22 := VAR_mantisse_final2.30;
+VAR_calcul_sortie.21 := VAR_mantisse_final2.29;
+VAR_calcul_sortie.20 := VAR_mantisse_final2.28;
+VAR_calcul_sortie.19 := VAR_mantisse_final2.27;
+VAR_calcul_sortie.18 := VAR_mantisse_final2.26;
+VAR_calcul_sortie.17 := VAR_mantisse_final2.25;
+VAR_calcul_sortie.16 := VAR_mantisse_final2.24;
+VAR_calcul_sortie.15 := VAR_mantisse_final2.23;
+VAR_calcul_sortie.14 := VAR_mantisse_final2.22;
+VAR_calcul_sortie.13 := VAR_mantisse_final2.21;
+VAR_calcul_sortie.12 := VAR_mantisse_final2.20;
+VAR_calcul_sortie.11 := VAR_mantisse_final2.19;
+VAR_calcul_sortie.10 := VAR_mantisse_final2.18;
+VAR_calcul_sortie.9 := VAR_mantisse_final2.17;
+VAR_calcul_sortie.8 := VAR_mantisse_final2.16;
+VAR_calcul_sortie.7 := VAR_mantisse_final2.15;
+VAR_calcul_sortie.6 := VAR_mantisse_final2.14;
+VAR_calcul_sortie.5 := VAR_mantisse_final2.13;
+VAR_calcul_sortie.4 := VAR_mantisse_final2.12;
+VAR_calcul_sortie.3 := VAR_mantisse_final2.11;
+VAR_calcul_sortie.2 := VAR_mantisse_final2.10;
+VAR_calcul_sortie.1 := VAR_mantisse_final2.9;
+VAR_calcul_sortie.0 := VAR_mantisse_final2.8;
+
+OUTPUT[0].0 := VAR_calcul_sortie.0;
+OUTPUT[0].1 := VAR_calcul_sortie.1;
+OUTPUT[0].2 := VAR_calcul_sortie.2;
+OUTPUT[0].3 := VAR_calcul_sortie.3;
+OUTPUT[0].4 := VAR_calcul_sortie.4;
+OUTPUT[0].5 := VAR_calcul_sortie.5;
+OUTPUT[0].6 := VAR_calcul_sortie.6;
+OUTPUT[0].7 := VAR_calcul_sortie.7;
+
+OUTPUT[1].0 := VAR_calcul_sortie.8;
+OUTPUT[1].1 := VAR_calcul_sortie.9;
+OUTPUT[1].2 := VAR_calcul_sortie.10;
+OUTPUT[1].3 := VAR_calcul_sortie.11;
+OUTPUT[1].4 := VAR_calcul_sortie.12;
+OUTPUT[1].5 := VAR_calcul_sortie.13;
+OUTPUT[1].6 := VAR_calcul_sortie.14;
+OUTPUT[1].7 := VAR_calcul_sortie.15;
+
+OUTPUT[2].0 := VAR_calcul_sortie.16;
+OUTPUT[2].1 := VAR_calcul_sortie.17;
+OUTPUT[2].2 := VAR_calcul_sortie.18;
+OUTPUT[2].3 := VAR_calcul_sortie.19;
+OUTPUT[2].4 := VAR_calcul_sortie.20;
+OUTPUT[2].5 := VAR_calcul_sortie.21;
+OUTPUT[2].6 := VAR_calcul_sortie.22;
+OUTPUT[2].7 := VAR_calcul_sortie.23;
+
+OUTPUT[3].0 := VAR_calcul_sortie.24;
+OUTPUT[3].1 := VAR_calcul_sortie.25;
+OUTPUT[3].2 := VAR_calcul_sortie.26;
+OUTPUT[3].3 := VAR_calcul_sortie.27;
+OUTPUT[3].4 := VAR_calcul_sortie.28;
+OUTPUT[3].5 := VAR_calcul_sortie.29;
+OUTPUT[3].6 := VAR_calcul_sortie.30;
+OUTPUT[3].7 := VAR_calcul_sortie.31;]]></ST>
+    </Implementation>
+    <LineIds Name="IEEE754_OUTPUT">
+      <LineId Id="36" Count="886" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

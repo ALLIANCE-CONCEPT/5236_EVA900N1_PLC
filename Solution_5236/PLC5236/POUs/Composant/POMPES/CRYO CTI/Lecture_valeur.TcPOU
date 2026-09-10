@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="Lecture_valeur" Id="{122b7c24-b5d1-4148-a881-99dcc18a91b0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION Lecture_valeur :STRING
+VAR_INPUT
+	VAR_Trame_entiere:	STRING;
+END_VAR
+VAR_OUTPUT
+	VAR_Trame_valeur:   STRING:= '';
+END_VAR
+VAR
+	VAR_STR:   STRING(1):='0';
+	VAR_Compteur: INT:= 4;
+	VAR_Trame_CHECKSUM: STRING:='';
+	VAR_CHECKSUM: STRING;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+VAR_Trame_CHECKSUM := MID(VAR_Trame_entiere, LEN:=3, POS:=1);
+WHILE (VAR_STR <>'') DO
+	VAR_STR	:=	MID(VAR_Trame_entiere, LEN:=1, POS:=VAR_Compteur);
+	VAR_CHECKSUM := CHECKSUM(VAR_Trame_CHECKSUM, TRUE);
+	IF VAR_STR <> VAR_CHECKSUM THEN
+		VAR_Trame_valeur := CONCAT(VAR_Trame_valeur,VAR_STR);
+		VAR_Trame_CHECKSUM:= CONCAT(VAR_Trame_CHECKSUM,VAR_STR);
+		VAR_Compteur := VAR_Compteur+1;
+	END_IF
+	IF VAR_STR = VAR_CHECKSUM THEN
+		VAR_Compteur:=4;
+		VAR_STR:='';
+	END_IF
+
+END_WHILE
+VAR_STR:= MID(VAR_Trame_valeur,LEN:=1,POS:=1);
+WHILE (VAR_STR = '0') DO
+	VAR_STR:= MID(VAR_Trame_valeur,LEN:=1,POS:=1);
+	IF (VAR_STR = '0') THEN
+		VAR_Trame_valeur := DELETE(VAR_Trame_valeur,LEN:=1,POS:=1);
+	END_IF
+END_WHILE
+IF VAR_Trame_valeur ='' THEN
+	VAR_Trame_valeur :='0';
+END_IF
+Lecture_valeur := VAR_Trame_valeur;
+RETURN;
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,222 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_ROTATION_PS" Id="{fa0f5e07-aeb0-4f62-8e76-9dbc7cc187b4}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_ROTATION_PS
+(* Fonction PS spécifique à l'affaire 8152 *)
+
+(****************historique des versions*****************************)
+
+(* Version 0-0 - SD - VERSION INITIALE EVA760 n°11 - 8152 *)
+(* Version 1-0 - GV - Ajout arret automatique de sécurité si rotation en cours et pas porte*)
+
+(*************************************************************************)
+
+VAR_INPUT
+
+(*information générale*)
+	RESET:					BOOL;
+	MANUAL:					BOOL;						 (*mode de fonctionnement de la fonction*)
+	CTRL_PLC:				BOOL;
+(* déclaration du moteur du PS*)
+	MPS11:					BLOCK_VARIATEUR_MOTEUR;
+
+(*sécurité*)
+	DOOR:					BOOL;						(*information porte fermée*)
+	INTERLOCK:				BOOL;						(*interlock de securité*)
+(*opération*)
+	OP_Rotation:			BLOCK_OPERATION;			(*opération rotation continue*)
+	OP_Stop:				BLOCK_OPERATION;			(*opération arrêt*)
+	(*Paramètre*)
+	PRM_Vitesse:			REAL:=5;			 			(*Vitesse de rotation en mode rotation continue*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+(* Entité*)
+	IsAssembly:				BOOL;						(*entité de type ensemble*)
+	TagXml:					UINT;
+	IdXml: 					STRING;
+	IdParent: 				STRING;						(*MNEMO du pére*)
+	MNEMO:					STRING;						(*MNEMO de cette entité *)
+
+END_VAR
+
+VAR_OUTPUT
+	STATE_NOK:				BOOL;						(*Présence d'un défaut*)
+END_VAR
+
+VAR_IN_OUT
+END_VAR
+
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+ACT_ROTATION();
+ACT_STOP();
+
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_ROTATION" Id="{694a8898-5596-427e-ae11-f236578e20ea}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION rotation*)
+(* Rotation continue du porte substrat*)
+
+(*initialisation de l'opération*)
+OP_Rotation(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= DOOR AND INTERLOCK ,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:=FALSE,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=2,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Rotation.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Rotation.Etape = 0
+		THEN
+				OP_Rotation.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	RESET OR OP_Stop.ETAPE.1OR MANUAL
+		THEN
+				OP_Rotation.Etape := 0;			(*RAZ grafcet*)
+				OP_Rotation.Etape.0  := TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Rotation.Etape.0
+		AND OP_Rotation.MARCHE_OP
+		THEN
+				OP_Rotation.Etape.1:=TRUE;
+				OP_Rotation.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Rotation.Etape.1
+		 AND OP_Stop.AR
+		THEN
+				OP_Rotation.Etape.2:=TRUE;
+				OP_Rotation.Etape.1:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Rotation.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{eec022bf-86a6-4b0f-a11e-681809345ec6}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION arrêt mouvement*)
+(* Arrêt des mouvement de l'axe*)
+
+(*initialisation de l'opération*)
+OP_Stop(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= TRUE ,
+	MANUAL:= FALSE,
+	ON_AUTO_INT:= MPS11.DEF_Off_auto.DEF AND NOT MANUAL,
+	RESTART_ENABLE_IF_OK:= TRUE,
+	N_STEP_OP_OK:=2,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Stop.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Stop.Etape = 0
+		THEN
+				OP_Stop.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+	ELSIF	( OP_Rotation.Etape.1 OR RESET OR MANUAL )
+		THEN
+				OP_Stop.Etape := 0;			(*RAZ grafcet*)
+				OP_Stop.Etape.0 := TRUE;
+(*étape 0-1*)
+	ELSIF 	OP_Stop.Etape.0
+		AND OP_Stop.MARCHE_OP
+		THEN
+				OP_Stop.Etape.1:=TRUE;
+				OP_Stop.Etape.0:=FALSE;
+(*étape 1-2*)
+	ELSIF	OP_Stop.Etape.1
+		AND OP_Rotation.AR
+		THEN
+				OP_Stop.Etape.2:=TRUE;
+				OP_Stop.Etape.1:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_Stop.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{30a9f238-b855-414d-804d-2b0ad4dca4c2}">
+      <Implementation>
+        <ST><![CDATA[(*************************************************************************)
+(*      	    MPS11 :    Sortie TOR de pilotage du moteur du PS            *)
+(*************************************************************************)
+IF OP_Rotation.Etape.2 THEN
+	MPS11.CO_On	:= 	TRUE;
+ELSIF OP_Stop.Etape.2 OR
+		(OP_STOP.Etape.0 AND OP_rotation.Etape.0) THEN
+	MPS11.CO_On	:= 	FALSE;
+END_IF;
+
+IF OP_rotation.Etape.2 OR OP_rotation.Etape.3 THEN
+	MPS11.PRM_Cons_Vitesse := PRM_Vitesse;
+END_IF
+
+
+MPS11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	DOOR:=DOOR ,
+	EN_On_INT:=TRUE ,
+	EN_Off_INT:= TRUE,
+	CONF_EN_On:= 1,
+	CONF_No_Safety_Auto:=FALSE  );
+
+
+(*Codage des états*)
+STATE_Nok		:=  OP_STOP.DEF_AUTO_ON.DEF OR OP_STOP.DEF_ON_REJECTED.DEF OR
+					OP_ROTATION.DEF_AUTO_ON.DEF OR OP_ROTATION.DEF_ON_REJECTED.DEF OR MPS11.STATE_Nok;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{9eec3ae8-6468-4399-9831-9bd2a16a6a6c}">
+      <Implementation>
+        <ST><![CDATA[(*commentaire pour les opérations*)
+(* Mnémonique*)
+MPS11.MNEMO := 'MPS11';
+MPS11.IdParent := MNEMO;
+
+
+(*commentaire dans les dictionnaires*)
+IdXml 						:='5';
+TagXml						:=0;
+
+OP_Rotation.IdXml			:='6';
+OP_Rotation.TagXml			:=2;
+
+OP_Stop.IdXml				:='0';
+OP_Stop.TagXml				:=2;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_ROTATION_PS">
+      <LineId Id="49" Count="5" />
+    </LineIds>
+    <LineIds Name="BLOCK_ROTATION_PS.ACT_ROTATION">
+      <LineId Id="0" Count="42" />
+    </LineIds>
+    <LineIds Name="BLOCK_ROTATION_PS.ACT_STOP">
+      <LineId Id="0" Count="42" />
+    </LineIds>
+    <LineIds Name="BLOCK_ROTATION_PS.POST">
+      <LineId Id="0" Count="27" />
+    </LineIds>
+    <LineIds Name="BLOCK_ROTATION_PS.PRL">
+      <LineId Id="0" Count="14" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

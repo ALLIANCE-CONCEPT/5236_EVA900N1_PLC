@@ -1,0 +1,113 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="FB_WritePosBias" Id="{f85995d7-9c30-4b19-8072-f386482ea52f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_WritePosBias
+(****************historique des versions*****************************)
+(* Version 1-0 - HG - 	VERSION INIITIALE*)
+(* Version 2-0 - HG - 	retour nouvelle valeur position bias
+					fonction d'écriture d'une valeur de position bias données*)
+(* Version 3-0 - HG - 	gestion maj position bias pour une position non nulle*)
+(*************************************************************************)
+
+(*Commande bExecute:
+permet de mettre à jour le paramètre position bias de la tache NC pour que 
+la position courante (IPosBias) corresponde à la position zéro (IPosZero)
+la nouvelle valeur du Position Bias est renvoyée dans STATE_PosBias
+*)
+(*Commande bApply:
+permet de mettre à jour le paramètre position bias de la tache NC
+directement à une valeur donnée (IPosBias) 
+*)
+VAR_INPUT
+	bExecute: 		BOOL;
+	bApply:			BOOL;
+	id: 				UINT;
+	lPosBias: 		LREAL;
+	IPosZero:		LREAL:=0.0;
+END_VAR
+VAR_OUTPUT
+	bBusy: 			BOOL;
+	bErr: 			BOOL;
+	bDone: 			BOOL;
+	STATE_PosBias:	LREAL;
+END_VAR
+VAR
+	step: 			UINT;
+	VAR_PosBias:	LREAL;
+	R_TRIG0: 		R_TRIG;
+	R_TRIG1: 		R_TRIG;
+	ADSWRITE0: 	ADSWRITE;
+	ADSREAD0:		ADSREAD;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE step OF
+
+	0:	(*lancement*)
+		R_TRIG0(CLK := bExecute);
+		R_TRIG1(CLK := bApply);
+		bBusy := FALSE;
+		IF R_TRIG0.Q THEN
+			ADSWRITE0(WRITE := FALSE);
+			ADSREAD0(READ := FALSE);
+			bDone := FALSE;
+			bBusy := TRUE;
+			bErr := FALSE;
+			step := step + 1;
+		END_IF
+		IF R_TRIG1.Q THEN
+			ADSWRITE0(WRITE := FALSE);
+			ADSREAD0(READ := FALSE);
+			bDone := FALSE;
+			bBusy := TRUE;
+			bErr := FALSE;
+			step := 2;
+			VAR_PosBias := lPosBias;
+		END_IF
+
+	1:	(*lecture Position bias courant*)
+		ADSREAD0(
+			NETID:= '',
+			PORT:= 501,
+			IDXGRP:= id,
+			IDXOFFS:= 16#07,
+			LEN:= SIZEOF(VAR_PosBias),
+			DESTADDR:= ADR(VAR_PosBias),
+			READ:= TRUE,
+			TMOUT:= t#500ms,);
+		IF NOT ADSREAD0.BUSY THEN
+			IF ADSREAD0.ERR THEN
+				bErr := TRUE;
+				step := 0;
+			ELSE
+				step 			:= 	step + 1;
+				VAR_PosBias	:=	VAR_PosBias - lPosBias + IPosZero;
+			END_IF
+		END_IF
+
+	2:	(*écriture position bias*)
+		ADSWRITE0(
+			NETID:= '',
+			PORT:= 501,
+			IDXGRP:= id,
+			IDXOFFS:= 16#07,
+			LEN:= SIZEOF(VAR_PosBias),
+			SRCADDR:= ADR(VAR_PosBias),
+			WRITE:= TRUE,
+			TMOUT:= t#500ms);
+		IF NOT ADSWRITE0.BUSY THEN
+			IF ADSWRITE0.ERR THEN
+				bErr := TRUE;
+			ELSE
+				bDone := TRUE;
+				STATE_PosBias	:=	VAR_PosBias;
+			END_IF
+			step := 0;
+		END_IF
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_WritePosBias">
+      <LineId Id="38" Count="64" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

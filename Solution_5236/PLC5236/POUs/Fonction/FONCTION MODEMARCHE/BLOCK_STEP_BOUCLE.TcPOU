@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_STEP_BOUCLE" Id="{0e7097a9-f7a7-449f-ab89-a69f2faab44c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_STEP_BOUCLE
+
+VAR_INPUT
+	RESET:							BOOL;
+	I_ON:							BOOL;
+	I_CURRENT_STEP:					UINT;
+	PRM_ITER_BOUCLE:				USINT;
+	PRM_ETAPE_BOUCLE:				UINT;
+END_VAR
+
+VAR_OUTPUT
+	STATE_OK:						BOOL;
+	AUTOR_STEP:						BOOL;
+	STATE_ITER_BOUCLE:				USINT;
+	O_NEXT_STEP:					UINT;
+	RQ_BOUCLE:						BOOL;
+	RQ_SAUT:						BOOL;
+END_VAR
+
+VAR
+	MEM_BOUCLE:						BOOL;
+	MEM_START_BOUCLE:				UINT;
+	MEM_STOP_BOUCLE:				UINT;
+	FM_ON:							R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Autorisation*)
+AUTOR_STEP	:=	( (PRM_ITER_BOUCLE = 0) AND (PRM_ETAPE_BOUCLE > I_CURRENT_STEP) ) (*saut sur étape après*)
+					OR
+					( (PRM_ITER_BOUCLE > 0) AND (PRM_ETAPE_BOUCLE < I_CURRENT_STEP) ) (*boucle sur étape avant*)
+					OR
+					( NOT MEM_BOUCLE AND ((MEM_START_BOUCLE <> I_CURRENT_STEP) OR (MEM_STOP_BOUCLE <> PRM_ETAPE_BOUCLE)) ); (*pas 2 boucles imbriquées*)
+
+(*Reset fonction hors procédé*)
+IF RESET THEN
+	MEM_BOUCLE			:=	FALSE;
+	MEM_START_BOUCLE	:=	0;
+	MEM_STOP_BOUCLE		:=	0;
+	STATE_ITER_BOUCLE	:=	0;
+	O_NEXT_STEP			:=	0;
+	RQ_BOUCLE				:=	FALSE;
+	RQ_SAUT				:=	FALSE;
+	STATE_OK				:=	FALSE;
+END_IF
+
+IF NOT I_ON THEN
+	STATE_OK				:=	FALSE;
+	RQ_BOUCLE				:=	FALSE;
+	RQ_SAUT				:=	FALSE;
+END_IF
+
+(*Front montant*)
+FM_ON.CLK	:=	I_ON;
+FM_ON();
+
+IF FM_ON.Q THEN
+	(*Gestion saut*)
+	IF PRM_ITER_BOUCLE = 0 THEN
+		MEM_BOUCLE			:=	FALSE;
+		MEM_START_BOUCLE	:=	0;
+		MEM_STOP_BOUCLE		:=	0;
+		STATE_ITER_BOUCLE	:=	0;
+		O_NEXT_STEP			:=	PRM_ETAPE_BOUCLE;
+		RQ_SAUT				:=	TRUE;
+		STATE_OK				:=	TRUE;
+
+	(*Gestion boucle*)
+	ELSE
+		(*Départ boucle*)
+		IF MEM_BOUCLE = 0THEN
+			MEM_BOUCLE			:=	TRUE;
+			MEM_START_BOUCLE	:=	I_CURRENT_STEP;
+			MEM_STOP_BOUCLE		:=	PRM_ETAPE_BOUCLE;
+			STATE_ITER_BOUCLE	:=	1;
+			O_NEXT_STEP			:=	PRM_ETAPE_BOUCLE;
+			RQ_BOUCLE				:=	TRUE;
+			STATE_OK				:=	TRUE;
+		ELSE
+			(*Fin boucle*)
+			IF MEM_BOUCLE AND (STATE_ITER_BOUCLE >= PRM_ITER_BOUCLE) THEN
+				MEM_BOUCLE			:=	FALSE;
+				MEM_START_BOUCLE	:=	0;
+				MEM_STOP_BOUCLE		:=	0;
+				STATE_ITER_BOUCLE	:=	0;
+				O_NEXT_STEP			:=	I_CURRENT_STEP + 1;
+				STATE_OK				:=	TRUE;
+			(*Suite boucle*)
+			ELSE
+				MEM_BOUCLE			:=	TRUE;
+				MEM_START_BOUCLE	:=	I_CURRENT_STEP;
+				MEM_STOP_BOUCLE		:=	PRM_ETAPE_BOUCLE;
+				STATE_ITER_BOUCLE	:=	STATE_ITER_BOUCLE + 1;
+				O_NEXT_STEP			:=	MEM_STOP_BOUCLE;
+				RQ_BOUCLE				:=	TRUE;
+				STATE_OK				:=	TRUE;
+			END_IF
+		END_IF
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_STEP_BOUCLE">
+      <LineId Id="25" Count="72" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

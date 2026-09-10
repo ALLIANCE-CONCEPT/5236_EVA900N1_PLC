@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_VVAT_650_ETHERCAT" Id="{77163d7f-c3b9-4eff-84fc-335dfdc2aac1}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"vanne"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vanne asservie</v>
+                <v>Servovalve</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"max stab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximal de stabilisation</v>
+                <v>Maximum stabilization time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"alm stab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Surveillance pression - Temps avant alarme</v>
+                <v>Pressure supervision - Delay before alarm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"def stab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Surveillance pression - Temps avant défaut</v>
+                <v>Pressure supervision - Delay before fault</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"pmin"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression min. (mbar)</v>
+                <v>Min. pressure (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"pmax"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression max. (mbar)</v>
+                <v>Max. pressure (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"TpsStab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de stab.</v>
+                <v>Stab. time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Pos"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Position (%)</v>
+                <v>Position (%)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Pression"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression (mbar)</v>
+                <v>Pressure (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{7c3dc1af-cddd-413c-ac80-a15a193ad162}</v>
+          <v n="GuidReInit">{e4d4c993-cbf0-4b69-99c6-097fe5b4cb46}</v>
+          <v n="GuidExitX">{92a56a18-3fe9-4e0a-aac0-39754f82bb3b}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

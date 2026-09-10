@@ -1,0 +1,518 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_PRG_GAZ" Id="{ef2b5139-2a29-4920-ae12-76d7f23e2aa6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_GAZ
+
+(*****************************************************************)
+(* 		Programme ligne de gaz
+		PRG_GAZ_TYPE_9070
+
+		Gestion jusqu'à 4 lignes de gaz MFC_MKS
+		+ EV SIMPLE
+		+ Gestion d'une ligne de gaz sans débimètre
+		4 POINT D'INJECTION PAR EV SIMPLE	max.		      
+
+		Affaire 9070 : 2 ligne de gaz + 1 sans débimètre, pas de vanne d'injection + regulation de pression gaz ligne 1 & 2
+
+		Version 0 - GV - 05/01/2015                                     
+		FAMILLE : DP/AC			      
+*)
+(******************************************************************)
+
+VAR_INPUT
+
+	LIGNE_GAZ:				ARRAY[0..4] OF BLOCK_LIGNE_GAZ;
+	DG:						ARRAY[0..4] OF BLOCK_MFC_MKS_NoCoE;
+	VGIN:					ARRAY[0..4] OF BLOCK_ACTUATOR2;
+	REGULATION_GAZ_L1:		BLOCK_REGUL_PR_GAZ;				(*regulation sur ligne 1*)
+	REGULATION_GAZ_L2:		BLOCK_REGUL_PR_GAZ;				(*regulation sur ligne 2*)
+
+	PRM_SEL_VGIN:	ARRAY[0..4] OF BOOL;					(*I_STANDARD --- Selection des vannes d'injection de gaz *)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_LIGNE_GAZ:		ARRAY[0..4] OF BOOL;		(*I_STANDARD -- Indique la présence de la ligne gaz sur le systeme*)
+	CONF_VGIN:			ARRAY[0..4] OF BOOL;		(*I_STANDARD -- indique la présence des vannes d'injection de gaz sur le systeme*)
+	CONF_NAME_VGIN:		ARRAY[0..4] OF STRING;		(*I_STANDARD -- Nom des point d'injection - par ex: cathode 1 / enceinte ...*)
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : ensemble*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_VG11	AT %Q*:	BOOL;
+	OUT_VG12	AT %Q*:	BOOL;
+	OUT_VG13	AT %Q*:	BOOL;
+	OUT_VG14	AT %Q*:	BOOL;
+	OUT_VO2		AT%Q*:	BOOL;
+	OUT_VGIN1	AT %Q*:	BOOL;
+	OUT_VGIN2	AT %Q*:	BOOL;
+	OUT_VGIN3	AT %Q*:	BOOL;
+	OUT_VGIN4	AT %Q*:	BOOL;
+
+	STATE_Ar:			BOOL;		(*I_STANDARD -indique que les fonctions puissances sont à l'arrêt*)
+	STATE_Def_IProc:	BOOL;		(*I_STANDARD -indique la présence d'un défaut entrainant l'arrêt du procédé*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Paramètre statique *)
+(*General*)
+IdXML				:=	'3';
+TagXML				:=	0;
+
+LIGNE_GAZ[1].IdXML			:=	'3';
+LIGNE_GAZ[1].TagXML			:=	1;
+LIGNE_GAZ[2].IdXML			:=	'3';
+LIGNE_GAZ[2].TagXML			:=	2;
+LIGNE_GAZ[3].IdXML			:=	'3';
+LIGNE_GAZ[3].TagXML			:=	3;
+LIGNE_GAZ[4].IdXML			:=	'3';
+LIGNE_GAZ[4].TagXML			:=	4;
+
+(*Configuration du programme*)
+CONF_LIGNE_GAZ[1]	:=	TRUE;
+CONF_LIGNE_GAZ[2]	:=	TRUE;
+CONF_LIGNE_GAZ[3]	:=	FALSE;
+CONF_LIGNE_GAZ[4]	:=	FALSE;
+CONF_VGIN[1]		:=	FALSE;
+CONF_VGIN[2]		:=	FALSE;
+CONF_VGIN[3]		:=	FALSE;
+CONF_VGIN[4]		:=	FALSE;
+
+
+(*VG11*)
+LIGNE_GAZ[1].VGI.CONF_Tim_Valid_Off		:=	T#1S;
+LIGNE_GAZ[1].VGI.CONF_Tim_Valid_On		:=	T#1S;
+LIGNE_GAZ[1].VGI.MNEMO					:=	'VG11';
+LIGNE_GAZ[1].VGI.CONF_EN_On				:=	0;
+LIGNE_GAZ[1].VGI.CONF_No_Safety_Auto	:=	FALSE;
+(*VG12*)
+LIGNE_GAZ[2].VGI.CONF_Tim_Valid_Off		:=	T#1S;
+LIGNE_GAZ[2].VGI.CONF_Tim_Valid_On		:=	T#1S;
+LIGNE_GAZ[2].VGI.MNEMO					:=	'VG12';
+LIGNE_GAZ[2].VGI.CONF_EN_On				:=	0;
+LIGNE_GAZ[2].VGI.CONF_No_Safety_Auto	:=	FALSE;
+(*VG13*)
+LIGNE_GAZ[3].VGI.CONF_Tim_Valid_Off		:=	T#1S;
+LIGNE_GAZ[3].VGI.CONF_Tim_Valid_On		:=	T#1S;
+LIGNE_GAZ[3].VGI.MNEMO					:=	'VG13';
+LIGNE_GAZ[3].VGI.CONF_EN_On				:=	0;
+LIGNE_GAZ[3].VGI.CONF_No_Safety_Auto	:=	FALSE;
+(*VG14*)
+LIGNE_GAZ[4].VGI.CONF_Tim_Valid_Off		:=	T#1S;
+LIGNE_GAZ[4].VGI.CONF_Tim_Valid_On		:=	T#1S;
+LIGNE_GAZ[4].VGI.MNEMO					:=	'VG14';
+LIGNE_GAZ[4].VGI.CONF_EN_On				:=	0;
+LIGNE_GAZ[4].VGI.CONF_No_Safety_Auto	:=	FALSE;
+
+(*VGIN1*)
+VGIN[1].MNEMO							:=	'VGIN1';
+VGIN[1].IdXML							:=	'7';
+VGIN[1].TagXML							:=	2;
+VGIN[1].DEF_Off_auto.IdXML				:=	'3';
+VGIN[1].DEF_Off_auto.TagXML				:=	11;
+VGIN[1].DEF_Off_Imposs.IdXML			:=	'3';
+VGIN[1].DEF_Off_Imposs.TagXML			:=	9;
+VGIN[1].DEF_On_Imposs.IdXML				:=	'3';
+VGIN[1].DEF_On_Imposs.TagXML			:=	6;
+VGIN[1].CONF_Tim_Valid_Off				:=	T#1s;
+VGIN[1].CONF_Tim_Valid_On				:=	T#1s;
+VGIN[1].CONF_EN_On						:=	0;
+VGIN[1].CONF_No_Safety_Auto				:=	FALSE;
+(*VGIN2*)
+VGIN[2].MNEMO							:=	'VGIN2';
+VGIN[2].IdXML							:=	'7';
+VGIN[2].TagXML							:=	2;
+VGIN[2].DEF_Off_auto.IdXML				:=	'3';
+VGIN[2].DEF_Off_auto.TagXML				:=	11;
+VGIN[2].DEF_Off_Imposs.IdXML			:=	'3';
+VGIN[2].DEF_Off_Imposs.TagXML			:=	9;
+VGIN[2].DEF_On_Imposs.IdXML				:=	'3';
+VGIN[2].DEF_On_Imposs.TagXML			:=	6;
+VGIN[2].CONF_Tim_Valid_Off				:=	T#1s;
+VGIN[2].CONF_Tim_Valid_On				:=	T#1s;
+VGIN[2].CONF_EN_On						:=	0;
+VGIN[2].CONF_No_Safety_Auto				:=	FALSE;
+(*VGIN3*)
+VGIN[3].MNEMO							:=	'VGIN3';
+VGIN[3].IdXML							:=	'7';
+VGIN[3].TagXML							:=	2;
+VGIN[3].DEF_Off_auto.IdXML				:=	'3';
+VGIN[3].DEF_Off_auto.TagXML				:=	11;
+VGIN[3].DEF_Off_Imposs.IdXML			:=	'3';
+VGIN[3].DEF_Off_Imposs.TagXML			:=	9;
+VGIN[3].DEF_On_Imposs.IdXML				:=	'3';
+VGIN[3].DEF_On_Imposs.TagXML			:=	6;
+VGIN[3].CONF_Tim_Valid_Off				:=	T#1s;
+VGIN[3].CONF_Tim_Valid_On				:=	T#1s;
+VGIN[3].CONF_EN_On						:=	0;
+VGIN[3].CONF_No_Safety_Auto				:=	FALSE;
+(*VGIN4*)
+VGIN[4].MNEMO							:=	'VGIN4';
+VGIN[4].IdXML							:=	'7';
+VGIN[4].TagXML							:=	2;
+VGIN[4].DEF_Off_auto.IdXML				:=	'3';
+VGIN[4].DEF_Off_auto.TagXML				:=	11;
+VGIN[4].DEF_Off_Imposs.IdXML			:=	'3';
+VGIN[4].DEF_Off_Imposs.TagXML			:=	9;
+VGIN[4].DEF_On_Imposs.IdXML				:=	'3';
+VGIN[4].DEF_On_Imposs.TagXML			:=	6;
+VGIN[4].CONF_Tim_Valid_Off				:=	T#1s;
+VGIN[4].CONF_Tim_Valid_On				:=	T#1s;
+VGIN[4].CONF_EN_On						:=	0;
+VGIN[4].CONF_No_Safety_Auto				:=	FALSE;
+
+(*compteurs des vannes d'injection - pas de vanne présente *)
+VGIN[1].VAR_CPT.DISABLE := TRUE;
+VGIN[2].VAR_CPT.DISABLE := TRUE;
+VGIN[3].VAR_CPT.DISABLE := TRUE;
+VGIN[4].VAR_CPT.DISABLE := TRUE;
+
+(*Débimètres*)
+DG[1].MNEMO				:=	'DG11';
+DG[2].MNEMO				:=	'DG12';
+DG[3].MNEMO				:=	'DG13';
+DG[4].MNEMO				:=	'DG14';
+
+(*Regulation de gaz*)
+REGULATION_GAZ_L1.CONF_Flow_Init	:=	1;	(*1 sccm pour mise en gaz*)
+REGULATION_GAZ_L1.IdXML				:=	'3';
+REGULATION_GAZ_L1.TagXML			:=	21;
+
+REGULATION_GAZ_L2.CONF_Flow_Init	:=	1;	(*1 sccm pour mise en gaz*)
+REGULATION_GAZ_L2.IdXML				:=	'3';
+REGULATION_GAZ_L2.TagXML			:=	22;
+
+(*Gestion du mode de pilotage*)
+IF (MACHINE.RQ_Ctrl_Ihm OR MACHINE.STATE_Manu) THEN
+	REGULATION_GAZ_L1.CTRL_PLC	:=	FALSE;
+	REGULATION_GAZ_L2.CTRL_PLC	:=	FALSE;
+	LIGNE_GAZ[3].CTRL_PLC := FALSE;
+	LIGNE_GAZ[4].CTRL_PLC := FALSE;
+ELSIF (MACHINE.RQ_Ctrl_Plc AND NOT MACHINE.STATE_Manu) THEN
+	REGULATION_GAZ_L1.CTRL_PLC	:=	TRUE;
+	REGULATION_GAZ_L2.CTRL_PLC	:=	TRUE;
+	LIGNE_GAZ[3].CTRL_PLC := TRUE;
+	LIGNE_GAZ[4].CTRL_PLC := TRUE;
+END_IF
+
+IF (MACHINE.RQ_Ctrl_Ihm OR MACHINE.STATE_Manu) AND NOT REGULATION_GAZ_L1.RQ_Ctrl_Gaz THEN
+	LIGNE_GAZ[1].CTRL_PLC := FALSE;
+ELSIF (MACHINE.RQ_Ctrl_Plc AND NOT MACHINE.STATE_Manu) OR REGULATION_GAZ_L1.RQ_Ctrl_Gaz THEN
+	LIGNE_GAZ[1].CTRL_PLC := TRUE;
+END_IF
+
+IF (MACHINE.RQ_Ctrl_Ihm OR MACHINE.STATE_Manu) AND NOT REGULATION_GAZ_L2.RQ_Ctrl_Gaz THEN
+	LIGNE_GAZ[2].CTRL_PLC := FALSE;
+ELSIF (MACHINE.RQ_Ctrl_Plc AND NOT MACHINE.STATE_Manu) OR REGULATION_GAZ_L2.RQ_Ctrl_Gaz THEN
+	LIGNE_GAZ[2].CTRL_PLC := TRUE;
+END_IF
+
+
+(*Ligne Gaz 1*)
+PRG_GAZ.LIGNE_GAZ[1].OP_MARCHE.ON_PLC := MAIN.STEP_EMPILEMENT.RQ_MARCHE_GAZ[1];
+
+PRG_GAZ.LIGNE_GAZ[1].OP_ARRET.ON_PLC :=	INIT_MACHINE.RQ_STOP_GAZ 
+										OR MAIN.STEP_EMPILEMENT.RQ_ARRET_GAZ[1]
+										OR REGULATION_GAZ_L1.RQ_Arret_Gaz;
+
+IF REGULATION_GAZ_L1.RQ_Marche_Gaz THEN
+	LIGNE_GAZ[1].PRM_Flow := REGULATION_GAZ_L1.CONF_Flow_Init;
+	LIGNE_GAZ[1].OP_MARCHE.ON_PLC := TRUE;
+END_IF
+
+PRG_GAZ.REGULATION_GAZ_L1.OP_MARCHE.ON_PLC:= MAIN.STEP_EMPILEMENT.RQ_MARCHE_REGUL_GAZ[1];
+
+PRG_GAZ.REGULATION_GAZ_L1.OP_ARRET.ON_PLC:=	INIT_MACHINE.RQ_STOP_GAZ OR
+											MAIN.STEP_EMPILEMENT.RQ_ARRET_REGUL_GAZ[1];
+
+(*Ligne Gaz 2*)
+PRG_GAZ.LIGNE_GAZ[2].OP_MARCHE.ON_PLC := MAIN.STEP_EMPILEMENT.RQ_MARCHE_GAZ[2];
+
+PRG_GAZ.LIGNE_GAZ[2].OP_ARRET.ON_PLC :=	INIT_MACHINE.RQ_STOP_GAZ
+										OR MAIN.STEP_EMPILEMENT.RQ_ARRET_GAZ[2]
+										OR REGULATION_GAZ_L2.RQ_Arret_Gaz;
+
+IF REGULATION_GAZ_L2.RQ_Marche_Gaz THEN
+	LIGNE_GAZ[2].PRM_Flow := REGULATION_GAZ_L2.CONF_Flow_Init;
+	LIGNE_GAZ[2].OP_MARCHE.ON_PLC := TRUE;
+END_IF
+
+PRG_GAZ.REGULATION_GAZ_L2.OP_MARCHE.ON_PLC:= MAIN.STEP_EMPILEMENT.RQ_MARCHE_REGUL_GAZ[2];
+
+PRG_GAZ.REGULATION_GAZ_L2.OP_ARRET.ON_PLC:=	INIT_MACHINE.RQ_STOP_GAZ OR
+											MAIN.STEP_EMPILEMENT.RQ_ARRET_REGUL_GAZ[2];
+
+(*Ligne Gaz 3*)
+PRG_GAZ.LIGNE_GAZ[3].OP_MARCHE.ON_PLC := MAIN.STEP_EFFLUVAGE.RQ_MARCHE_GAZ[1];
+
+PRG_GAZ.LIGNE_GAZ[3].OP_ARRET.ON_PLC := INIT_MACHINE.RQ_STOP_GAZ
+										   OR MAIN.STEP_EFFLUVAGE.RQ_ARRET_GAZ;
+										   
+(*Ligne Gaz 4*)
+PRG_GAZ.LIGNE_GAZ[4].OP_MARCHE.ON_PLC := MAIN.STEP_EFFLUVAGE.RQ_MARCHE_GAZ[2];
+
+PRG_GAZ.LIGNE_GAZ[4].OP_ARRET.ON_PLC := INIT_MACHINE.RQ_STOP_GAZ
+										   OR MAIN.STEP_EFFLUVAGE.RQ_ARRET_GAZ;
+
+
+(*Paramétre dynamique*)
+LIGNE_GAZ[1].OP_MARCHE.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[2].OP_MARCHE.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[3].OP_MARCHE.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[4].OP_MARCHE.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[1].OP_ARRET.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[2].OP_ARRET.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[3].OP_ARRET.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[4].OP_ARRET.ENABLE_EXT		:= TRUE;
+LIGNE_GAZ[1].VGI.EN_Off_EXT				:= TRUE;
+LIGNE_GAZ[2].VGI.EN_Off_EXT				:= TRUE;
+LIGNE_GAZ[3].VGI.EN_Off_EXT				:= TRUE;
+LIGNE_GAZ[4].VGI.EN_Off_EXT				:= TRUE;
+LIGNE_GAZ[1].VGI.EN_On_EXT				:= TRUE;
+LIGNE_GAZ[2].VGI.EN_On_EXT				:= TRUE;
+LIGNE_GAZ[3].VGI.EN_On_EXT				:= TRUE;
+LIGNE_GAZ[4].VGI.EN_On_EXT				:= TRUE;
+REGULATION_GAZ_L1.OP_MARCHE.ENABLE_EXT := REGULATION_GAZ_L2.OP_ARRET.OK;
+REGULATION_GAZ_L2.OP_MARCHE.ENABLE_EXT := REGULATION_GAZ_L1.OP_ARRET.OK;
+
+VGIN[1].EN_Off_EXT				:=	TRUE;
+VGIN[1].EN_ON_EXT				:=	TRUE;
+VGIN[2].EN_Off_EXT				:=	TRUE;
+VGIN[2].EN_ON_EXT				:=	TRUE;
+VGIN[3].EN_Off_EXT				:=	TRUE;
+VGIN[3].EN_ON_EXT				:=	TRUE;
+VGIN[4].EN_Off_EXT				:=	TRUE;
+VGIN[4].EN_ON_EXT				:=	TRUE;
+
+IF REGULATION_GAZ_L1.OP_MARCHE.Etape.6
+	OR REGULATION_GAZ_L1.OP_MARCHE.Etape.7
+	OR REGULATION_GAZ_L1.OP_MARCHE.AR THEN	(*marche gaz dans debut régulation, ou marche gaz classique, la consigne reste celle de la ligne de gaz*)
+		DG[1].PRM_Flow := LIGNE_GAZ[1].OUT_DG_PRM_FLOW;
+ELSIF REGULATION_GAZ_L1.OP_MARCHE.Etape.8		(*dans le cas de la regulation, la consigne devient celle du PID*)
+	OR REGULATION_GAZ_L1.OP_MARCHE.Etape.9
+	OR REGULATION_GAZ_L1.OP_MARCHE.Etape.10
+	OR REGULATION_GAZ_L1.OP_MARCHE.Etape.11
+	OR REGULATION_GAZ_L1.OP_MARCHE.Etape.12 THEN
+		DG[1].PRM_Flow	:=	MIN(REGULATION_GAZ_L1.CONTROLEUR_GAZ.STATE_Flow, DG[1].CONF_Util_Max_Flow);
+END_IF
+
+LIGNE_GAZ[1]
+	(
+	RESET:= 			MACHINE.STATE_Off,
+	MANUAL:=			MACHINE.STATE_Manu,
+	VAC:= 				PRG_POMPAGE.VAC,
+	DOOR:=				PRG_POMPAGE.DOOR ,
+	PRM_Disable_Surv:=	(VGIN[1].STATE_Off OR NOT CONF_VGIN[1])
+      						AND (VGIN[2].STATE_Off OR NOT CONF_VGIN[2])
+      						AND (VGIN[3].STATE_Off OR NOT CONF_VGIN[3])
+      						AND (VGIN[4].STATE_Off OR NOT CONF_VGIN[4])
+      						AND NOT (NOT CONF_VGIN[1] AND NOT CONF_VGIN[2] AND NOT CONF_VGIN[3] AND NOT CONF_VGIN[4])
+						OR REGULATION_GAZ_L1.OP_MARCHE.EC,		(*inhibition surveillance débit gaz si régulation en cours*)
+	IN_DG_PRM_FLOW:=	DG[1].PRM_Flow,
+	O_SURV_DISABLE=>  DG[1].I_SURV_DISABLE,
+	);
+
+IF REGULATION_GAZ_L2.OP_MARCHE.Etape.6
+	OR REGULATION_GAZ_L2.OP_MARCHE.Etape.7
+	OR REGULATION_GAZ_L2.OP_MARCHE.AR THEN	(*marche gaz dans debut régulation, ou marche gaz classique, la consigne reste celle de la ligne de gaz*)
+		DG[2].PRM_Flow := LIGNE_GAZ[2].OUT_DG_PRM_FLOW;
+ELSIF REGULATION_GAZ_L2.OP_MARCHE.Etape.8		(*dans le cas de la regulation, la consigne devient celle du PID*)
+	OR REGULATION_GAZ_L2.OP_MARCHE.Etape.9
+	OR REGULATION_GAZ_L2.OP_MARCHE.Etape.10
+	OR REGULATION_GAZ_L2.OP_MARCHE.Etape.11
+	OR REGULATION_GAZ_L2.OP_MARCHE.Etape.12 THEN
+		DG[2].PRM_Flow	:=	MIN(REGULATION_GAZ_L2.CONTROLEUR_GAZ.STATE_Flow, DG[2].CONF_Util_Max_Flow);
+END_IF
+
+LIGNE_GAZ[2]
+	(
+	RESET:= 			MACHINE.STATE_Off,
+	MANUAL:=			MACHINE.STATE_Manu,
+	VAC:= 				PRG_POMPAGE.VAC,
+	DOOR:=				PRG_POMPAGE.DOOR ,
+	PRM_Disable_Surv:=	(VGIN[1].STATE_Off OR NOT CONF_VGIN[1])
+     						AND (VGIN[2].STATE_Off OR NOT CONF_VGIN[2])
+      						AND (VGIN[3].STATE_Off OR NOT CONF_VGIN[3])
+     						AND (VGIN[4].STATE_Off OR NOT CONF_VGIN[4])
+     						AND NOT (NOT CONF_VGIN[1] AND NOT CONF_VGIN[2] AND NOT CONF_VGIN[3] AND NOT CONF_VGIN[4])
+						OR REGULATION_GAZ_L2.OP_MARCHE.EC,		(*inhibition surveillance débit gaz si régulation en cours*)
+	IN_DG_PRM_FLOW:=	DG[2].PRM_Flow,
+	O_SURV_DISABLE=> DG[2].I_SURV_DISABLE,
+	);
+
+LIGNE_GAZ[3]
+	(
+	RESET:= 			MACHINE.STATE_Off,
+	MANUAL:=			MACHINE.STATE_Manu,
+	VAC:= 				PRG_POMPAGE.M11.STATE_Seuil[14],
+	DOOR:=				PRG_POMPAGE.DOOR ,
+	PRM_Disable_Surv:=	(VGIN[1].STATE_Off OR NOT CONF_VGIN[1])
+     						AND (VGIN[2].STATE_Off OR NOT CONF_VGIN[2])
+      						AND (VGIN[3].STATE_Off OR NOT CONF_VGIN[3])
+     						AND (VGIN[4].STATE_Off OR NOT CONF_VGIN[4])
+      						AND NOT (NOT CONF_VGIN[1] AND NOT CONF_VGIN[2] AND NOT CONF_VGIN[3] AND NOT CONF_VGIN[4]),
+	IN_DG_PRM_FLOW:=	DG[3].PRM_Flow,
+	O_SURV_DISABLE=> DG[3].I_SURV_DISABLE,
+	);
+	
+LIGNE_GAZ[4](
+	RESET:= 			MACHINE.STATE_Off,
+	MANUAL:=			MACHINE.STATE_Manu,
+	VAC:= 				PRG_POMPAGE.M11.STATE_Seuil[14],
+	DOOR:=				PRG_POMPAGE.DOOR ,
+	PRM_Disable_Surv:=	(VGIN[1].STATE_Off OR NOT CONF_VGIN[1])
+      						AND (VGIN[2].STATE_Off OR NOT CONF_VGIN[2])
+      						AND (VGIN[3].STATE_Off OR NOT CONF_VGIN[3])
+      						AND (VGIN[4].STATE_Off OR NOT CONF_VGIN[4])
+      						AND NOT (NOT CONF_VGIN[1] AND NOT CONF_VGIN[2] AND NOT CONF_VGIN[3] AND NOT CONF_VGIN[4]),
+	IN_DG_PRM_FLOW:=	DG[4].PRM_Flow,
+	O_SURV_DISABLE=> DG[4].I_SURV_DISABLE,
+	);
+
+VGIN[1](
+	I_PARAM_SYSTEM_OK:= PARAM_SYSTEM_OK,
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	CO_On:= PRM_SEL_VGIN[1] AND (
+			LIGNE_GAZ[1].OP_MARCHE.OK OR
+			LIGNE_GAZ[2].OP_MARCHE.OK OR
+			LIGNE_GAZ[3].OP_MARCHE.OK OR
+			LIGNE_GAZ[4].OP_MARCHE.OK )
+	);
+VGIN[2](
+	I_PARAM_SYSTEM_OK:= PARAM_SYSTEM_OK,
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	CO_On:= PRM_SEL_VGIN[2] AND (
+			LIGNE_GAZ[1].OP_MARCHE.OK OR
+			LIGNE_GAZ[2].OP_MARCHE.OK OR
+			LIGNE_GAZ[3].OP_MARCHE.OK OR
+			LIGNE_GAZ[4].OP_MARCHE.OK )
+	);
+VGIN[3](
+	I_PARAM_SYSTEM_OK:= PARAM_SYSTEM_OK,
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	CO_On:= PRM_SEL_VGIN[3] AND (
+			LIGNE_GAZ[1].OP_MARCHE.OK OR
+			LIGNE_GAZ[2].OP_MARCHE.OK OR
+			LIGNE_GAZ[3].OP_MARCHE.OK OR
+			LIGNE_GAZ[4].OP_MARCHE.OK )
+	);
+VGIN[4](
+	I_PARAM_SYSTEM_OK:= PARAM_SYSTEM_OK,
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	CO_On:= PRM_SEL_VGIN[4] AND (
+			LIGNE_GAZ[1].OP_MARCHE.OK OR
+			LIGNE_GAZ[2].OP_MARCHE.OK OR
+			LIGNE_GAZ[3].OP_MARCHE.OK OR
+			LIGNE_GAZ[4].OP_MARCHE.OK )
+	);
+
+DG[3].PRM_Flow	:=	LIGNE_GAZ[3].OUT_DG_PRM_FLOW;
+DG[4].PRM_Flow	:=	LIGNE_GAZ[4].OUT_DG_PRM_FLOW;
+
+DG[1](
+	RESET:= MACHINE.STATE_Off,
+	);
+DG[2](
+	RESET:= MACHINE.STATE_Off,
+	);
+DG[3](
+	RESET:= MACHINE.STATE_Off,
+	);
+DG[4](
+	RESET:= MACHINE.STATE_Off,
+	);
+
+(*appel des fonction de regulation de gaz*)
+REGULATION_GAZ_L1(
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	VAC:= PRG_POMPAGE.VAC,
+	DOOR := PRG_POMPAGE.DOOR,
+	USER:= TRUE,
+	PRM_Pos_Vanne:= ,
+	PRM_Pressure:= ,
+	PRM_Pressure_H:= ,
+	PRM_Pressure_L:= ,
+	PRM_Tim_Stab:= ,
+ 	PRM_Tim_Max_Stab:= REGULATION_GAZ_L1.PRM_Tim_Stab + T#30s,
+	I_Pompage_Proc_Ok:= PRG_POMPAGE.POMPAGE.OP_Pompage_Proc.OK,
+	I_Pompage_Sec_Ok:= PRG_POMPAGE.POMPAGE.OP_Pompage_Sec.EC
+						OR PRG_POMPAGE.POMPAGE.OP_Pompage_Sec.OK, 	(*on n'attend pas la fin du pompage secondaire pour ne pas bloquer l'init*)
+	I_Act_Pressure:= PRG_POMPAGE.M11.STATE_Pression,
+	I_Marche_Gaz_Ok:= LIGNE_GAZ[1].OP_MARCHE.OK,
+	I_Arret_Gaz_Ok:= LIGNE_GAZ[1].OP_ARRET.OK,
+	I_Atm:= PRG_POMPAGE.POMPAGE.TH_Atm,
+	PRM_Tim_Def_Pr:= (*config machine*),
+	PRM_Tim_Ala_Pr:= (*config machine*),
+	CONF_Flow_Init:= (*config machine*),
+);
+
+REGULATION_GAZ_L2(
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu,
+	VAC:= PRG_POMPAGE.VAC,
+	DOOR := PRG_POMPAGE.DOOR,
+	USER:= TRUE,
+	PRM_Pos_Vanne:= ,
+	PRM_Pressure:= ,
+	PRM_Pressure_H:= ,
+	PRM_Pressure_L:= ,
+	PRM_Tim_Stab:= ,
+ 	PRM_Tim_Max_Stab:= REGULATION_GAZ_L2.PRM_Tim_Stab + T#30s,
+	I_Pompage_Proc_Ok:= PRG_POMPAGE.POMPAGE.OP_Pompage_Proc.OK,
+	I_Pompage_Sec_Ok:= PRG_POMPAGE.POMPAGE.OP_Pompage_Sec.EC
+						OR PRG_POMPAGE.POMPAGE.OP_Pompage_Sec.OK, 	(*on n'attend pas la fin du pompage secondaire pour ne pas bloquer l'init*)
+	I_Act_Pressure:= PRG_POMPAGE.M11.STATE_Pression,
+	I_Marche_Gaz_Ok:= LIGNE_GAZ[2].OP_MARCHE.OK,
+	I_Arret_Gaz_Ok:= LIGNE_GAZ[2].OP_ARRET.OK,
+	I_Atm:= PRG_POMPAGE.POMPAGE.TH_Atm,
+	PRM_Tim_Def_Pr:= (*config machine*),
+	PRM_Tim_Ala_Pr:= (*config machine*),
+	CONF_Flow_Init:= (*config machine*),
+);
+
+(*Affection des sorties*)
+OUT_VG11	:=	LIGNE_GAZ[1].VGI.OUT_On;
+OUT_VG12	:=	LIGNE_GAZ[2].VGI.OUT_On;
+OUT_VG13	:=	LIGNE_GAZ[3].VGI.OUT_On;
+OUT_VG14	:=	LIGNE_GAZ[4].VGI.OUT_On;
+OUT_VGIN1	:=	VGIN[1].OUT_On;
+OUT_VGIN2	:=	VGIN[2].OUT_On;
+OUT_VGIN3	:=	VGIN[3].OUT_On;
+OUT_VGIN4	:=	VGIN[4].OUT_On;
+
+(*Affectation des état*)
+STATE_AR :=((MACHINE.STATE_Auto OR MACHINE.STATE_Prod) AND LIGNE_GAZ[1].OP_ARRET.OK AND REGULATION_GAZ_L1.OP_ARRET.OK
+			AND LIGNE_GAZ[2].OP_ARRET.OK AND REGULATION_GAZ_L2.OP_ARRET.OK AND
+			LIGNE_GAZ[3].OP_ARRET.OK AND LIGNE_GAZ[4].OP_ARRET.OK) OR
+			(MACHINE.STATE_Manu AND LIGNE_GAZ[1].VGI.STATE_Off AND LIGNE_GAZ[2].VGI.STATE_Off AND
+			LIGNE_GAZ[3].VGI.STATE_Off AND LIGNE_GAZ[4].VGI.STATE_Off);
+
+(*défaut entrainant l'arrêt du procédé*)
+STATE_Def_IProc		:=		LIGNE_GAZ[1].VGI.DEF_Off_auto.DEF OR LIGNE_GAZ[1].VGI.DEF_On_Imposs.DEF OR LIGNE_GAZ[1].VGI.DEF_Off_Imposs.DEF OR
+							LIGNE_GAZ[1].OP_MARCHE.DEF_ON_REJECTED.DEF OR LIGNE_GAZ[1].OP_ARRET.DEF_AUTO_ON.DEF OR
+							LIGNE_GAZ[2].VGI.DEF_Off_auto.DEF OR LIGNE_GAZ[2].VGI.DEF_On_Imposs.DEF OR LIGNE_GAZ[2].VGI.DEF_Off_Imposs.DEF OR
+							LIGNE_GAZ[2].OP_MARCHE.DEF_ON_REJECTED.DEF OR LIGNE_GAZ[2].OP_ARRET.DEF_AUTO_ON.DEF OR
+							LIGNE_GAZ[3].VGI.DEF_Off_auto.DEF OR LIGNE_GAZ[3].VGI.DEF_On_Imposs.DEF OR LIGNE_GAZ[3].VGI.DEF_Off_Imposs.DEF OR
+							LIGNE_GAZ[3].OP_MARCHE.DEF_ON_REJECTED.DEF OR LIGNE_GAZ[3].OP_ARRET.DEF_AUTO_ON.DEF OR
+							LIGNE_GAZ[4].VGI.DEF_Off_auto.DEF OR LIGNE_GAZ[4].VGI.DEF_On_Imposs.DEF OR LIGNE_GAZ[4].VGI.DEF_Off_Imposs.DEF OR
+							LIGNE_GAZ[4].OP_MARCHE.DEF_ON_REJECTED.DEF OR LIGNE_GAZ[4].OP_ARRET.DEF_AUTO_ON.DEF OR
+							VGIN[1].DEF_Off_auto.DEF OR VGIN[1].DEF_Off_Imposs.DEF OR VGIN[1].DEF_On_Imposs.DEF OR
+							VGIN[2].DEF_Off_auto.DEF OR VGIN[2].DEF_Off_Imposs.DEF OR VGIN[2].DEF_On_Imposs.DEF OR
+							VGIN[3].DEF_Off_auto.DEF OR VGIN[3].DEF_Off_Imposs.DEF OR VGIN[3].DEF_On_Imposs.DEF OR
+							VGIN[4].DEF_Off_auto.DEF OR VGIN[4].DEF_Off_Imposs.DEF OR VGIN[4].DEF_On_Imposs.DEF OR
+							DG[1].DEF_SURV.DEF OR DG[2].DEF_SURV.DEF OR DG[3].DEF_SURV.DEF OR DG[4].DEF_SURV.DEF OR
+							REGULATION_GAZ_L1.OP_MARCHE.DEF_ON_REJECTED.DEF OR REGULATION_GAZ_L1.OP_ARRET.DEF_AUTO_ON.DEF OR
+							REGULATION_GAZ_L2.OP_MARCHE.DEF_ON_REJECTED.DEF OR REGULATION_GAZ_L2.OP_ARRET.DEF_AUTO_ON.DEF OR
+							REGULATION_GAZ_L1.STATE_NOK OR REGULATION_GAZ_L2.STATE_NOK;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

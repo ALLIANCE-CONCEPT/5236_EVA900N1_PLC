@@ -1,0 +1,125 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CHILLER" Id="{deb5d475-6739-4e48-92b9-3dbe4f3e43a5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CHILLER
+
+(* Gestion d'un groupe de circulation d'eau froide, avec retour de défaut, et commande de mise en marche (pas de controle de marche)*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB : affaire 7506*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:	BOOL;														(*paramétrage système ok*)
+	MANUAL:				BOOL;				(* ~ (OPC : 1 : available for OPC-clients) *)		(* Mode de pilotage manuel *)
+	RESET:				BOOL;														(* Condition de réiinitialisation de la fonction *)
+
+	DEF_Chill:			PRCDEF;			(*Défaut de groupe froid*)
+
+	CO_On:				BOOL;			(*demande de marche en mode automatique généré par la fonction qui gère la pompe*)
+
+	IN_Def:				BOOL;		(*Groupe en defaut*)
+	OUT_On:				BOOL;		(* Marche groupe *)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Tim_Valid_On:			TIME:=T#0ms;	(*temporisation de validation du l'état STATE_OK*)
+	CONF_Tim_Valid_Off:			TIME:=T#0ms;	(*temporisation de validation de l'état STATE_AR*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	(*variable d'état d'autorisation*)
+	AUTOR_On_IHM:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)	(*indique que la mise en marche de la pompe est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Off_IHM:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)	(*indique que l'arrêt de la pompe est autorisée en mode manuel depuis l'IHM*)
+
+	STATE_On:					BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)	(*indique que la pompe est en marche et à atteint sa vitesse*)
+	STATE_NOK:					BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)	(*indique la présence d'un défaut sur la pompe ou que l'ordre de marche a été refusé*)
+	STATE_Off:					BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)	(*indique que la pompe est à l'arrêt*)
+END_VAR
+
+VAR
+	TIMER_Valid_On:				TON;
+	TIMER_Valid_Off:			TON;
+	(* Variables pour les sorties profibus *)
+
+	(* Variables demande en mode manuel*)
+	M_On:						BOOL;					(* ~ (OPC : 1 : available for OPC-clients) *)	(* Ordre marche/arrêt de la  pompe en mode manuel *)
+	RCP_M_On:					BOOL;														(* bit de reception de l'ordre de marche en mode manuel*)
+	VAR_On:						BOOL;														(* variable intermédiaire de marche de la pompe*)
+
+	VAR_CPT:					BLOCK_CPT_TEMPS;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML						:=	'10';
+TagXML						:=	2;
+
+(*Défaut interne*)
+DEF_Chill.IdXML				:=	'0';
+DEF_Chill.TagXML			:=	6;
+
+(* Gestion des ordres en mode manuel *)
+RCP_M_On 					:=	M_On;
+
+(*gestion des bits d'autorisation en mode manuel*)
+AUTOR_On_IHM			:=	NOT RESET AND NOT VAR_On  AND MANUAL;
+AUTOR_Off_IHM			:=	NOT RESET  AND VAR_On  AND MANUAL;
+
+(* Défaut du groupe froid*)
+DEF_Chill.CONDITION		:=		IN_Def;
+DEF_Chill.DELAY			:=		T#1s;
+DEF_Chill();
+
+
+(* ARRET groupe*)
+IF 		(NOT CO_On AND NOT MANUAL)
+		OR ( RCP_M_On AND AUTOR_Off_IHM) OR RESET
+		THEN
+			Var_On 				:= 	FALSE;
+(*MARCHE POMPES*)
+ELSIF	( CO_On AND NOT MANUAL)
+		 OR 	( RCP_M_On AND AUTOR_On_IHM) THEN
+			Var_On 				:= 	TRUE;
+END_IF;
+
+(*SORTIE MARCHE GROUPE*)
+OUT_On			:= 	VAR_On;
+
+
+(*affectation des bits d'état*)
+(*indicateur pompe en marche STATE_ON*)
+TIMER_Valid_On.IN	:=	OUT_On;
+TIMER_Valid_On(PT:=CONF_Tim_Valid_On);
+STATE_ON			:=	TIMER_Valid_On.Q;
+(*indicateur pompe à l'arrêt STATE_OFF*)
+TIMER_Valid_Off.IN	:=	NOT OUT_On;
+TIMER_Valid_Off(PT:=CONF_Tim_Valid_Off);
+STATE_Off			:=	TIMER_Valid_Off.Q;
+
+STATE_NOK			:=	DEF_Chill.DEF;
+
+
+(*Gestion compteur*)
+VAR_CPT(I_On:= STATE_On);
+
+
+(* Reset des ordres*)
+IF M_On AND RCP_M_On THEN
+	M_On		:= FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CHILLER">
+      <LineId Id="59" Count="55" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

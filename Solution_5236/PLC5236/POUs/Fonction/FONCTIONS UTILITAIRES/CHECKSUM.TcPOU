@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="CHECKSUM" Id="{b16b2eb7-a9eb-480d-a13b-ebdc08464a0f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION CHECKSUM : STRING
+
+VAR_INPUT
+	PRM_CHR:			STRING;
+	PRM_AvecDollars:	BOOL;
+END_VAR
+
+VAR
+	VAR_STR:		STRING(1);
+	VAR_NB:			BYTE;
+	VAR_Somme1:		BYTE;
+	VAR_Somme2:		BYTE;
+	VAR_Somme3:		BYTE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[VAR_STR	:=	'X';
+IF PRM_AvecDollars THEN
+	VAR_NB		:=	2;
+ELSE
+	VAR_NB		:=	1;
+END_IF
+VAR_Somme1	:=	0;
+WHILE VAR_STR <> '' DO
+	VAR_STR	:=	MID(STR:=PRM_CHR, LEN:=1, POS:=VAR_NB);
+	IF VAR_STR <> '' THEN
+		VAR_Somme1	:=	VAR_Somme1 + ASC(VAR_STR);
+	END_IF
+	VAR_NB		:=	VAR_NB + 1;
+END_WHILE
+
+(*Somme2	:=	ROR(Somme1,6);*)
+VAR_NB		:=	0;
+VAR_NB.0	:=	VAR_Somme1.6;
+VAR_NB.1	:=	VAR_Somme1.7;
+(*Somme2	:=	2;*)
+VAR_Somme3	:=	VAR_Somme1 XOR VAR_NB;
+VAR_Somme1	:=	63;
+VAR_Somme3	:=	VAR_Somme3 AND VAR_Somme1;
+VAR_Somme2	:=	VAR_Somme3 + 48;
+
+CHECKSUM	:=	CHR(VAR_Somme2);
+RETURN;]]></ST>
+    </Implementation>
+    <LineIds Name="CHECKSUM">
+      <LineId Id="14" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,183 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_TELEMARK_CHEETAH_SWEEP" Id="{e1c9b12d-6e92-41d0-89e8-32d969e7c999}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_TELEMARK_CHEETAH_SWEEP
+
+(* Gestion d'un controleur de balayage telemark Digital Sweep 8 motifs*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - LDS - 01/09/26 - VERSION INIITIALE EVA900 n°1 - 5236 *)
+
+
+(*************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;		(*Mode de pilotage manuel *)
+	RESET:					BOOL;		(*Condition de réinitialisation de la fonction *)
+	DOOR:					BOOL;		(*Porte fermée*)
+	
+	I_SW_RUN:				BOOL;		(*Balayage en marche*)
+	I_SW_RDY:				BOOL;		(*Balayage prêt*)
+	
+	PRM_NbBal:				USINT:=1;	(*Commande de position*)
+	
+	CO_Remote:				BOOL;		(*Demande d'activation du mode remote en automatique*)
+	CO_Balayage:			BOOL;		(*Demande d'activation du balayage*)
+END_VAR
+
+VAR
+	TIMER_Valid_On:			TON;
+	TIMER_Valid_Off:		TOF;
+	M_Remote:				BOOL;	(* Ordre de changement commande remote *)
+	RCP_M_Remote:			BOOL;	(* Bit de reception de l'ordre de remote du module de balayage*)
+	VAR_Remote:				BOOL;	(* Variable intermédiaire commande remote du module de balayage*)
+	
+	M_balayage:				BOOL;	(* Ordre de balayage en manuel*)
+	RCP_M_Balayage:			BOOL;	(* Bit de reception de l'ordre de balayage du module de balayage*)
+	VAR_Balayage:			BOOL;	(* Variable intermédiaire commande balayage du module de balayage*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_SWB1:			BOOL;		(*sélection du motif*)
+	OUT_SWB2:			BOOL;		(*sélection du motif*)
+	OUT_SWB3:			BOOL;		(*sélection du motif*)
+	OUT_SWB4:			BOOL;		(*sélection du motif*)
+	OUT_SWP_ON:			BOOL;		(*SWEEP ON/OFF*)
+	OUT_RMT:			BOOL;		(*Remote*)
+	STATE_NbBal:		USINT;
+	STATE_BAL:			STRING;
+	STATE_REM:			BOOL;		(*Module de balayage en mode Remote*)
+	STATE_LOC:			BOOL;		(*Module de balayage en mode Local*)
+	STATE_ON:			BOOL;		(*Module de balayage en marche*)
+	STATE_OFF:			BOOL;		(*Module de balayage à l'arrêt*)
+	STATE_RDY:			BOOL;		(*Module de balayage à prêt*)
+	AUTOR_Remote_IHM:			BOOL;		(*indique que le changement mode remote est autorisé en mode manuel depuis l'IHM*)
+	AUTOR_Remote_PLC:			BOOL;		(*indique que le changement more remote est autorisé en mode automatique depuis l'automate*)
+	AUTOR_BALAYAGE_IHM:			BOOL;		(*indique que le changement mode remote est autorisé en mode manuel depuis l'IHM*)
+	AUTOR_BALAYAGE_PLC:			BOOL;		(*indique que le changement more remote est autorisé en mode automatique depuis l'automate*)
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+
+	PRM_BAL: 		ARRAY[0..8] OF STRING;		(*nom du programme de balayage*)
+
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Gestion des ordres en mode manuel *)
+RCP_M_Remote			:=	M_Remote;
+RCP_M_Balayage			:=	M_Balayage;
+
+(*affectation des bits d'état*)
+STATE_REM			:=	OUT_RMT;
+STATE_LOC			:=	NOT OUT_RMT;
+STATE_OFF			:=	NOT I_SW_RUN;
+STATE_RDY			:=	I_SW_RDY;
+
+(*indicateur  STATE_ON*)
+
+TIMER_Valid_On.IN	:=	I_SW_RUN;
+TIMER_Valid_On(PT:=T#500ms);
+TIMER_Valid_Off.IN	:=	I_SW_RUN;
+TIMER_Valid_Off(PT:=T#200ms);
+STATE_ON			:=	Timer_Valid_On.Q AND TIMER_Valid_Off.Q;
+
+(*gestion des bits d'autorisation en mode manuel*)
+AUTOR_Remote_IHM		:=	NOT RESET AND MANUAL;
+AUTOR_Remote_PLC		:=	NOT RESET AND NOT MANUAL;
+AUTOR_Balayage_IHM		:=	NOT RESET AND MANUAL;
+AUTOR_Balayage_PLC		:=	NOT RESET AND NOT MANUAL;
+
+(*Selection du mode de balayage*)
+CASE PRM_NbBal OF
+		8:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := TRUE;
+		7:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		6:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		5:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		4:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		3:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+		2:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+		1:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+END_CASE
+STATE_NbBal := PRM_NbBal;
+IF STATE_NbBal > 0 THEN
+	STATE_BAL:= PRM_BAL[STATE_NbBal];
+ELSE
+	STATE_BAL:= '';
+END_IF
+
+(*gestion SWP ON*)
+IF	(CO_balayage AND AUTOR_BALAYAGE_PLC)
+		 OR 	(RCP_M_Balayage AND NOT VAR_BALAYAGE AND AUTOR_BALAYAGE_IHM) THEN
+			VAR_BALAYAGE 		:= 	TRUE;
+ELSIF (NOT Co_balayage AND NOT RESET AND NOT MANUAL)
+		OR 	(RCP_M_Balayage AND VAR_BALAYAGE AND AUTOR_BALAYAGE_IHM)
+		OR 	RESET THEN
+			VAR_BALAYAGE		:=	FALSE;
+END_IF;
+OUT_SWP_ON	:=	VAR_BALAYAGE;
+
+
+(*gestion remote*)
+IF	(CO_Remote AND AUTOR_Remote_PLC)
+		 OR 	(RCP_M_Remote AND NOT VAR_Remote AND AUTOR_Remote_IHM) THEN
+			VAR_Remote 		:= 	TRUE;
+ELSIF (NOT CO_Remote AND NOT RESET AND NOT MANUAL)
+		OR 	(RCP_M_Remote AND VAR_Remote AND AUTOR_Remote_IHM)
+		OR 	RESET THEN
+			VAR_Remote		:=	FALSE;
+END_IF;
+OUT_RMT	:=	VAR_Remote;
+
+(* Reset des ordres*)
+IF M_Remote	AND RCP_M_Remote THEN
+	M_Remote			:=	FALSE;
+END_IF
+
+(* Reset des ordres*)
+IF M_Balayage AND RCP_M_Balayage THEN
+	M_Balayage		:=	FALSE;
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

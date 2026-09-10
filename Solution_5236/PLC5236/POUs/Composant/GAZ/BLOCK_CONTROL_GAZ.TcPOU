@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_CONTROL_GAZ" Id="{b0f742a7-66d2-456b-971a-30f9a409bdfd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CONTROL_GAZ
+(* Gestion d'un controleur de débit de gaz interne Bechkoff pour régulation de pression par débit de gaz*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - VERSION INITIALE - aff 8415 : CT200 n8 Nivarox*)
+
+(*************************************************************************)
+
+VAR_INPUT
+(*informations générales*)
+	RESET:					BOOL;		(* Condition de réinitialisation du controlleur*)
+
+	(*Marche régulation*)
+	CO_On:					BOOL;		(*demande de marche du PID*)
+
+	(*Consignes*)
+	PRM_Pressure:			REAL;		(* Consigne de pression*)
+
+	(*retours d'informations*)
+	I_Act_Pressure:			REAL;		(*Feedback pressure*)
+
+	(*Défauts*)
+	DEF_Internal:			PRCDEF;	(*Controlleur PID en défaut interne*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Flow:				REAL;		(* Débit gaz appliqué*)
+
+	STATE_Nok:				BOOL;		(*controlleur en défaut*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Configuration*)
+	CONF_Kp:		REAL;			(*composante P*)
+	CONF_Tn:		REAL;			(*Composante I (s)*)
+	CONF_Tv:		REAL;			(*Composante D (s)*)
+	CONF_Td:		REAL;			(*Composante damping time*)
+
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+END_VAR
+
+VAR
+	VAR_Ctrl_PID:	FB_BasicPID;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'7';
+TagXML					:=	4;
+
+DEF_Internal.IdXML		:=	'0';
+DEF_Internal.TagXML		:=	6;
+
+
+(*configuratrion du PID*)
+VAR_Ctrl_PID.fKp				:=	CONF_Kp;		(*P*)
+VAR_Ctrl_PID.fTn				:=	CONF_Tn;		(*I*)
+VAR_Ctrl_PID.fTv				:=	CONF_Tv;		(*D*)
+VAR_Ctrl_PID.fTd				:=	CONF_Td;		(*damping*)
+VAR_Ctrl_PID.fCtrlCycleTime		:=	1;				(*controle toutes les secondes, dans un premier temps*)
+
+
+(*affectation des entrées*)
+VAR_Ctrl_PID.fActualValue		:=	I_Act_Pressure;	(*feedback pression*)
+VAR_Ctrl_PID.fSetpointValue		:=	PRM_Pressure;	(*consigne pression*)
+
+(*lancement de la régulation PID sur Co_on et pas reset*)
+VAR_Ctrl_PID(
+		bReset 	:=	NOT CO_On OR RESET,
+);
+
+(*Défaut interne*)
+DEF_Internal.CONDITION	:=	(VAR_Ctrl_PID.nErrorStatus > 0);
+DEF_Internal.DELAY		:=	T#1s;
+DEF_Internal();
+
+
+(*retours controlleur*)
+STATE_Flow		:=	LREAL_TO_REAL(VAR_Ctrl_PID.fCtrlOutput);		(*sortie du PID remise à zéro du bit reset, donc ok pour raz de state_flow*)
+STATE_NOK		:=	DEF_internal.DEF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CONTROL_GAZ">
+      <LineId Id="48" Count="32" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

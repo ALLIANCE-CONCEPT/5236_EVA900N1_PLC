@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_MFC_MKS_NoCoE" Id="{c4877c44-4c12-423a-bf12-56ed4a6837e6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_MFC_MKS_NoCoE
+(* Gestion débitmètre massique MKS sur Ethercat*)
+
+(*Copie conforme du BLOCK_MFC_BROOKS_NoCoE*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - VERSION INITIALE*)
+(* Version simpliste sans programmation du CoE (débitmètre bien configuré en arrivant)*)
+(* Le changement de type de gaz se fait encore via la configuration machine *)
+(* Pas de gestion des erreurs / alarmes internes ==> TODO? *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:		BOOL;		(*paramétrage système ok*)
+(*informations générales*)
+	RESET:					BOOL;		(* Condition de réinitialisation de la fonction *)
+	PRM_Flow:				REAL;		(* Consigne débit gaz*)
+
+	(*DEF_MFC:				PRCDEF;	(* Défaut interne débitmètre*)*)
+	DEF_SURV:				PRCDEF;	(* Défaut surveillance débit*)
+	ALM_SURV:				PRCDEF;	(* Alarme surveillance débit*)
+	VAR_DEF_SURV:			SURVPRC;	(* Condition defaut surveillance débit*)
+	VAR_ALM_SURV:			SURVPRC;	(* Condition alarme surveillance débit*)
+
+	I_SURV_DISABLE:			BOOL;		(* I_STANDARD -- option de desactivation de la surveillance du débit venant du bloc ligne de gaz*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Flow:				REAL;		(* Débit gaz appliqué*)
+	CONF_Util_Max_Flow:		REAL:=1;		(* Débit max gaz utilisé*)
+	(*STATE_Com:				BOOL;		(* Etat communication profibus*)*)
+	STATE_NOK:				BOOL;		(* Débitmètre en défaut*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+(*Configuration*)
+	CONF_Nom_Max_Flow:		REAL:=1;		(* Débit max gaz nominal débitmètre*)
+	CONF_Nom_Coef:			REAL:=1;		(* Coefficient gaz nominal débitmètre*)
+	CONF_Util_Coef:			REAL:=1;		(* Coefficient gaz utilisé*)
+	CONF_Nom_Name:			STRING;		(*Nom du gaz nominal*)
+	CONF_Util_Name:			STRING;		(*Nom du gaz utilisé*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR
+	IN_Measure		AT%I*:	REAL;
+	OUT_Setpoint	AT%Q*:	REAL;
+
+	VAR_Ret_flow:			REAL;
+	VAR_Cons_flow:			REAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'7';
+TagXML					:=	1;
+
+DEF_SURV.IdXML		:=	'0';
+DEF_SURV.TagXML		:=	7;
+
+ALM_SURV.IdXml			:=	'0';
+ALM_SURV.TagXml		:=	8;
+ALM_SURV.Groupe		:=	1;
+
+(*Débit max utile*)
+IF CONF_Nom_Coef > 0.0 THEN
+	CONF_Util_Max_Flow	:=	CONF_Nom_Max_Flow * CONF_Util_Coef / CONF_Nom_Coef;
+ELSE
+	CONF_Util_Max_Flow	:=	0.0;
+END_IF;
+
+(*Retour débit*)
+IF CONF_Nom_Coef > 0.0 THEN
+	VAR_Ret_Flow	:=	IN_Measure;		(*retour directement en réel*)
+	STATE_Flow		:=	VAR_Ret_Flow * CONF_Util_Coef / CONF_Nom_Coef;
+ELSE
+	STATE_Flow		:=	0.0;
+END_IF
+
+(*Consigne débit*)
+IF NOT reset AND PRM_Flow>0.0 AND CONF_Util_Coef > 0.0 THEN
+	VAR_Cons_Flow	:=	PRM_Flow * CONF_Nom_Coef / CONF_Util_Coef;
+ELSE
+	VAR_Cons_Flow	:=	0.0;
+END_IF;
+
+OUT_Setpoint	:=	VAR_Cons_flow;
+
+(*Retour état*)
+STATE_NOK		:=	ALM_SURV.DEF OR DEF_SURV.DEF;
+
+(*desactivation de la surveillance*)
+ALM_SURV.DISABLE	:=	I_SURV_DISABLE;
+DEF_SURV.DISABLE	:=	I_SURV_DISABLE;
+
+(*Défaut surveillance*)
+VAR_ALM_SURV(MEASURE:=STATE_Flow , SETPOINT:= PRM_Flow);
+ALM_SURV.CONDITION	:=	VAR_ALM_SURV.CONDITION AND (ALM_SURV.DELAY > T#0ms) ;
+ALM_SURV();
+
+VAR_DEF_SURV(MEASURE:=STATE_Flow , SETPOINT:= PRM_Flow);
+DEF_SURV.CONDITION	:=	VAR_DEF_SURV.CONDITION AND (DEF_SURV.DELAY > T#0ms) ;
+DEF_SURV();]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_MFC_MKS_NoCoE">
+      <LineId Id="3" Count="47" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

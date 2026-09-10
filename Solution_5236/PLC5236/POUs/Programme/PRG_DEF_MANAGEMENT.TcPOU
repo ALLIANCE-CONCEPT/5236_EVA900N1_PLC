@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="PRG_DEF_MANAGEMENT" Id="{37b361ee-6cda-4e54-baef-ad652486c874}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_DEF_MANAGEMENT
+(* V1.0 S.PARISOT 01/2012 Gestion des piles de défaut et de la communication avec ACsoft*)
+VAR_OUTPUT
+	EVENT_MAILBOX_FULL:	BOOL;
+	STATE_DEFAUT_PRESENT:	BOOL;		(*Indicateur de défaut en cours sur équipement, levé par journal externe*)
+END_VAR
+VAR_INPUT
+	RQ_EMPTY:				BOOL;								(*demande de vidage de la pile*)
+	TABLE_DEF:				ARRAY[0..30] OF DWORD;				(*tables d'état des défaut - 960 defaut max*)
+	RQ_DISPLAY_EVENT:		BOOL;								(*demande d'enregistrement d'un événement dans la liste des événements récents*)
+END_VAR
+VAR_INPUT PERSISTENT
+	EVENT_MAILBOX:		ARRAY[0..100] OF STRUCT_EVENT;	(* pile des evenements en attente de prise en compte par le module EVENT*)
+	EVENT_LIST:			ARRAY[0..20] OF STRUCT_JEV;		(*Liste des événements récents pour affichage dans l'IHM*)
+	EVENT_TO_SEND:		STRUCT_EVENT;					(*Evenement en attente d'enregistrement dans la base de donnée*)
+	EVENT_TO_DISPLAY:	STRUCT_JEV;						(*Evenement en attente d'enregistrement dans la liste des événements récents*)
+END_VAR
+
+VAR
+	I:	INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* le module AC-SOFTWARE demande l'affichage de l'évenement dans la table des événements récents*)
+IF RQ_DISPLAY_EVENT THEN
+	I:=19;
+	WHILE (i>=0) DO
+		EVENT_LIST[I+1] := EVENT_LIST[I];
+		I:=I-1;
+	END_WHILE
+	EVENT_LIST[0] := EVENT_TO_DISPLAY;
+	RQ_DISPLAY_EVENT:= FALSE;
+
+END_IF
+(* si l'id de l'évenement à envoyer est = 0 (pas d'evenement dans la boite) alors*)
+IF  (EVENT_TO_SEND._ID = 0) THEN
+	(* si le premier evenement de la pile d'évenement n'est pas nulle (= présence d'un évenement en haut  de la pile) *)
+	IF NOT (EVENT_MAILBOX[0]._ID = 0) THEN
+		(*on informe le type et l'horodatage de l'événement en attente d'ebregistrement dans la liste des événements récents*)
+		IF EVENT_MAILBOX[0]._TYPE  THEN
+			EVENT_TO_DISPLAY.STATE_App := 'APP';
+		ELSE
+			EVENT_TO_DISPLAY.STATE_App := 'DIS';
+		END_IF
+		EVENT_TO_DISPLAY.STATE_DT := EVENT_MAILBOX[0]._HORODAT;
+	END_IF
+	(*on met l'évenement en haut de  la pile en attente d'envoi vers la base de donnée *)
+	EVENT_TO_SEND:=EVENT_MAILBOX[0];
+	(*on décale toute la pile vers le haut*)
+	FOR i:=0 TO 99 DO
+		EVENT_MAILBOX[i]:=EVENT_MAILBOX[i+1];
+		EVENT_MAILBOX[100]._ID := 0;
+	END_FOR
+
+END_IF
+
+
+IF RQ_EMPTY THEN
+FOR i:=0 TO 99 DO
+		EVENT_TO_SEND._ID := 0;
+		EVENT_MAILBOX[i]._ID := 0;
+END_FOR
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="PRG_DEF_MANAGEMENT">
+      <LineId Id="22" Count="39" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

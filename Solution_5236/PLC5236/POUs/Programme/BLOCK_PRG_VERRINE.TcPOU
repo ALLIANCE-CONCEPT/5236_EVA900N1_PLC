@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_PRG_VERRINE" Id="{ff198dc0-c86a-440f-b48f-fe622070df08}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_VERRINE
+VAR_INPUT
+	VERRINE:						BLOCK_VERRINE;
+	BUZZER:							BLOCK_BUZZER;
+END_VAR
+VAR_OUTPUT
+	(*Verrine*)
+	OUT_Vert		AT%Q*:			BOOL;	(*allumage vert*)
+	OUT_Rouge		AT%Q*:			BOOL;	(*allumage rouge*)
+	OUT_Orange		AT%Q*:			BOOL;	(*allumage orange*)
+	OUT_Buzzer		AT%Q*:			BOOL;
+END_VAR
+VAR
+	VAR_Def_non_bloquant:	BOOL;
+
+	VAR_Mem_MultiBip:		BOOL;
+	TIMER_MultiBip:			TON;
+	VAR_Mem_Buzz_Cont1:		BOOL;
+	TIMER_Buzz_Cont1:		TON;
+	FM_Proc_OK:				ARRAY[0..25] OF R_TRIG;		(*depend du nombre de slots de la cassette*)
+	FD_Prod:				F_TRIG;						(*front descendant du state_prod*)
+	VAR_I:					USINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+(*Défauts non bloquants en procédé*)
+VAR_def_non_bloquant	:=	PRG_GAZ.DG[1].ALM_SURV.DEF OR PRG_GAZ.DG[2].ALM_SURV.DEF
+							OR PRG_GAZ.REGULATION_GAZ_L1.ALA_Surv_Pression.DEF OR PRG_GAZ.REGULATION_GAZ_L2.ALA_Surv_Pression.DEF
+							OR PRG_POMPAGE.POMPAGE.VS11.ALA_Surv_Pression.DEF 
+							OR PRG_POMPAGE.POMPAGE.VS11.DEF_Off.DEF OR PRG_POMPAGE.POMPAGE.VS11.DEF_On.DEF OR PRG_POMPAGE.POMPAGE.VS11.DEF_Position.DEF OR PRG_POMPAGE.POMPAGE.VS11.DEF_Pression.DEF
+							OR PRG_POMPAGE.POMPAGE.VP11.DEF_Off.DEF OR PRG_POMPAGE.POMPAGE.VP11.DEF_On.DEF OR PRG_POMPAGE.POMPAGE.VP11.DEF_Sensor.DEF
+							OR PRG_POMPAGE.POMPAGE.DEF_Vent.DEF 
+							OR PRG_POMPAGE.POMPAGE.PR11.DEF_On.DEF
+							OR PRG_EVAP.EVAPS1.DEF_QZ_CTRL_RATE.DEF OR PRG_EVAP.EVAPS2.DEF_QZ_CTRL_RATE.DEF OR PRG_EVAP.EVAPS3.DEF_QZ_CTRL_RATE.DEF
+							OR PRG_EVAP.XTC3.STATE_NOK;						
+
+
+(*------------------------------------------------------------------GESTION VERRINE----------------------------------------------------------------------------*)
+
+VERRINE.RESET := MACHINE.STATE_Off;
+
+(*Rouge fixe : MACHINE EN AUTOMATIE, PORTE FERMEE SANS PRODUCTION OU PRODUTION INTERROMPUE*)
+VERRINE.I_rouge_cont	:=	MACHINE.STATE_Auto AND PRG_POMPAGE.DOOR AND (NOT MACHINE.STATE_Prod OR MACHINE.STATE_interrupted);
+
+(*Rouge clignottant : NU*)
+VERRINE.I_rouge_cligno	:=	FALSE;
+
+(*Orange fixe : PROCEDE EN COURS ET DEFAUT NON BLOQUANT *)
+VERRINE.I_orange_cont	:= 	MACHINE.STATE_Prod AND VAR_Def_non_bloquant;
+
+(*Orange clignotant : NU*)
+VERRINE.I_orange_cligno := 	FALSE;
+
+(*Vert fixe : PROCEDE EN COURS ET PAS DE DEFAUT NON BLOQUANT*)
+VERRINE.I_vert_cont 	:= 	MACHINE.STATE_Prod AND NOT VAR_Def_non_bloquant;
+
+(*vert clignotant : NU*)
+VERRINE.I_vert_cligno 	:=	FALSE;
+
+VERRINE();
+
+OUT_Orange  :=	VERRINE.OUT_orange;
+OUT_Rouge	:=	VERRINE.OUT_rouge;
+OUT_Vert	:=	VERRINE.OUT_vert;
+
+
+(*------------------------------------------------------------------------------------GESTION BUZZER-----------------------------------------------------------------------*)
+(*
+(*gestion front montant fin procédé pour chaque plaque*)
+FOR VAR_I := 0 TO 25 (*10*) DO
+	FM_Proc_OK[VAR_I].CLK	:=	(K7.SUBSTRAT[VAR_I].STATE_Process = 3);
+	FM_Proc_OK[VAR_I];
+END_FOR
+IF 	FM_Proc_OK[0].Q
+	OR FM_Proc_OK[1].Q OR FM_Proc_OK[2].Q OR FM_Proc_OK[3].Q OR FM_Proc_OK[4].Q OR FM_Proc_OK[5].Q
+	OR FM_Proc_OK[6].Q OR FM_Proc_OK[7].Q OR FM_Proc_OK[8].Q OR FM_Proc_OK[9].Q OR FM_Proc_OK[10].Q
+	OR FM_Proc_OK[11].Q OR FM_Proc_OK[12].Q OR FM_Proc_OK[13].Q OR FM_Proc_OK[14].Q OR FM_Proc_OK[15].Q
+	OR FM_Proc_OK[16].Q OR FM_Proc_OK[17].Q OR FM_Proc_OK[18].Q OR FM_Proc_OK[19].Q OR FM_Proc_OK[20].Q
+	OR FM_Proc_OK[21].Q OR FM_Proc_OK[22].Q OR FM_Proc_OK[23].Q OR FM_Proc_OK[24].Q OR FM_Proc_OK[25].Q THEN
+		VAR_Mem_Buzz_Cont1	:=	TRUE;
+ELSIF TIMER_Buzz_Cont1.Q THEN
+		VAR_Mem_Buzz_Cont1	:=	FALSE;
+END_IF
+*)
+
+(*
+BUZZER(
+	I_DEF_Continu1:= 				TIMER_Buzz_Cont1.Q,
+	I_DEF_Continu2:= 				FALSE,
+	I_DEF_Alternatif:= 				FALSE,
+	I_DEF_MultiBip:= 				FALSE,
+	I_DEF_Permanent:= 			FALSE,
+	RESET:= 					ENCEINTE_10.STATE_Off,
+	PRM_Tp_Continu1:= 			T#5s,
+	PRM_Tp_Continu2:= 			T#2s,
+	PRM_Tp_Bip_Alternatif:= 		T#2s,
+	PRM_Tp_Tempo_Alternatif:= 	T#2s,
+	PRM_Tp_MultiBip1:= 			T#500ms,
+	PRM_Tp_MultiBip2:= 			T#30s,
+	PRM_Tp_Tempo_MultiBip:= 	T#2m,
+	PRM_Alternatif_Temporise:= 	FALSE,
+	PRM_MultiBip_Temporise:= 	FALSE,
+	PRM_Acq_Continu1:= 			FALSE,
+	PRM_Acq_Continu2:= 			FALSE,
+	PRM_Acq_Alternatif:= 			FALSE,
+	PRM_Acq_MultiBip:= 			TRUE,
+	PRM_Acq_Permanent:= 		FALSE,
+	PRM_Nb_Bip:=				2,
+);
+OUT_Buzzer	:=	BUZZER.OUT_Buzzer;*)]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PRG_VERRINE">
+      <LineId Id="146" Count="1" />
+      <LineId Id="133" Count="0" />
+      <LineId Id="136" Count="1" />
+      <LineId Id="144" Count="0" />
+      <LineId Id="138" Count="0" />
+      <LineId Id="142" Count="0" />
+      <LineId Id="145" Count="0" />
+      <LineId Id="139" Count="1" />
+      <LineId Id="134" Count="1" />
+      <LineId Id="29" Count="2" />
+      <LineId Id="131" Count="0" />
+      <LineId Id="33" Count="68" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

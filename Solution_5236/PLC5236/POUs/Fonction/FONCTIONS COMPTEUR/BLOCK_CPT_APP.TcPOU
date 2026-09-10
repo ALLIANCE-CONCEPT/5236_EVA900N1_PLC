@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CPT_APP" Id="{757f6ae4-12c2-494d-a96f-511492937fb6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CPT_APP
+(* fonction permettant de compter un nombre d'apparition*)
+(* il faut lier la variable Etat à la variable que l'on veut compter*)
+(* la variable compteur donnera le nombre d'appartition de Etat depuis le début du lancement de la machine*)
+(* la version initiale n'a pas été tracée*)
+(*V2.0 - version initiale SP - 7326 - BA8*)
+VAR_INPUT
+	I_On:						BOOL;				(*donne si la fonction appelante est dans l'état marche (true) ou arret (false) *)
+END_VAR
+VAR
+	FP_On:						R_TRIG;
+END_VAR
+VAR_INPUT PERSISTENT
+	TagXML:						UINT;
+	DISABLE:					BOOL;											(*indique que le compteur est desactivé*)
+END_VAR
+VAR PERSISTENT
+	STATE_Cpt:	 				UDINT;				(*contient le nombre cumulé d'utilisation de la fonction*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF DISABLE THEN
+	RETURN;
+END_IF
+FP_On(clk:=I_On);
+
+IF FP_On.Q THEN
+	STATE_Cpt	:=	STATE_Cpt + 1;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CPT_APP">
+      <LineId Id="19" Count="7" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="SURVPRC" Id="{9448f8bd-cdd8-427d-9e14-bf7d8141c70f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK SURVPRC
+
+(* Fonction standard AC de gestion surveillance de défaut *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	MEASURE:			REAL;	(* Retour valeurs à surveillées*)
+	SETPOINT:			REAL;	(* Consigne valeurs à surveillées*)
+
+END_VAR
+
+VAR_OUTPUT
+	CONDITION:			BOOL;	(* Condition de défaut *)
+END_VAR
+VAR_INPUT PERSISTENT
+	OFFSET:			REAL;	 (* Ecart toléré*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Surveillance inhibée si offset = 0*)
+IF OFFSET <> 0
+	AND (ABS(MEASURE - SETPOINT) > OFFSET) THEN
+	CONDITION := TRUE;
+ELSE
+	CONDITION := FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="SURVPRC">
+      <LineId Id="22" Count="6" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

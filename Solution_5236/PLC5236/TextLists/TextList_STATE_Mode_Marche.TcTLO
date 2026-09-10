@@ -1,0 +1,228 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <TextList Name="TextList_STATE_Mode_Marche" Id="{093db9f2-2791-4b21-a7cb-f7e3999665df}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"0 - PLC Off"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>0 - Automate à l'arrêt</v>
+                <v>0 - PLC Off</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"1 - PLC Starting"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>1 - Démarrage automate</v>
+                <v>1 - PLC starting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"2 - Waiting for
+machine supply"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>2 - Attente
+alimentation machine</v>
+                <v>2 - Waiting for machine supply</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"3 - Machine stopped"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>3 - Machine à l'arrêt</v>
+                <v>3 - Machine stopped</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"4 - Waiting for operating
+mode selection..."</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>4 - Attente sélection
+mode de marche...</v>
+                <v>4 - Wait for operating mode selection...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"5 - Machine initialization..."</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>5 - Initialisation machine</v>
+                <v>5 - Machine initialization</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"6 - Automatic mode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>6 - Mode automatique</v>
+                <v>6 - Automatic mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"7 - Production preparation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>7 - Préparation production</v>
+                <v>7 - Production preparation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"8 - Production"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>8 - Production en cours...</v>
+                <v>8 - Production in progress...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"9 - Production stopped"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>9 - Production stoppée</v>
+                <v>9 - Production stopped</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"10 - Manual mode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>10 - Mode manuel</v>
+                <v>10 - Manual mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"11 - Fin de production"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>11 - Fin de production</v>
+                <v>11 - End of production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"12 - Interruption de production"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>12 - Interruption de production</v>
+                <v>12 - Production interruption</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"13 - En attente de reprise"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>13 - En attente de reprise</v>
+                <v>13 - Waiting for resume</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"20 - Lancement Eco"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>20 - Lancement Eco Mode</v>
+                <v>20 - Eco Mode starting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"21 - Eco Mode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>21 - Eco Mode</v>
+                <v>21 - Eco Mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"22 - Lancement procédé
+eco-veille profond"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>22 - Lancement procédé
+eco-veille profond</v>
+                <v>22 - Deep eco-sleep process starting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">"23 - Lancement procédé
+eco-veille profond"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>23 - Lancement procédé
+eco-veille profond</v>
+                <v>23 - Deep eco-sleep process starting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">"24 - Procédé eco-veille
+profond en cours"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>24 - Procédé eco-veille
+profond en cours</v>
+                <v>24 - Deep eco-sleep process running</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">"25 - Arrêt procédé
+eco-veille profond"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>25 - Arrêt procédé
+eco-veille profond</v>
+                <v>25 - Deep eco-sleep process end</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">"26 - Procédé eco-veille
+profond en défaut"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>26 - Procédé eco-veille
+profond en défaut</v>
+                <v>26 - Deep eco-sleep process in fault</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"27"</v>
+              <v n="TextDefault">"27 - Attente sortie de veille
+appareils"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>27 - Attente sortie de veille
+appareils</v>
+                <v>27 - Waiting for devices wakes up</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{c9dbb815-3aa0-429a-ba62-0fe530eab2c5}</v>
+          <v n="GuidReInit">{62fff584-effb-48dd-926e-3f359cf042b0}</v>
+          <v n="GuidExitX">{76f635e4-af46-4b92-8d12-0f6ec7209f46}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

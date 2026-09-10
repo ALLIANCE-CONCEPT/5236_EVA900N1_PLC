@@ -1,0 +1,331 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_EXEC_PROC" Id="{fe045354-7b1d-463c-afd6-ac8bebcfb525}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_EXEC_PROC
+
+(*block de gestion d'éxécution des procédés d'une machine de type EVA*)
+
+(****************historique des versions*****************************)
+(* Version 1-0 - GV - VERSION INITIALE - 9070*)
+(* Version 2-0 - GV - 9310 - 01/2016 - Modification gestion PULL_TRAC type lent *)
+(* Version 3-0 - HG - 11355 - 03/2019 - Ajout gestion paramètres boucle/saut pour numéro étape à demander à ACSoft 
+								+ texte évènement*)
+(* Version 4-0 - GV - 13375 - 10/2022 - Modificiation variable PULL_TRAC pour gestion avec nouveau TR'AC*)
+(* Version 5-0 - HG - 14035 - 11/2023 - Suppression PULL_TRAC, géré dans BLOCK_MODE_MARCHE V5*)
+(*************************************************************************)
+
+VAR_INPUT
+	I_ON:						BOOL;					(*Condition de déclenchement du grafcet de marche du procédé*)
+	I_PROCESS_LOADING_OK:		BOOL;					(*l'IHM indique que le procédé a été chargé sans erreur*)
+	I_PROCESS_LOADING_NOK:		BOOL;					(*L'IHM indique une erreur de chargement du procédé*)
+	I_STEP_LOADING_OK:			BOOL;					(*L'IHM indique le chargement de l'étape ok*)
+	I_STEP_LOADING_NOK:			BOOL;					(*L'IHM indique le chargement de l'étape nok*)
+	I_NO_MORE_STEP:				BOOL;					(*L'IHM indique qu'il n'y a plus d'étape à exécuter*)
+	I_INTER_PROC:				BOOL;					(*information d'interruption du procédé en cours*)
+
+	M_LOAD_PROCESS:				BOOL;					(*Demande opérateur de chargement du process*)
+
+	EN_EXEC_STEP:					ARRAY[0..30] OF BOOL;	(*Condition d'autorisation d'exécution des étapes*)
+	EN_NEXT_STEP:					ARRAY[0..30] OF BOOL;	(*Condition d'autorisation d'exécution de l'étape suivante*)
+
+	M_NEXT_STEP:					BOOL;
+
+	I_EXEC_STEP_OK:					ARRAY[0..30] OF BOOL;	(*Execution étape ok*)
+
+	(*défaut*)
+	DEF_PROCESS_LOADING:		PRCDEF;				(*défaut de chargement du procédé*)
+	DEF_STEP_REJECTED:			PRCDEF;				(*défaut d'étape non autorisée*)
+	DEF_READ_STEP:				PRCDEF;				(*défaut de lecture d'une étape*)
+
+	(*évenement*)
+	EV_LOAD_PROCESS:				PRCDEF;				(*Evenement chargement d'un procédé*)
+	EV_LOAD_STEP:					PRCDEF;				(*Evenement chargement d'une étape*)
+	EV_STEP_BOUCLE:					PRCDEF;				(*Evenement boucle Xeme itération*)
+	EV_NEXT_STEP:					PRCDEF;				(*Evenement de passage à l'étape suivante*)
+
+	PRM_PROCESS: 				STRING;					(* ~ (OPC : 1 : available for OPC-clients) *)				(*Chemin et nom du fichier procédé executé*)
+	PRM_PROCESS_NAME: 			STRING;
+	PRM_TYPE_ETAPE:				UINT;					(*Type d'étape à exécuter*)
+	PRM_BATCH:					STRING;					(* ~ (OPC : 1 : available for OPC-clients) *)				(*Identifiant du lot*)
+	PRM_RECORD:					BOOL;					(*Option d'enregistrement du programme de procédé*)
+	PRM_NEXT_STEP_EXT:			ARRAY[0..30] OF BOOL;	(*Indique que la fonction fin d'étape anticipée est prise en charge de manière externe*)
+	PRM_BOUCLE:					BOOL:=FALSE;			(*Indique que l'étape courante est une boucle : gestion numéro étape suivante*)
+	PRM_SAUT:					BOOL:=FALSE;			(*Indique que l'étape courante est un saut : gestion numéro étape suivante*)
+	PRM_NEXT_STEP:				UINT;					(*N° d'étape suivante si boucle/saut*)
+	I_ITER_BOUCLE:				USINT;					(*Itération courante boucle*)
+
+	OP_RUN:						BLOCK_G7;				(*Grafcet de gestion de l'execution procede*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	IsFunction:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+VAR_OUTPUT
+	RQ_EXEC_STEP:					ARRAY[0..30] OF BOOL;
+	RQ_LOAD_PROCESS:				BOOL;						(*Demande de chargement du procédé dans l'HM*)
+	RQ_READ_STEP:					BOOL;						(*Demande de lecture de l'étape suivante*)
+	RQ_FM_EXEC_STEP:				ARRAY[0..30] OF BOOL;		(*Front montant demande de lecture procédé dans l'IHM*)
+	STATE_INTERRUPTED:				BOOL;						(*Indicateur de procédé interrompu*)
+	STATE_STEP:						UINT;						(*N° d'étape en cours d'exécution*)
+	STATE_OK:						BOOL;
+	STATUS:							UINT;						(*Etat du grafcet*)
+	STATE_STEP_TEXT:				STRING(255);				(*Descriptif de l'étape en cours d'exécution*)
+	AUTOR_NEXT_STEP:				BOOL;					(*Autorisation de passage à l'étape suivante*)
+	STATE_reprise:					BOOL;						(*indicateurateur de mode reprise en cours*)
+	RQ_NEXT_STEP:					BOOL;						(* transmission de l'ordre d'étape suivante au étape complexe*)
+	STATE_RECORD:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)
+
+	(*requetes vérification*)
+	RQ_Verif_Prog:			BOOL;						(*Demande vérification du programme de procédé*)
+END_VAR
+
+VAR
+	TIMER_TIMEOUT:				TON;		(*Timer timemout lecture étape*)
+	TIMER_RCP_PROCESS:			TP;
+	RCP_NEXT_STEP:				BOOL;
+	RCP_LOAD_PROCESS:			BOOL;
+	FM_ETAPE5:					R_TRIG;
+	FM_ETAPE0:					R_TRIG;
+	TIMER_RESET_BATCH:			TP;
+	FD_TIMER_RESET:				F_TRIG;
+	TIMER_RELOAD_PROCESS: 		TP;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_PROCESS_LOADING.IdXML := '0';
+DEF_PROCESS_LOADING.TagXML := 27;
+DEF_READ_STEP.IdXML := '0';
+DEF_READ_STEP.TagXML := 28;
+DEF_STEP_REJECTED.IdXML := '0';
+DEF_STEP_REJECTED.TagXML := 29;
+
+EV_LOAD_PROCESS.IdXML := '0';
+EV_LOAD_PROCESS.TagXML :=30;
+EV_LOAD_PROCESS.Groupe := 3;
+
+EV_LOAD_STEP.IdXML := '0';
+EV_LOAD_STEP.TagXML :=31;
+EV_LOAD_STEP.Groupe := 3;
+
+EV_STEP_BOUCLE.IdXML := '0';
+EV_STEP_BOUCLE.TagXML :=41;
+EV_STEP_BOUCLE.Groupe := 3;
+
+EV_NEXT_STEP.IdXML :='0';
+EV_NEXT_STEP.TagXML :=32;
+EV_NEXT_STEP.Groupe := 3;
+
+
+IdXML :='19';
+TagXML := 1;
+
+(*Demande de vérification procédé*)
+RQ_Verif_Prog	:=	OP_RUN.Etape.1;
+
+(*Reception des ordres*)
+RQ_NEXT_STEP:= FALSE;
+RCP_NEXT_STEP:= M_NEXT_STEP;
+RQ_NEXT_STEP:=RCP_NEXT_STEP;
+
+RCP_LOAD_PROCESS:= M_LOAD_PROCESS;
+TIMER_RCP_PROCESS(IN:=M_LOAD_PROCESS  ,PT:=T#1s);
+
+TIMER_RELOAD_PROCESS(IN:=RCP_LOAD_PROCESS , PT:=T#2s);
+
+
+(*Evenement de lecture d'une étape*)
+EV_LOAD_STEP.VAL1 := UINT_TO_STRING(STATE_STEP);
+EV_LOAD_STEP.VAL2 := STATE_STEP_TEXT;
+EV_LOAD_STEP.CONDITION := OP_RUN.Etape.2 AND I_STEP_LOADING_OK AND NOT PRM_BOUCLE;
+EV_LOAD_STEP();
+
+(*Evenement de lecture d'une étape boucle*)
+EV_STEP_BOUCLE.VAL1 := UINT_TO_STRING(STATE_STEP);
+EV_STEP_BOUCLE.VAL2 := STATE_STEP_TEXT;
+EV_STEP_BOUCLE.VAL3 := USINT_TO_STRING(I_ITER_BOUCLE+1);
+EV_STEP_BOUCLE.CONDITION := OP_RUN.Etape.5 AND (I_EXEC_STEP_OK[PRM_TYPE_ETAPE]) AND PRM_BOUCLE;
+EV_STEP_BOUCLE();
+
+EV_NEXT_STEP.CONDITION :=OP_RUN.Etape.5
+						AND RCP_NEXT_STEP AND AUTOR_NEXT_STEP;
+EV_NEXT_STEP();
+
+RUN_PROCESS();
+
+
+(*Temporisation de time out*)
+TIMER_TIMEOUT	(
+				PT:=T#5s,
+				IN:=OP_RUN.Etape.2
+				);
+
+(*Demande de chargement procédé*)
+RQ_LOAD_PROCESS		:= 	OP_RUN.Etape.1
+						OR (TIMER_RCP_PROCESS.Q AND NOT I_PROCESS_LOADING_OK AND NOT I_PROCESS_LOADING_NOK)  ;
+RQ_READ_STEP 			:= 	OP_run.Etape.2;
+
+FM_ETAPE5(CLK:=OP_RUN.Etape.5);
+RQ_FM_EXEC_STEP[PRM_TYPE_ETAPE] 		:=	FM_ETAPE5.Q;
+RQ_EXEC_STEP[PRM_TYPE_ETAPE]			:=	OP_RUN.Etape.5;
+IF NOT RQ_LOAD_PROCESS THEN
+	I_PROCESS_LOADING_OK:=FALSE;
+	I_PROCESS_LOADING_NOK:=FALSE;
+END_IF
+IF NOT RQ_READ_STEP THEN
+	I_STEP_LOADING_NOK := FALSE;
+	I_STEP_LOADING_OK:=FALSE;
+	I_NO_MORE_STEP :=FALSE;
+END_IF
+
+(*N°d'étape en cours*)
+IF OP_RUN.Etape.1 THEN
+	STATE_STEP	:=	1;
+ELSIF OP_RUN.Etape.6 AND NOT PRM_BOUCLE AND NOT PRM_SAUT THEN
+	STATE_STEP := STATE_STEP + 1;
+ELSIF OP_RUN.Etape.6 AND (PRM_BOUCLE OR PRM_SAUT) THEN
+	STATE_STEP := PRM_NEXT_STEP;
+END_IF
+STATE_OK:=OP_RUN.OK;
+(*Gestion du mode reprise*)
+IF OP_RUN.Etape.9 THEN
+	STATE_reprise := TRUE;
+ELSIF OP_RUN.Etape.0 OR OP_RUN.Etape.6 THEN
+	STATE_Reprise:=FALSE;
+END_IF
+
+(*interruption procédé*)
+STATE_INTERRUPTED	 := 	OP_RUN.Etape.8;
+STATUS				 := 	OP_RUN.STATUS;
+AUTOR_NEXT_STEP		 :=		EN_NEXT_STEP[PRM_TYPE_ETAPE] AND OP_RUN.Etape.5;
+
+
+(*Défaut de chargement du procédé*)
+DEF_PROCESS_LOADING.CONDITION:=OP_RUN.Etape.12;
+DEF_PROCESS_LOADING();
+(*Défaut d'étape non autorisés*)
+DEF_STEP_REJECTED.VAL1 := UINT_TO_STRING(STATE_STEP);
+DEF_STEP_REJECTED.VAL2:=STATE_STEP_TEXT ;
+DEF_STEP_REJECTED.CONDITION:=OP_RUN.Etape.7;
+DEF_STEP_REJECTED();
+(*Défaut de lecture d'une étape*)
+DEF_READ_STEP.VAL1 := UINT_TO_STRING(STATE_STEP);
+DEF_READ_STEP.CONDITION := OP_RUN.Etape.11;
+DEF_READ_STEP();
+
+(*Evenement de chargement d'un procédé*)
+EV_LOAD_PROCESS.VAL1 := PRM_PROCESS;
+EV_LOAD_PROCESS.VAL2 := PRM_BATCH;
+EV_LOAD_PROCESS.CONDITION := OP_RUN.Etape.1 OR ( TIMER_RCP_PROCESS.Q AND I_PROCESS_LOADING_OK)  ;
+EV_LOAD_PROCESS();
+
+(*reset des ordres*)
+IF RCP_NEXT_STEP AND M_NEXT_STEP THEN
+	M_NEXT_STEP:=FALSE;
+END_IF;
+IF RCP_LOAD_PROCESS AND M_LOAD_PROCESS THEN
+	M_LOAD_PROCESS:=FALSE;
+END_IF;
+
+STATE_RECORD := PRM_RECORD AND NOT OP_RUN.Etape.0;
+FM_ETAPE0(CLK:=OP_RUN.Etape.0);
+TIMER_RESET_BATCH( IN:= FM_ETAPE0.Q ,
+						PT:= T#5s);
+
+FD_TIMER_RESET(CLK:= TIMER_RESET_BATCH.Q);
+IF FD_TIMER_RESET.q  THEN
+	PRM_BATCH := '';
+END_IF
+]]></ST>
+    </Implementation>
+    <Action Name="RUN_PROCESS" Id="{761b2fe6-23ad-41e5-bd78-156dd552a1fe}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET EXECUTION PROCEDE*)
+(* initialisation du grafcet*)
+
+OP_RUN(
+	N_STEP_OP_OK:=10 ,
+	N_STEP_OP_NOK:= 0);
+
+(* initialisation du grafcet*)
+IF 		OP_RUN.Etape = 0 THEN
+				OP_RUN.Etape.0 := TRUE;
+(*interruption du procédé - repositionnement sur étape 8*)
+ELSIF NOT OP_RUN.Etape.0 AND I_INTER_PROC THEN
+				OP_RUN.Etape := 0;
+				OP_RUN.Etape.8:=TRUE;
+(*repositionnement sur étape 0*)
+ELSIF  NOT I_ON AND NOT OP_RUN.Etape.0 THEN
+
+				OP_Run.Etape:= 0;			(*RAZ grafcet*)
+				OP_Run.Etape.0:=TRUE;
+(*étape 0-1 attente ordre execution du procede*)
+ELSIF OP_RUN.etape.0 AND I_ON  THEN
+				OP_RUN.Etape.1 	:=TRUE;
+				OP_RUN.Etape.0 	:=FALSE;
+(*étape 1-2 chargement procede ok*)
+ELSIF	OP_RUN.Etape.1 AND I_PROCESS_LOADING_OK  THEN
+				OP_RUN.Etape.2:=TRUE;
+				OP_RUN.Etape.1:=FALSE;
+(*étape 1-12 chargement procede nok*)
+ELSIF	OP_RUN.Etape.1 AND I_PROCESS_LOADING_NOK  THEN
+				OP_RUN.Etape.12:=TRUE;
+				OP_RUN.Etape.1:=FALSE;
+(*etape 2-3*)
+ELSIF OP_RUN.Etape.2 AND I_STEP_LOADING_OK THEN
+				OP_RUN.Etape.3:=TRUE;
+				OP_RUN.Etape.2:=FALSE;
+(*etape 2-11*)
+ELSIF OP_RUN.Etape.2 AND (TIMER_TIMEOUT.Q OR I_STEP_LOADING_NOK)  THEN
+				OP_RUN.Etape.11:=TRUE;
+				OP_RUN.Etape.2	:=FALSE;
+(*etape 2-10*)
+ELSIF OP_RUN.Etape.2 AND I_NO_MORE_STEP THEN
+				OP_RUN.Etape.10:=TRUE;
+				OP_RUN.Etape.2:= FALSE;
+(*etape 3-4*)
+ELSIF OP_RUN.Etape.3 THEN
+				OP_RUN.Etape.4:=TRUE;
+				OP_RUN.Etape.3:= FALSE;
+(*etape 4-5*)
+ELSIF OP_RUN.Etape.4 AND EN_EXEC_STEP[PRM_TYPE_ETAPE] THEN
+				OP_RUN.Etape.5:=TRUE;
+				OP_RUN.Etape.4:=FALSE;
+(*Etape 4-7*)
+ELSIF OP_RUN.Etape.4 AND NOT EN_EXEC_STEP[PRM_TYPE_ETAPE] THEN
+				OP_RUN.Etape.7:=TRUE;
+				OP_RUN.Etape.4:=FALSE;
+(*Etape 5-6*)
+ELSIF OP_RUN.Etape.5 AND (I_EXEC_STEP_OK[PRM_TYPE_ETAPE]
+						OR (RCP_NEXT_STEP AND AUTOR_NEXT_STEP  AND NOT PRM_NEXT_STEP_EXT[PRM_TYPE_ETAPE])) THEN
+				OP_RUN.Etape.6:=TRUE;
+				OP_RUN.Etape.5:=FALSE;
+(*Etape 6-2*)
+ELSIF OP_RUN.Etape.6  THEN
+				OP_RUN.Etape.2:=TRUE;
+				OP_RUN.Etape.6:=FALSE;
+(*Etape 8-9*)
+ELSIF OP_RUN.Etape.8  AND NOT I_INTER_PROC THEN
+				OP_RUN.Etape.9:=TRUE;
+				OP_RUN.Etape.8:=FALSE;
+(*Etape 9-2*)
+ELSIF OP_RUN.Etape.9   THEN
+				OP_RUN.Etape.2:=TRUE;
+				OP_RUN.Etape.9:=FALSE;
+END_IF
+
+OP_RUN.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_EXEC_PROC">
+      <LineId Id="101" Count="141" />
+      <LineId Id="397" Count="0" />
+      <LineId Id="243" Count="0" />
+    </LineIds>
+    <LineIds Name="BLOCK_EXEC_PROC.RUN_PROCESS">
+      <LineId Id="0" Count="74" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

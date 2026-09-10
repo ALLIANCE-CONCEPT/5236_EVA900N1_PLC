@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_VERRINE" Id="{b670ca72-df7f-40c3-9f71-004155d57079}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_VERRINE
+(*Block de gestion de verrine 3 couleurs - clignotement possible pour chacune d'elles*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - VERSION INITIALE*)
+(* Version 2-0 - HG - Sans block PWM*)
+
+(*************************************************************************)
+
+VAR_INPUT
+
+	I_vert_cont: 			BOOL := FALSE;		(*demande allumage vert continu*)
+	I_vert_cligno:			BOOL := FALSE;		(*demande allumage vert clignotant*)
+	I_orange_cont:			BOOL := FALSE;
+	I_orange_cligno:		BOOL := FALSE;
+	I_rouge_cont:			BOOL := FALSE;
+	I_rouge_cligno:			BOOL := FALSE;
+	RESET:					BOOL;		(*demande de reset *)
+
+END_VAR
+
+
+VAR_OUTPUT
+	OUT_vert: 		BOOL;		(*allumage vert*)
+	OUT_orange:		BOOL;
+	OUT_rouge:		BOOL;
+
+END_VAR
+
+
+VAR
+	(*variables de gestion du clignotement*)
+	VAR_Alternatif_vert:				BLOCK_CLIGNOTANT_V0_0;
+	VAR_Alternatif_orange:				BLOCK_CLIGNOTANT_V0_0;
+	VAR_Alternatif_rouge:				BLOCK_CLIGNOTANT_V0_0;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*entrées alternatives*)
+VAR_Alternatif_vert.CONF_Period_Off		:=	T#1S;
+VAR_Alternatif_vert.CONF_Period_Off		:=	T#1S;
+VAR_Alternatif_orange.CONF_Period_Off	:=	T#1S;
+VAR_Alternatif_orange.CONF_Period_Off	:=	T#1S;
+VAR_Alternatif_rouge.CONF_Period_Off	:=	T#1S;
+VAR_Alternatif_rouge.CONF_Period_Off	:=	T#1S;
+
+(*vert*)
+VAR_Alternatif_vert(IN_On	:=	I_vert_cligno AND NOT RESET);
+
+(*orange*)
+VAR_Alternatif_orange(IN_On	:=	I_orange_cligno AND NOT RESET);
+
+(*rouge*)
+VAR_Alternatif_rouge(IN_On	:=	I_rouge_cligno AND NOT RESET);
+
+(*envoi des sorties*)
+OUT_vert := VAR_Alternatif_vert.STATE_ON OR (I_vert_cont AND NOT RESET);
+OUT_orange := VAR_Alternatif_orange.STATE_ON OR (I_orange_cont AND NOT RESET);
+OUT_rouge := VAR_Alternatif_rouge.STATE_ON OR  (I_rouge_cont AND NOT RESET);]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_VERRINE">
+      <LineId Id="39" Count="0" />
+      <LineId Id="124" Count="0" />
+      <LineId Id="128" Count="3" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="44" Count="1" />
+      <LineId Id="55" Count="2" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="68" Count="1" />
+      <LineId Id="78" Count="5" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

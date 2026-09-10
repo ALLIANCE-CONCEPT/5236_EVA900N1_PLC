@@ -1,0 +1,164 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_VARIATEUR_MOTEUR" Id="{c7a2e0b8-4022-4cdb-be0f-d53df9335be8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_VARIATEUR_MOTEUR
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:			BOOL;			(*paramétrage système ok*)
+(*paramètre standard*)
+	RESET:   					BOOL; 			(*Condition RAZ actionneur*)
+	MANUAL:  					BOOL; 			(*Mode manuel*)
+
+	DOOR:						BOOL;			(*indicateur fermeture porte*)
+
+(*parametre de pilotage en entrée*)
+	CO_On:   					BOOL;	 		(*Ordre mode automatique activation*)
+	EN_On_INT:   				BOOL:=TRUE;		(*Condition d'autorisation d'activation donnée par le bloc qui instancie le bloc actuator*)
+	EN_Off_INT:  				BOOL:=TRUE;		(*Condition d'autorisation de désactivation donnée par le bloc qui instacie le bloc actuator*)
+	EN_On_EXT:					BOOL:=TRUE;		(*condition d'autorisation d'activation externe*)
+	EN_Off_EXT:					BOOL:=TRUE;		(*condition d'autorisation de desactivation externe*)
+
+	IN_OK AT %I*:			BOOL;				(*Indique que le variateur est OK, pas en défaut*)
+
+	PRM_Cons_Vitesse:		REAL;				(*consigne de vitesse du PS de 0*)
+
+	DEF_Off_auto:			PRCDEF;		(*Défaut de désactivation automatique*)
+(*	DEF_SURV_ROTATION:		PRCDEF;		(*Défaut de surveillance de la rotation*)	*)
+(*	DEF_MARCHE:				PRCDEF;		(*Défaut de marche du variateur*)		*)
+	DEF_Variateur:			PRCDEF;		(*Défaut indiquant que le variateur est pas ok*)
+
+	AO_VITESSE:				ANALOG_OUTPUT;
+	TIMER_OFF:				TON;
+END_VAR
+
+VAR
+	M_On:  						BOOL; 										(*Ordre mode manuel activation rotation*)
+	M_Off:   					BOOL; 										(*Ordre mode manuel désactivation*)
+	RCP_M_On:   				BOOL;
+	RCP_M_Off:  				BOOL;
+	VAR_On:						BOOL;										(*variable intermédiaire avant affectation de la sortie OUT_On *)
+	VAR_Off:					BOOL;										(*Variable intermédiaire avant affectation de la sortie OUT_Off *)
+	TIMER_DOOR_CLOSED:	TON;
+	VAR_TIM_SURV:			TIME;
+	AI_POT: BOOL;
+END_VAR
+
+VAR_INPUT PERSISTENT
+(*Entité*)
+	IsComponent:			BOOL;		(*entité : composant*)
+	IdXML:					STRING;		(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:					UINT;		(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:				STRING;		(*MNEMO de l'appelant*)
+	MNEMO:					STRING;		(*MNEMO de l'entité*)
+	CONF_MAX_RPM:			REAL;		(*Vitesse maximum en unité physique*)
+	CONF_EN_On:				USINT:=0;	(*définit la réaction du système en cas de perte des conditions d'autorisation d'activation EN_On*)
+										(* 0 = désactivation automatique  en cas de perte des conditions d'autorisation d'activation uniquement en manuel*)
+										(* 1 = désactivation automatique en cas de perte des conditions d'autorisation d'activation en auto et en manuel*)
+										(* 2 = Pas de déscativation automatique*)
+	CONF_No_Safety_Auto:	BOOL:=FALSE;
+										(*option de desactivation des conditions d'autorisation en mode automatique*)
+	TIMER_RETARD_SURV : TON;
+END_VAR
+
+VAR_OUTPUT
+
+	OUT_MPS11 				AT %Q*:	BOOL;							(*SORTIE TOR ROTATION PS *)
+	STATE_Consigne:			REAL;									(*Consigne de vitesse de rotation appliquée*)
+	STATE_On:	   			BOOL; 									(*Indicateur moteur en marche*)
+	STATE_Off:				BOOL;									(*Indicateur moteur à l'arrêt*)
+	STATE_Nok:				BOOL;									(*Etat non ok*)
+	AUTOR_On_IHM:			BOOL; 									(*etat activation autorisée depuis la supervision*)
+	AUTOR_Off_IHM:			BOOL; 									(*etat désactivation autorisée depuis la supervision*)
+	AUTOR_On_PLC:			BOOL;									(*etat activation autorisée depuis l'automate*)
+	AUTOR_Off_PLC:			BOOL;									(*etat désactivation autorisée depuis l'automate*)
+	OUT_QVMPS11 			AT %Q*: INT;								(*consigne de vitesse appliquée au moteur*)
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	IdXML:= '5';
+	TagXML:= 2;
+	DEF_OFF_AUTO.IdXML := '3';
+	DEF_OFF_AUTO.TagXML :=10;
+	(*DEF_MARCHE.IdXML := '3';
+	DEF_MARCHE.TagXML:=1;*)
+	DEF_Variateur.IdXML	:= '5';
+	DEF_Variateur.TagXML	:= 15;
+
+(* Réception des ordres en mode manuel*)
+	RCP_M_On	 		:=	M_On;
+	RCP_M_Off			:=	M_Off;
+
+(*Autorisation*)
+	AUTOR_On_IHM		:= 	MANUAL AND ((EN_On_INT AND EN_On_EXT AND DOOR)
+							OR MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_On;
+	AUTOR_Off_IHM		:= 	MANUAL AND ((EN_Off_INT AND EN_Off_EXT)  OR
+							MANUAL_SAFETY_OFF) AND NOT RESET;
+	AUTOR_On_PLC		:=	 NOT MANUAL AND ((EN_On_INT AND EN_On_EXT AND DOOR)
+							OR CONF_No_Safety_Auto) AND NOT RESET;
+	AUTOR_Off_PLC		:= 	NOT MANUAL AND ((EN_Off_INT AND EN_Off_EXT)
+							OR CONF_No_Safety_Auto) AND NOT RESET;
+
+(*defaut desactivation automatique*)
+	DEF_Off_Auto.CONDITION :=        (NOT EN_On_INT OR NOT EN_On_EXT OR NOT DOOR)
+								AND  VAR_On
+								AND ((CONF_En_ON=1) OR ((CONF_EN_On=0) AND MANUAL))
+								AND NOT RESET;
+	DEF_Off_auto.DELAY:=T#0ms;
+	DEF_Off_Auto();
+
+(*gestion des sorties*)
+IF 		(RCP_M_On AND AUTOR_On_IHM) OR
+		(CO_On AND AUTOR_On_PLC)	THEN
+				VAR_On		:= 	TRUE;
+				VAR_Off			:= 	FALSE;
+ELSIF
+		(RCP_M_Off AND AUTOR_Off_IHM)  OR
+	    	(NOT CO_On AND AUTOR_Off_PLC)
+		OR RESET OR DEF_Off_Auto.DEF THEN
+				VAR_On		:=	FALSE;
+				VAR_Off			:=	TRUE;		(*COR_MOMO*)
+END_IF;
+
+OUT_MPS11		:=	VAR_On ;		(*Affectation de la sortie rotation PS*)
+
+STATE_On:= 	OUT_MPS11 ;
+TIMER_OFF.IN :=  NOT OUT_MPS11;
+TIMER_OFF(PT:=T#45s);	(*Temporisation de validation de l'arrêt du PS*)
+STATE_OFF:=	TIMER_OFF.Q;
+
+(*Conversion de la valeur analogique*)
+AO_VITESSE.Value := PRM_Cons_Vitesse;		(*Consigne 0-10v*)
+
+AO_VITESSE(
+	CONF_Max:= CONF_MAX_RPM,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:=1.0,
+	Value:=  ,
+	OUTPUT=> OUT_QVMPS11);
+
+(*
+DEF_MARCHE.CONDITION 		:=	STATE_On AND NOT IN_OK;
+DEF_MARCHE.DELAY				:=	T#5s;
+DEF_MARCHE;
+*)
+DEF_Variateur.CONDITION		:=	NOT IN_OK AND NOT RESET;
+DEF_Variateur.DELAY		:= T#5s;
+DEF_Variateur();
+
+STATE_NOK:=	DEF_Off_AUTO.DEF OR DEF_Variateur.DEF;
+
+(* Reset des ordres *)
+IF M_On AND RCP_M_On THEN
+	M_On 	:= FALSE;
+END_IF;
+IF M_Off AND RCP_M_Off THEN
+	M_Off		 := FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_VARIATEUR_MOTEUR">
+      <LineId Id="74" Count="79" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

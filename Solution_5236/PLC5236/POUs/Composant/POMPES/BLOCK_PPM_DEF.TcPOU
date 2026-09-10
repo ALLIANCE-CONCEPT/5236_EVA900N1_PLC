@@ -1,0 +1,196 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_PPM_DEF" Id="{7b136205-f417-4aad-9fec-561e1c1d1a6a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PPM_DEF
+
+(* Gestion d'une pompe turbo ADIXEN avec controleur REMOTE*)
+(* TYPE OBJET = POMPE TURBO*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE - 7015*)
+(* Version 2-0 - HG - 06/2011 - Adaptation pour journal des évènements externe*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;				(* Mode de pilotage manuel *)
+	RESET:					BOOL;				(* Condition de réiinitialisation de la fonction *)
+	WATER:					BOOL;				(*indication de refrodissement de la pompe ok*)
+
+	DEF_Arret_Auto:			PRCDEF;		(*01 - défaut d'arrêt automatique de la pompe*)
+	DEF_Marche_imposs:		PRCDEF;		(*02 - défaut de marche de la pompe turbo non autorisée*)
+	DEF_Arret_imposs:		PRCDEF;		(*03 - défaut d'arrêt de la pompe turbo non autorisée*)
+	DEF_On:					PRCDEF;		(*04 - défaut de marche de la pompe*)
+	DEF_Off:				PRCDEF;		(*05 - défaut d'arrêt de la pompe*)
+	DEF_Interne:			PRCDEF;		(*06 - défaut interne de la pompe*)
+
+	CO_On:					BOOL;			(*demande de marche de la pompe en mode automatique généré par la fonction qui gère la pompe*)
+
+	(*conditions d'autorisation*)
+	EN_On_INT:					BOOL:= TRUE;	(*condition d'autorisation de marche et de standby de la pompe donnée par la fonction qui gère la pompe*)
+	EN_Off_INT:					BOOL:= TRUE;	(*condition d'autorisation d'arrêt de la pompe donnée par la fonction qui gère la pompe*)
+	EN_On_EXT:					BOOL:= TRUE;	(*condition d'autorisation de marche et de standby externe*)
+	EN_Off_EXT:					BOOL:= TRUE;	(*condition d'autorisation d'arrêt de la pompe donnée par la fonction qui gère la pompe*)
+
+	IN_On:						BOOL;			(*entrée TOR pompe en marche*)
+	IN_Def:						BOOL;			(*entrée TOR pompe en défaut*)
+
+	OUT_On:						BOOL;			(* Marche pompe *)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Tim_Valid_On:			TIME:=T#0ms;	(*temporisation de validation du l'état STATE_OK*)
+	CONF_Tim_Valid_Off:			TIME:=T#0ms;	(*temporisation de validation de l'état STATE_AR*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	RQ_Cool:					BOOL;			(* Demande de refroidissement de la pompe turbo*)
+
+	(*variable d'état d'autorisation*)
+	AUTOR_On_IHM:				BOOL;			(*indique que la mise en marche de la pompe est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Off_IHM:				BOOL;			(*indique que l'arrêt de la pompe est autorisée en mode manuel depuis l'IHM*)
+
+	STATE_Ec:					BOOL;			(*indique que la pompe est en marche et n'a pas atteint sa vitesse*)
+	STATE_On:					BOOL;			(*indique que la pompe est en marche et à atteint sa vitesse*)
+	STATE_NOK:					BOOL;			(*indique la présence d'un défaut sur la pompe ou que l'ordre de marche a été refusé*)
+	STATE_Off:					BOOL;			(*indique que la pompe est à l'arrêt*)
+	STATE_Ihm:					USINT;			(*code d'état de la pompe*)
+END_VAR
+
+VAR
+	TIMER_Valid_On:				TON;
+	TIMER_Valid_Off:			TON;
+
+	(* Variables demande en mode manuel*)
+	M_On:						BOOL;			(* Ordre marche/arrêt de la  pompe en mode manuel *)
+	RCP_M_On:					BOOL;			(* bit de reception de l'ordre de marche en mode manuel*)
+	VAR_On:						BOOL;			(* variable intermédiaire de marche de la pompe*)
+
+	VAR_CPT:					BLOCK_CPT_TEMPS;
+END_VAR
+
+VAR_EXTERNAL
+	MANUAL_SAFETY_OFF:			BOOL;			(*desactive les sécurités en mode manuel*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_Arret_Auto.IdXml			:=	'3';
+DEF_Arret_Auto.TagXml			:=	10;
+
+DEF_Marche_imposs.IdXml			:=	'3';
+DEF_Marche_imposs.TagXml		:=	5;
+
+DEF_Arret_imposs.IdXml			:=	'3';
+DEF_Arret_imposs.TagXml			:=	8;
+
+DEF_On.IdXml					:=	'3';
+DEF_On.TagXml					:=	1;
+
+DEF_Off.IdXml					:=	'3';
+DEF_Off.TagXml					:=	3;
+
+DEF_Interne.IdXml				:=	'0';
+DEF_Interne.TagXml				:=	6;
+
+
+(* Gestion des ordres en mode manuel *)
+RCP_M_On 				:=	M_On;
+
+(*gestion des bits d'autorisation en mode manuel*)
+AUTOR_On_IHM			:=	NOT RESET AND ((EN_On_INT AND EN_On_EXT AND WATER AND NOT DEF_Interne.DEF) OR MANUAL_SAFETY_OFF)
+							AND NOT VAR_On  AND MANUAL;
+AUTOR_Off_IHM			:=	NOT RESET  AND VAR_On  AND MANUAL
+							AND (( EN_Off_EXT AND EN_Off_INT) OR MANUAL_SAFETY_OFF);
+
+(*défaut d'arrêt automatique de la pompe *)
+DEF_Arret_Auto.CONDITION :=     (NOT WATER
+								OR  NOT EN_On_INT
+								OR NOT EN_On_EXT
+								OR DEF_Interne.DEF)
+								AND  OUT_On AND NOT RESET;
+DEF_arret_auto.DELAY:=T#0ms;
+DEF_Arret_Auto();
+
+(* Défaut de marche de la pompe primaire non autorisée en automatique*)
+DEF_marche_imposs.CONDITION:=	NOT MANUAL AND CO_On AND (NOT EN_On_INT OR NOT EN_On_EXT)
+								AND NOT MANUAL AND NOT RESET;
+DEF_marche_imposs.DELAY := T#0ms;
+DEF_marche_imposs();
+
+(* Défaut d'arrêt de la pompe primaire non autorisée en automatique*)
+DEF_arret_imposs.CONDITION	:=	NOT MANUAL AND NOT CO_On AND VAR_ON AND( NOT EN_Off_INT OR NOT EN_Off_EXT)
+								AND NOT RESET;
+DEF_arret_imposs.DELAY := T#0ms;
+DEF_arret_imposs();
+
+(* ARRET POMPE*)
+IF 		(NOT CO_On AND NOT MANUAL AND EN_Off_INT AND EN_Off_EXT)
+		OR ( RCP_M_On AND AUTOR_Off_IHM) OR RESET OR DEF_arret_auto.DEF
+		THEN
+			Var_On 				:= 	FALSE;
+(*MARCHE POMPES*)
+ELSIF	( CO_On AND NOT MANUAL AND EN_On_INT AND EN_On_EXT)
+		 OR 	( RCP_M_On AND AUTOR_On_IHM) THEN
+			Var_On 				:= 	TRUE;
+END_IF;
+
+(*SORTIE MARCHE POMPE*)
+OUT_On			:= 	WATER AND VAR_On;
+
+(*DEMANDE DE REFROIDISSEMENT DE LA POMPE*)
+RQ_Cool			:=	VAR_On;
+
+(* Défaut de marche de la pompe*)
+DEF_ON.CONDITION := OUT_On AND NOT IN_On;
+DEF_ON();
+
+(* Défaut d'arrêt de la pompe*)
+DEF_Off.CONDITION := NOT OUT_On AND IN_On;
+DEF_Off();
+
+(*Défaut interne de la pompe*)
+DEF_Interne.CONDITION := IN_Def;
+DEF_Interne.DELAY :=	T#200ms;
+DEF_Interne();
+
+(*affectation des bits d'état*)
+(*indicateur pompe en marche STATE_ON*)
+TIMER_Valid_On.IN	:=	OUT_On AND IN_On;
+TIMER_Valid_On(PT:=CONF_Tim_Valid_On);
+STATE_ON			:=	TIMER_Valid_On.Q;
+(*indicateur pompe à l'arrêt STATE_OFF*)
+TIMER_Valid_Off.IN	:=	NOT OUT_On AND NOT IN_On;
+TIMER_Valid_Off(PT:=CONF_Tim_Valid_Off);
+STATE_Off			:=	TIMER_Valid_Off.Q;
+	STATE_Ec		:=	VAR_On AND NOT IN_On;
+	STATE_NOK		:=	DEF_Arret_imposs.DEF OR DEF_Marche_imposs.DEF OR DEF_Arret_auto.DEF OR DEF_On.DEF OR DEF_Off.DEF OR DEF_Interne.DEF;
+
+IF NOT out_on THEN
+	STATE_Ihm := 0;
+ELSIF out_on AND NOT IN_On THEN
+	STATE_ihm := 1;
+ELSIF out_on AND in_on THEN
+	STATE_ihm:=2;
+END_IF;
+
+
+(*Gestion compteur*)
+VAR_CPT(I_On:= STATE_On);
+
+(* Reset des ordres*)
+	IF M_On AND RCP_M_On THEN
+		M_On		:= FALSE;
+	END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PPM_DEF">
+      <LineId Id="79" Count="106" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

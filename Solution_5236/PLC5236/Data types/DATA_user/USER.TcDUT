@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <DUT Name="USER" Id="{a366ef74-01f7-4a2f-9191-2d75e94cab5c}">
+    <Declaration><![CDATA[TYPE USER :
+
+STRUCT
+
+	LOGIN:			STRING[30];
+	PASS:			STRING[30];
+	PASS_DISPLAY:	STRING[30];
+	NOM:			STRING[30];
+	PRENOM:			STRING[30];
+	GROUPE:			STRING[30];
+
+END_STRUCT
+
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

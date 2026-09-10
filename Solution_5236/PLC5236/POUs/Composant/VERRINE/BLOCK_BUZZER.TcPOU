@@ -1,0 +1,157 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_BUZZER" Id="{26509961-af3a-4260-bdf8-bab96e696c8d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_BUZZER
+VAR_INPUT
+	I_DEF_Continu1:				BOOL:=FALSE;		(*Déclenchement bip continu temporisé 1*)
+	I_DEF_Continu2:				BOOL:=FALSE;		(*Déclenchement bip continu temporisé 2*)
+	I_DEF_Alternatif:			BOOL:=FALSE;		(*Déclenchement bip alternatif*)
+	I_DEF_MultiBip:				BOOL:=FALSE;		(*Déclenchement multi bip*)
+	I_DEF_Permanent:			BOOL:=FALSE;		(*Déclenchement bip permanent*)
+	M_ACQ:						BOOL;				(*Acquittement buzzer et inhibition*)
+	RESET:						BOOL;
+END_VAR
+
+VAR_OUTPUT
+	OUT_Buzzer:					BOOL;
+END_VAR
+
+VAR
+	VAR_Alternatif:				BLOCK_CLIGNOTANT_V0_0;
+	VAR_MultiBip:				BLOCK_CLIGNOTANT_V0_0;
+	TIMER_Continu1:				TP;
+	TIMER_Continu2:				TP;
+	TIMER_Alternatif:			TP;
+	TIMER_MultiBip:				TP;
+	TIMER_MultiBip2:			TON;
+	FM_Continu1:				R_TRIG;
+	FM_Continu2:				R_TRIG;
+	FM_Alternatif:				R_TRIG;
+	FM_MultiBip:				R_TRIG;
+	FM_Permanent:				R_TRIG;
+	FD_MultiBip:				F_TRIG;
+	VAR_Cpt_Bip:				USINT;
+END_VAR
+
+VAR_INPUT PERSISTENT
+	PRM_Tp_Continu1:			TIME;	(*Temps bip continu 1*)
+	PRM_Tp_Continu2:			TIME;	(*Temps bip continu 2*)
+	PRM_Tp_Bip_Alternatif:		TIME;	(*Temps bip alternatif : 50% de ce paramètre*)
+	PRM_Tp_Tempo_Alternatif:	TIME;	(*Temps d'activation du bip alternatif si PRM_Alternatif_Temporise*)
+	PRM_Tp_MultiBip1:			TIME;	(*Temps un bip : 50% de ce paramètre*)
+	PRM_Tp_MultiBip2:			TIME;	(*Temps pour chaque double-bip*)
+	PRM_Tp_Tempo_MultiBip:		TIME;	(*Temps d'activation du double bip si PRM_DoubleBip_Temporise*)
+	PRM_Alternatif_Temporise:	BOOL;	(*Activation temporisée du défaut alternatif*)
+	PRM_MultiBip_Temporise:		BOOL;	(*Activation temporisée du défaut double bip*)
+	PRM_Acq_Continu1:			BOOL;	(*Mode inhibé par l'acquittement*)
+	PRM_Acq_Continu2:			BOOL;	(*Mode inhibé par l'acquittement*)
+	PRM_Acq_Alternatif:			BOOL;	(*Mode inhibé par l'acquittement*)
+	PRM_Acq_MultiBip:			BOOL;	(*Mode inhibé par l'acquittement*)
+	PRM_Acq_Permanent:			BOOL;	(*Mode inhibé par l'acquittement*)
+	PRM_Nb_Bip:					USINT;	(*Nb de bips mode mulitbip*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*-----------------------------------------------------BIP ALTERNATIF---------------------------------------------------*)
+
+(*Bip pendant 50% de PRM_Tp_Alternatif si I_DEF_Alternatif actif*)
+VAR_Alternatif.CONF_Period_Off		:=	PRM_Tp_Bip_Alternatif/2;
+VAR_Alternatif.CONF_Period_On		:=	PRM_Tp_Bip_Alternatif/2;
+
+(*Timer activation bip temporisé si option sélectionnée*)
+TIMER_Alternatif.PT	:=	PRM_Tp_Tempo_Alternatif;
+TIMER_Alternatif.IN	:=	I_DEF_Alternatif AND PRM_Alternatif_Temporise;
+TIMER_Alternatif();
+
+VAR_Alternatif(IN_On	:=	((I_DEF_Alternatif AND NOT PRM_Alternatif_Temporise) OR TIMER_Alternatif.Q) AND NOT RESET);
+
+FM_Alternatif.CLK	:=	I_DEF_Alternatif;
+FM_Alternatif();
+
+(*-----------------------------------------------------MULTI BIP---------------------------------------------------*)
+
+(*Multi bip de 50% de PRM_Tp_MultiBip1 toutes les PRM_Tp_MultiBip2 si I_DEF_MultiBip actif*)
+VAR_MultiBip.CONF_Period_Off		:=	PRM_Tp_MultiBip1/2;
+VAR_MultiBip.CONF_Period_On			:=	PRM_Tp_MultiBip1/2;
+
+FD_MultiBip.CLK	:=	VAR_MultiBip.STATE_ON;
+FD_MultiBip();
+IF FD_MultiBip.Q THEN
+	VAR_Cpt_Bip		:=	VAR_Cpt_Bip + 1;
+END_IF
+TIMER_MultiBip2.IN		:=	(VAR_Cpt_Bip = PRM_Nb_Bip);
+TIMER_MultiBip2.PT		:=	PRM_Tp_MultiBip2 - REAL_TO_TIME(PRM_nb_Bip*TIME_TO_REAL(PRM_Tp_MultiBip1));
+TIMER_MultiBip2();
+IF TIMER_MultiBip2.Q OR NOT I_DEF_MultiBip THEN
+	VAR_Cpt_Bip		:=	0;
+END_IF
+
+(*Timer activation bip temporisé si option sélectionnée*)
+TIMER_MultiBip.PT	:=	PRM_Tp_Tempo_MultiBip;
+TIMER_MultiBip.IN	:=	I_DEF_MultiBip AND PRM_MultiBip_Temporise;
+TIMER_MultiBip();
+
+VAR_MultiBip(IN_On	:=	((I_DEF_MultiBip AND NOT PRM_MultiBip_Temporise AND (VAR_Cpt_Bip < PRM_Nb_Bip)) OR TIMER_MultiBip.Q) AND NOT RESET);
+
+FM_MultiBip.CLK	:=	I_DEF_MultiBip;
+FM_MultiBip();
+
+(*-----------------------------------------------------BIP CONTINU TEMPORISE 1---------------------------------------------------*)
+
+TIMER_Continu1.PT		:=	PRM_Tp_Continu1;
+TIMER_Continu1.IN		:=	I_DEF_Continu1 AND NOT RESET;
+TIMER_Continu1();
+
+FM_Continu1.CLK	:=	I_DEF_Continu1;
+FM_Continu1();
+
+(*-----------------------------------------------------BIP CONTINU TEMPORISE 2---------------------------------------------------*)
+
+TIMER_Continu2.PT		:=	PRM_Tp_Continu2;
+TIMER_Continu2.IN		:=	I_DEF_Continu2 AND NOT RESET;
+TIMER_Continu2();
+
+FM_Continu2.CLK	:=	I_DEF_Continu2;
+FM_Continu2();
+
+(*-----------------------------------------------------BIP PERMANENT---------------------------------------------------*)
+
+FM_Permanent.CLK	:=	I_DEF_Permanent;
+FM_Permanent();
+
+
+(*-----------------------------------------------------SORTIE---------------------------------------------------*)
+IF (FM_Permanent.Q AND PRM_Acq_Permanent)
+	OR (FM_Continu1.Q AND PRM_Acq_Continu1)
+	OR (FM_Continu2.Q AND PRM_Acq_Continu2)
+	OR (FM_Alternatif.Q AND PRM_Acq_Alternatif)
+	OR (FM_MultiBip.Q AND PRM_Acq_MultiBip) THEN
+		M_ACQ				:=	FALSE;
+		OUT_Buzzer			:=	TRUE;
+ELSIF (I_DEF_Permanent AND (NOT PRM_Acq_Permanent OR (NOT M_ACQ AND PRM_Acq_Permanent)))
+	OR (TIMER_Continu1.Q AND (NOT PRM_Acq_Continu1 OR (NOT M_ACQ AND PRM_Acq_Continu1)))
+	OR (TIMER_Continu2.Q AND (NOT PRM_Acq_Continu2 OR (NOT M_ACQ AND PRM_Acq_Continu2)))
+	OR (VAR_Alternatif.STATE_ON AND (NOT PRM_Acq_Alternatif OR (NOT M_ACQ AND PRM_Acq_Alternatif)))
+	OR (VAR_MultiBip.STATE_ON AND (NOT PRM_Acq_MultiBip OR (NOT M_ACQ AND PRM_Acq_MultiBip)))
+	THEN
+		OUT_Buzzer			:=	TRUE;
+ELSE
+		OUT_Buzzer			:=	FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_BUZZER">
+      <LineId Id="51" Count="1" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="204" Count="1" />
+      <LineId Id="57" Count="4" />
+      <LineId Id="207" Count="0" />
+      <LineId Id="70" Count="6" />
+      <LineId Id="208" Count="1" />
+      <LineId Id="81" Count="0" />
+      <LineId Id="210" Count="0" />
+      <LineId Id="82" Count="15" />
+      <LineId Id="212" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="108" Count="45" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

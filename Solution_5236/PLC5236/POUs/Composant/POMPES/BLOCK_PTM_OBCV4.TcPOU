@@ -1,0 +1,271 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_PTM_OBCV4" Id="{f3b10247-9851-43e4-b8ae-d7c539aa7c29}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PTM_OBCV4
+
+(****************historique des versions************************************)
+
+(* Version 1-0 - ?? - ??/?? -  VERSION INIITIALE*)
+(* Version 2-0 - HG - 02/2013 - Adaptation pour journal des évènements externe, renommage variables*)
+(* Version 2-1 - GV - 10/2017 - Gestion arrêt automatique *)
+
+(********************************************************************************)
+
+VAR_INPUT
+	EN_On_EXT:				BOOL;	(* Autorisation de marche en mode manuel *)
+	EN_Off_EXT:				BOOL;	(* Autorisation d'arrêt en mode manuel *)
+	EN_On_INT:				BOOL;
+	EN_Off_INT:				BOOL;
+
+	EN_Purge_EXT:			BOOL;	(*Autorisation externe d'ouverture de la vanne de purge : typiquement, VI en amont de PS ouverte*)
+
+	CO_On:					BOOL;	(* Ordre automatique de marche pompe *)
+	CO_Purge:				BOOL;	(* Ordre automatique d'ouverture de la vanne de purge de la pompe (pas de gestion manuelle de cette vanne)*)
+
+	MANUAL:					BOOL;	(* Ordre de commande manuel de la fonction *)
+	RESET: 					BOOL;	(* Condition de réiinitialisation de la fonction *)
+	WATER:					BOOL;	(* Indication de refrodissement de la pompe ok*)
+	I_Standby:				BOOL;	(* Condition réduction vitesse pompe *)
+
+	DEF_Arret_Auto:			PRCDEF;	(* Indicateur de défaut d'arrêt automatique de la pompe*)
+	DEF_On:					PRCDEF;	(* Indicateur de défaut amorçage de la pompe turbo *)
+	DEF_Off:				PRCDEF;	(* Indicateur de défaut d'arrêt de la pompe turbo *)
+	DEF_Desamorcage:		PRCDEF;	(* Indicateur de défaut désamorçage de la pompe turbo *)
+	DEF_Interne:			PRCDEF;	(* Indicateur de défaut interne de la pompe turbo *)
+	DEF_Marche_Imposs:		PRCDEF;	(* Indicateur de défaut de marche de la pompe turbo non autorisée*)
+	DEF_Arret_Imposs:		PRCDEF;	(* Indicateur de défaut d'arrêt de la pompe turbo non autorisée*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Erreur:			INT;			(* Code erreur du défaut interne de la pompe *)
+	RQ_Cool:				BOOL;
+	Autor_ON_IHM:			BOOL;
+	Autor_Off_IHM:			BOOL;
+END_VAR
+
+VAR
+	INPUT1	AT %I*:		USINT;
+	OUTPUT1	AT%Q*:		USINT;
+
+	(* Variables pour l'entrée profibus *)
+	STATE_On:				BOOL;		(* Normal operation has been attained *)
+	STATE_Off:				BOOL;		(* Pump is off *)
+	STATE_NOK:				BOOL;
+	VAR_Ok:					BOOL;		(* pump at speed *)
+	VAR_PSxM_ec:			BOOL;		(* Pump is running *)
+	VAR_Maint_required:		BOOL;		(* Maintenance is required *)
+	VAR_Error_active:		BOOL;		(* Error active *)
+	VAR_Com_int_fault:		BOOL;		(* Internal communication failure *)
+	VAR_Overbalance_fault:	BOOL;		(* Overbalance default *)
+	VAR_Overtemp_pump_fault:BOOL;		(* Overtemperature pump warning *)
+	VAR_Overtemp_ctrl_fault:BOOL;		(* Overtemperature controller warninq *)
+
+	(* Variables pour les sorties profibus *)
+	VAR_PSx:				BOOL;		(* Start pump *)
+	VAR_Enable_process:		BOOL;		(* Enable process data *)
+	VAR_Purge_gaz_on:		BOOL;		(* Purge gaz valve on *)
+	VAR_Foreline_isol_on:	BOOL;		(* Foreline isolation valve on *)
+	VAR_Standby_speed:		BOOL;		(* Go to standby speed *)
+	VAR_Ack_error:			BOOL;		(* Acknowledge error *)
+
+	(* Variables pour IHM *)
+	M_ON:					BOOL;		(* Ordre maintenance commutation sortie marche pompe *)
+	RCP_M_PSx:				BOOL;
+
+	(* Variables interne à la fonction *)
+	FD_PSxM:				F_TRIG;
+
+	TIMER_Valid_On:			TON;
+	TIMER_Valid_Off:		TON;
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:			BOOL;			(*entité : composant*)
+	IdXML:					STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:					UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:				STRING;			(*MNEMO de l'appelant*)
+	MNEMO:					STRING;			(*MNEMO de l'entité*)
+	(*parametre de configuration constructeur*)
+	(*les parametres suivants dépendent de la configuration de la machine*)
+	CONF_No_Safety_Auto:	BOOL:=FALSE;	(*option de desactivation des conditions d'autorisation en mode automatique*)
+	CONF_Tim_Valid_On:  	TIME; 			(*Temps validation actionneur on*)
+	CONF_Tim_Valid_Off:   	TIME; 			(*Temps validation actionneur off *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Gestion d'une pompe turbo indépendante
+La fonction permet de gérer la mise en CO_On de la pompe  sur une 
+condition et l'arrêt  sur la remise à 0 de la condition de CO_On en mode 
+automatique
+La fonction gère des défauts d'amorçage et de désamorçage  et la commutation de 
+l'état de la pompe en mode maintenance.
+Défaut interne:
+1:maintenance demandée, 2:communication interne, 3:équilibrage, 4:surchauffe 
+pompe, 5:surchauffe controleur *)
+
+IdXML							:=	'1';
+TagXML							:=	8;
+
+DEF_Arret_Auto.IdXml			:=	'3';
+DEF_Arret_Auto.TagXml			:=	10;
+
+DEF_Arret_imposs.IdXml			:=	'3';
+DEF_Arret_imposs.TagXml			:=	8;
+
+DEF_Off.IdXml					:=	'3';
+DEF_Off.TagXml					:=	3;
+
+DEF_On.IdXml					:=	'3';
+DEF_On.TagXml					:=	1;
+
+DEF_Marche_imposs.IdXml			:=	'3';
+DEF_Marche_imposs.TagXml		:=	5;
+
+DEF_Desamorcage.IdXml			:=	'1';
+DEF_Desamorcage.TagXml			:=	13;
+
+DEF_Interne.IdXml				:=	'0';
+DEF_Interne.TagXml				:=	6;
+
+(* Reception trame *)
+VAR_Ok						:=	INPUT1.0;
+VAR_PSxM_ec					:= 	INPUT1.1;
+VAR_Maint_required			:=	INPUT1.2;
+VAR_Error_active			:=	INPUT1.3;
+VAR_Com_int_fault			:=	INPUT1.4;
+VAR_Overbalance_fault 		:=	INPUT1.5;
+VAR_Overtemp_pump_fault		:=	INPUT1.6;
+VAR_Overtemp_ctrl_fault		:=	INPUT1.7;
+
+(* Gestion des ordres de CO_On externe *)
+RCP_M_PSx := M_ON;
+
+(* AFFECTATION DES SORTIES LOGIQUES *)
+(* state on *)
+TIMER_Valid_On.PT	:=	CONF_Tim_Valid_On;
+TIMER_Valid_On.IN	:=	VAR_Ok;
+TIMER_Valid_On();
+STATE_On			:=	TIMER_Valid_On.Q;
+
+(* Autorisation *)
+(*gestion des bits d'autorisation en mode manuel*)
+AUTOR_On_IHM			:=	NOT RESET AND ((EN_On_INT AND EN_On_EXT AND WATER) OR MANUAL_SAFETY_OFF)
+							AND NOT VAR_PSx  AND MANUAL;
+AUTOR_Off_IHM			:=	NOT RESET  AND VAR_PSx  AND MANUAL
+							AND (( EN_Off_EXT AND EN_Off_INT) OR MANUAL_SAFETY_OFF);
+
+IF EN_On_EXT = TRUE OR EN_Off_EXT = TRUE THEN
+	VAR_Enable_process :=TRUE;
+ELSE
+	VAR_Enable_process :=FALSE;
+END_IF
+
+(* PSx *)
+IF (EN_Off_INT AND NOT CO_On AND NOT MANUAL)
+		OR (STATE_On AND (RCP_M_PSx AND (EN_Off_EXT OR CONF_No_Safety_Auto) OR NOT EN_On_EXT AND MANUAL))
+		OR RESET OR DEF_Arret_Auto.DEF THEN
+	VAR_PSx := FALSE;
+ELSIF (RCP_M_PSx AND MANUAL AND (EN_On_EXT OR CONF_No_Safety_Auto) AND NOT VAR_PSx)
+		OR (WATER AND CO_On AND NOT MANUAL AND EN_On_INT) THEN
+	VAR_PSx := TRUE;
+END_IF
+
+(* standby *)
+IF VAR_PSx AND STATE_On AND I_Standby THEN
+	VAR_Standby_speed := TRUE;
+ELSE
+	VAR_Standby_speed := FALSE;
+END_IF
+
+(*Purge : demande de purge externe ou phase de ralentissement de la pompe*)
+VAR_Purge_gaz_on	:=	( (CO_Purge AND NOT RESET) OR (NOT VAR_PSx AND VAR_PSxM_ec) )
+						AND EN_Purge_EXT;
+
+(* state off  *)
+TIMER_Valid_Off.PT	:=	CONF_Tim_Valid_Off;
+TIMER_Valid_Off.IN	:=	NOT STATE_On AND NOT VAR_PSxM_ec;
+TIMER_Valid_Off();
+STATE_Off			:=	TIMER_Valid_Off.Q;
+
+RQ_Cool		:=	VAR_PSx;
+
+(* Envoi trame *)
+OUTPUT1.0	:=	VAR_PSx;
+OUTPUT1.2	:=	VAR_Enable_process;
+OUTPUT1.4	:=	VAR_Purge_gaz_on;
+OUTPUT1.5	:=	VAR_Foreline_isol_on;
+OUTPUT1.6	:=	VAR_Standby_speed;
+OUTPUT1.7	:=	VAR_Ack_error;
+
+(* Défaut *)
+
+(* Défaut de marche de la pompe primaire non autorisée en automatique*)
+DEF_Marche_Imposs.CONDITION	:=	NOT MANUAL AND CO_On AND (NOT EN_On_INT OR NOT EN_On_EXT)
+									AND NOT MANUAL AND NOT RESET;
+DEF_Marche_Imposs.DELAY		 := 	T#0ms;
+DEF_Marche_Imposs();
+
+(* Défaut d'arrêt de la pompe primaire non autorisée en automatique*)
+DEF_Arret_Imposs.CONDITION	:=	NOT MANUAL AND NOT CO_On AND STATE_ON
+								AND( NOT EN_Off_INT OR NOT EN_Off_EXT)
+								AND NOT RESET;
+DEF_Arret_Imposs.DELAY		 := 	T#0ms;
+DEF_Arret_Imposs();
+
+(*défaut d'arrêt automatique de la pompe *)
+DEF_Arret_Auto.CONDITION 	:=	(NOT WATER
+								OR  NOT EN_On_INT
+								OR NOT EN_On_EXT)
+								AND  VAR_PSx AND NOT RESET;
+DEF_Arret_Auto.DELAY		:=	T#0ms;
+DEF_Arret_Auto();
+
+(* Défaut amorçage de la pompe *)
+Def_ON.CONDITION 		:= 	VAR_PSx AND NOT STATE_On AND NOT RESET;
+Def_ON();
+
+(* Défaut arrêt de la pompe *)
+Def_OFF.CONDITION 		:= 	NOT VAR_PSx AND STATE_ON;
+Def_OFF();
+
+(* Défaut désamorçage *)
+FD_PSxM.CLK 				:= 	STATE_On;
+DEF_Desamorcage.DELAY 		:= 	INT_TO_TIME(0);
+DEF_Desamorcage.CONDITION 	:= 	FD_PSxM.Q AND VAR_PSx;
+DEF_Desamorcage();
+
+(* Défaut interne pompe *)
+IF VAR_Error_active THEN
+	STATE_Erreur := 6;
+ELSIF VAR_Overtemp_ctrl_fault THEN
+	STATE_Erreur := 5;
+ELSIF VAR_Overtemp_pump_fault THEN
+	STATE_Erreur := 4;
+ELSIF VAR_Overbalance_fault THEN
+	STATE_Erreur := 3;
+ELSIF VAR_Com_int_fault THEN
+	STATE_Erreur := 2;
+ELSIF VAR_Maint_required THEN
+	STATE_Erreur := 1;
+ELSE
+	STATE_Erreur := 0;
+END_IF
+DEF_Interne.DELAY 		:= 	INT_TO_TIME(0);
+DEF_Interne.CONDITION 	:= 	(STATE_Erreur > 0);
+DEF_Interne.VAL1		:=	INT_TO_STRING(STATE_Erreur);
+DEF_Interne();
+
+STATE_NOK		:=	DEF_Arret_Imposs.DEF OR DEF_Marche_Imposs.DEF OR DEF_Arret_Auto.DEF
+					OR DEF_On.DEF OR DEF_Off.DEF;
+
+(* Reset des ordres *)
+IF RCP_M_PSx AND M_ON THEN
+	M_ON := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PTM_OBCV4">
+      <LineId Id="92" Count="168" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

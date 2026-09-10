@@ -1,0 +1,231 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_CANON_ST10" Id="{0a612114-1112-4259-8144-4683800db851}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CANON_ST10
+
+(* Gestion d'une source Telemark ST-10 *)
+
+(****************historique des versions*****************************)
+
+(* Version 0 - GV - 01/2015  - affaire 8866 EVA760 n°12 *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	DOOR:						BOOL;		(*porte fermée*)
+	VAC:						BOOL;		(*sécurité vide*)
+	WATER:						BOOL;		(*refroidissement canon ok*)
+	MANUAL:						BOOL;		(*demande mode manuel*)
+	I_CR_OK:					BOOL;		(*Positionnement creuset ok*)
+	RESET:						BOOL;		(*reset*)
+
+	AI_UHV:						ANALOG_INPUT;
+	AI_IEM:						ANALOG_INPUT;
+	AI_FIL:						ANALOG_INPUT;
+	IN_UHVQ			AT%I*:		INT;			(* Entrée analogique Haute Tension *)
+	IN_IEMQ			AT%I*:		INT;			(* Entrée analogique courant d'émission *)
+	IN_FILQ			AT%I*:		INT;			(* Entrée analogique courant filament *)
+
+	IN_HV_OK		AT%I*:		BOOL;		(* Entrée TOR Haute Tension prête *)
+	IN_HV_ON		AT%I*:		BOOL;		(* Entrée TOR Haute tension ON *)
+	IN_SRC_ON		AT%I*:		BOOL;		(* Entrée TOR Source ON *)
+
+	HV:							BLOCK_ACTUATOR;
+	SRC:						BLOCK_ACTUATOR;
+
+	I_TENSION:					REAL;		(*consigne de tension (kV) appliquée en mode automatique*)
+	PRM_TENSION:				REAL;		(*Consigne de tension (kV) appliquée en mode manuel*)
+	I_COURANT:					REAL;		(*consigne de courant (%) appliquée en mode automatique*)
+	PRM_COURANT:				REAL;		(*Consigne de courant (%) appliquée en mode manuel*)
+	CO_HV:						BOOL;		(*Commande externe de marche de la Haute Tension en automatique*)
+	CO_SRC:						BOOL;		(*commande de marche de la source en automatique*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_HV				AT%Q*:		BOOL;			(*Pilotage de la haute tension*)
+	OUT_SRC				AT%Q*:		BOOL;			(*Pilotage de la source*)
+	OUT_QUHV			AT%Q*:		INT;			(*Sortie analogique de la consigne tension (max 10kV) *)
+	OUT_QIEM			AT%Q*:		INT;			(*Sortie analogique de la consigne courant emission (max 1000mA)*)
+	OUT_ITLCK_VAC	 	AT%Q*:		BOOL;			(*Interlock de vide Haute Tension*)
+	OUT_ITLCK_HVAC		AT%Q*:		BOOL;			(*Interlock de vide Source*)
+	OUT_ITLCK_WAT		AT%Q*:		BOOL;			(*Interlock eau source*)
+	AO_QUHV:						ANALOG_OUTPUT;
+	AO_QIEM:						ANALOG_OUTPUT;
+
+	STATE_HV_ON:				BOOL;			(*Haute tension en marche*)
+	STATE_HV:					BOOL;			(*Demande de mise en marche de la Haute Tension en cours*)
+	STATE_SRC_ON:				BOOL;			(*Source en marche*)
+	STATE_SRC:					BOOL;			(*Demande de mise en marche de la source en cours*)
+	STATE_NOK:					BOOL;			(*Alimentation en défaut*)
+	STATE_I_Fil:				REAL;			(*Mesure Courant filament (A)*)
+	STATE_V_HV:					REAL;			(*Mesure de la tension (kV)*)
+	STATE_I_EMISS:				REAL;			(*Mesure du courant d'émission (mA)*)
+	STATE_COURANT:				REAL;			(* Courant appliqué en % *)
+	STATE_READY:				BOOL;
+END_VAR
+
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[HV.IdParent := MNEMO;
+SRC.IdParent := MNEMO;
+HV.IdXML := '16';
+HV.TagXML := 1;
+SRC.IdXML := '16';
+SRC.TagXML := 2;
+HV.MNEMO := 	CONCAT(MNEMO,'_HV');
+SRC.MNEMO :=	CONCAT(MNEMO,'_SRC');
+
+(*Défaut*)
+HV.DEF_Off.IdXML				:=	'3';
+HV.DEF_Off.TagXML				:=	3;
+HV.DEF_On.IdXML				:=	'3';
+HV.DEF_On.TagXML				:=	1;
+HV.DEF_Off_Auto.IdXml			:=	'3';
+HV.DEF_Off_Auto.TagXml			:=	10;
+HV.DEF_On_imposs.IdXml		:=	'3';
+HV.DEF_On_imposs.TagXml		:=	5;
+HV.DEF_Off_imposs.IdXml		:=	'3';
+HV.DEF_Off_imposs.TagXml		:=	8;
+
+SRC.DEF_Off.IdXML				:=	'3';
+SRC.DEF_Off.TagXML			:=	3;
+SRC.DEF_On.IdXML				:=	'3';
+SRC.DEF_On.TagXML			:=	1;
+SRC.DEF_Off_Auto.IdXml			:=	'3';
+SRC.DEF_Off_Auto.TagXml		:=	10;
+SRC.DEF_On_imposs.IdXml		:=	'3';
+SRC.DEF_On_imposs.TagXml		:=	5;
+SRC.DEF_Off_imposs.IdXml		:=	'3';
+SRC.DEF_Off_imposs.TagXml		:=	8;
+
+
+HV(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	IN_ON:= NOT IN_HV_ON,
+	CO_On:= CO_HV,
+	EN_On_INT:=DOOR AND WATER AND VAC,
+	EN_Off_INT:= TRUE,
+	CONF_Type_Actuator:= 0,
+	CONF_EN_On:= 0,
+	CONF_DI_Off:= FALSE,
+	CONF_DI_On:= TRUE,
+	CONF_No_Safety_Auto:= FALSE,
+	CONF_Tim_Valid_On:= T#2s,
+	CONF_Tim_Valid_Off:= T#50ms,
+	OUT_On=>OUT_HV,
+	STATE_On=> STATE_HV_ON );
+	
+HV.DEF_Off.DELAY := T#10s;
+HV.DEF_On.DELAY := T#10s;
+
+STATE_HV := HV.OUT_On;
+
+SRC(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	CO_On:=CO_SRC,
+	IN_ON:= NOT IN_SRC_ON,
+	EN_On_INT:=DOOR AND WATER  AND VAC AND (I_CR_OK OR (STATE_COURANT= 0)) AND STATE_HV_ON,
+	EN_Off_INT:= TRUE,
+	CONF_Type_Actuator:= 0,
+	CONF_EN_On:= 0,
+	CONF_DI_Off:= FALSE,
+	CONF_DI_On:= TRUE,
+	CONF_No_Safety_Auto:=FALSE ,
+	CONF_Tim_Valid_On:= T#2s,
+	CONF_Tim_Valid_Off:= T#50ms,
+	OUT_On=>OUT_SRC,
+	STATE_On=>STATE_SRC_ON );
+	
+SRC.DEF_Off.DELAY := T#10s;
+SRC.DEF_On.DELAY := T#10s;
+
+STATE_SRC := SRC.OUT_On;
+
+AI_UHV(
+	CONF_Max:= 10.0,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:= 1,
+	INPUT:= IN_UHVQ ,
+	Value=> STATE_V_HV );
+
+AI_IEM(
+	CONF_Max:= 1000,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:= 1,
+	INPUT:= IN_IEMQ,
+	Value=> STATE_I_EMISS );
+
+AI_FIL(
+	CONF_Max:= 100,
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1,
+	INPUT:= IN_FILQ ,
+	Value=> STATE_I_Fil );
+
+(*Gestion de la sortie analogique de courant d'emission*)
+IF NOT STATE_SRC_ON OR RESET THEN
+	AO_QIEM.Value := 0.0;
+ELSIF MANUAL THEN
+	AO_QIEM.Value := PRM_COURANT;
+ELSE
+	AO_QIEM.Value := I_COURANT;
+END_IF;
+STATE_COURANT:= AO_QIEM.Value;
+
+AO_QIEM(
+	CONF_Max:=100,  (*%*)
+	CONF_Min:= 0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:=1 ,
+	OUTPUT=> OUT_QIEM );
+
+(*Gestion de la sortie analogique haute tension*)
+IF RESET THEN
+	AO_QUHV.Value := 0.0;
+ELSIF MANUAL THEN
+	AO_QUHV.Value := PRM_TENSION;
+ELSE
+	AO_QUHV.Value := I_TENSION;
+END_IF;
+
+AO_QUHV(
+	CONF_Max:=10,
+	CONF_Min:= 0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:=1 ,
+	OUTPUT=> OUT_QUHV );
+
+(*Gestion des interlock*)
+OUT_ITLCK_VAC := DOOR AND VAC;
+OUT_ITLCK_HVAC := DOOR AND VAC;
+OUT_ITLCK_WAT := WATER;
+
+
+STATE_NOK:= HV.STATE_Nok OR SRC.STATE_Nok;
+STATE_READY:= WATER AND DOOR AND VAC AND I_CR_OK;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CANON_ST10">
+      <LineId Id="75" Count="48" />
+      <LineId Id="294" Count="0" />
+      <LineId Id="125" Count="20" />
+      <LineId Id="303" Count="0" />
+      <LineId Id="147" Count="69" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

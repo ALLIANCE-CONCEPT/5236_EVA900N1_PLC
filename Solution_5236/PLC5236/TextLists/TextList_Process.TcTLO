@@ -1,0 +1,260 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Process" Id="{9d08fc89-6a7f-49bf-b64a-7b3df3733506}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Selec proc"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Procédé sélectionné :</v>
+                <v>Selected process:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"step"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etape en cours :</v>
+                <v>Step in progress:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"layer"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Couche :</v>
+                <v>Layer:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"start"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche
+Production</v>
+                <v>Start
+Production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"stop"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt
+Production</v>
+                <v>Stop
+Production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"inter"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Interruption
+Production</v>
+                <v>Break
+Production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"resume"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Reprise
+Production</v>
+                <v>Resume
+Production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"process name"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nom procédé</v>
+                <v>Process name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"etape"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etape</v>
+                <v>Step</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"type etape"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Type étape</v>
+                <v>Step type</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"tps effluvage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée effluvage</v>
+                <v>Glow disch. time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"couche"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Couche</v>
+                <v>Layer</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"détails"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Détails</v>
+                <v>Details</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"boucle"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Boucle</v>
+                <v>Loop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"first"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Départ</v>
+                <v>First</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"fin"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fin</v>
+                <v>Last</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"seg"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Segment</v>
+                <v>Segment</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"tps seg"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps segment</v>
+                <v>Segment time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"tps couche"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps couche</v>
+                <v>Layer time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"next layer"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Couche suivante</v>
+                <v>Next layer</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"break"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Interruption</v>
+                <v>Break</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"resume"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Reprise</v>
+                <v>Resume</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"arrêt"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt procédé</v>
+                <v>Process stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">"next step"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etape suivante</v>
+                <v>Next step</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">"Temps purge"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps purge</v>
+                <v>Purge time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">"Temps etching"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps décapage</v>
+                <v>Etching time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">"Rechargement"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Rechargement</v>
+                <v>Reload</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{26ff13e9-bc64-4a1a-8647-5d619c0fb807}</v>
+          <v n="GuidReInit">{b2263318-d9d8-462d-9762-09886ac0f899}</v>
+          <v n="GuidExitX">{192a602a-2f84-4ea3-bb4c-d5d72d43d83c}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

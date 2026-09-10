@@ -1,0 +1,242 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_PCR_CTI_OB" Id="{e62ab788-6188-4acf-bcfc-5d6acbdb8eb5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PCR_CTI_OB
+
+(* Gestion d'un objet pompe cryo CTI avec controleur ON-BOARD*)
+(* TYPE OBJET = POMPE CRYO*)
+
+(****************historique des versions************************************)
+
+(* Version 1-0 - SP - 09/2010 -  VERSION INIITIALE - 6844 DP650 N35*)
+(* Version 2-0 - HG - 04/2011 -  Ajout regen sur option - 7015 CT200 n°2*)
+(* Version 3-0 - HG - 06/2011 - Adaptation pour journal des évènements externe*)
+(* Version 3-1 - HG - 12/2012 - Modification défaut désamorçage pour cryo network (envoi OUT_On pendant regen)*)
+(* Version 3-2 - GV - 07/2015 - Modification défaut arret auto (var_on modifié par Out_On)*)
+(* Version 3-3 - LDS - 07/2015 - ajout d'un "forcage automatique" du CO_ETAT cryo*)
+(********************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;		(* Mode de pilotage manuel *)
+	RESET:					BOOL;		(* Condition de réiinitialisation de la fonction *)
+	WATER:					BOOL;		(*indication de refrodissement de la pompe ok*)
+
+	DEF_Desamorcage:		PRCDEF;		(*01 - défaut désamorçage de la pompe cryogénique*)
+	DEF_Arret_Auto:			PRCDEF;		(*02 - défaut d'arrêt automatique de la pompe*)
+	DEF_Marche_imposs:		PRCDEF;		(*03 - défaut de marche de la pompe cryo non autorisée*)
+	DEF_On:					PRCDEF;		(*04 - défaut de marche de la pompe*)
+	DEF_Off:				PRCDEF;		(*05 - défaut d'arrêt de la pompe*)
+
+	CO_On:					BOOL;		(*demande de marche de la pompe en mode automatique généré par la fonction qui gère la pompe*)
+	CO_Regen:				BOOL;		(*demande de régénération de la pompe en mode automatique par la fonction qui gère la pompe*)
+
+	IN_ST11:				BOOL;		(*indique que la pompe cryogénique est opérationnelle*)
+	IN_ST12:				BOOL;		(*indique que la pompe cryogénique est en régénration*)
+	IN_ON:					BOOL;		(*indique que la pompe cryogénique est en marche*)
+
+	(*conditions d'autorisation*)
+	EN_On_INT:					BOOL:= TRUE;	(*condition d'autorisation de marche de la pompe donnée par la fonction qui gère la pompe*)
+	EN_Off_INT:					BOOL:= TRUE;	(*condition d'autorisation d'arrêt de la pompe donnée par la fonction qui gère la pompe*)
+	EN_On_EXT:					BOOL:= TRUE;	(*condition d'autorisation de marche externe*)
+	EN_Off_EXT:					BOOL:= TRUE;	(*condition d'autorisation d'arrêt de la pompe donnée par la fonction qui gère la pompe*)
+	EN_Regen_INT:				BOOL:= TRUE;	(*condition d'autorisation de régénération de la pompe donnée par la fonction qui gère la pompe*)
+	EN_Regen_EXT:				BOOL:= TRUE;	(*condition d'autorisation de régénération externe*)
+	
+	PRM_Forcage_Cryo_EXT:			BOOL;   
+	PRM_Forcage_Cryo_INT:			BOOL;   	  		
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	RQ_Cool:					BOOL;			(* Demande de refroidissement de la pompe cryogénique*)
+
+	(*variable d'état d'autorisation*)
+	AUTOR_On_IHM:				BOOL;			(*indique que la mise en marche de la pompe est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Off_IHM:				BOOL;			(*indique que l'arrêt de la pompe est autorisée en mode manuel depuis l'IHM*)
+	AUTOR_Regen_IHM:			BOOL;			(*indique que la régénération de la pompe est autorisée en mode manuel depuis l'IHM*)
+
+	STATE_On:					BOOL;			(*indique que la pompe est en marche*)
+	STATE_Ok:					BOOL;			(*indique que la pompe est en marche et à atteint sa température*)
+	STATE_Nok:					BOOL;			(*indique la présence d'un défaut sur la pompe ou que l'ordre de marche a été refusé*)
+	STATE_Ar:					BOOL;			(*indique que la pompe est à l'arrêt*)
+	STATE_Ready:				BOOL;			(*indique que la pompe est prête à fonctionner*)
+	STATE_Regen:				BOOL;			(*indique que la pompe est en régénération*)
+	STATE_Ihm:					USINT;			(*code d'état de la pompe turbo*)
+												(* 	0 = pompe à l'arrêt
+												   	1 = pompe en régénération
+													2 = amorcage en cours
+													3 = pompe amorcée 
+												*)
+END_VAR
+
+VAR
+
+	(* Variables pour les sorties*)
+	OUT_On:						BOOL;			(* Start pump *)
+	OUT_Regen:					BOOL;			(* Regen pump *)
+
+	(* Variables demande en mode manuel*)
+	M_On:						BOOL;			(* Ordre marche pompe en mode manuel *)
+	M_Regen:					BOOL;			(* Ordre regénération pompe en mode manuel *)
+
+	RCP_M_On:					BOOL;			(*bit de reception de l'ordre de marche/arrêt en mode manuel*)
+	RCP_M_Regen:				BOOL;			(*bit de reception de l'ordre de regeneration en mode manuel*)
+
+	VAR_On:						BOOL;			(*bit intermédiaire de demande de marche de la pompe turbo*)
+	VAR_Regen:					BOOL;			(*bit intermédiaire de demande de regeneration de la pompe turbo*)
+	VAR_mem_ok:					BOOL;
+
+	VAR_CPT:					BLOCK_CPT_TEMPS;
+	
+	Tempo_on_Cryo: 				TON;
+END_VAR
+
+VAR_EXTERNAL
+	MANUAL_SAFETY_OFF:			BOOL;			(*desactive les sécurités en mode manuel*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML						:=	'1';
+TagXML						:=	9;
+
+DEF_Desamorcage.IdXml		:=	'16';
+DEF_Desamorcage.TagXml		:=	12;
+
+DEF_Arret_Auto.IdXml		:=	'3';
+DEF_Arret_Auto.TagXml		:=	10;
+
+DEF_Marche_imposs.IdXml		:=	'3';
+DEF_Marche_imposs.TagXml	:=	5;
+
+DEF_On.IdXml				:=	'3';
+DEF_On.TagXml				:=	1;
+
+DEF_Off.IdXml				:=	'3';
+DEF_Off.TagXml				:=	3;
+
+
+(* Gestion des ordres en mode manuel *)
+	RCP_M_On 			:=	M_On;
+	RCP_M_Regen			:=	M_Regen;
+
+(*gestion des bits d'autorisation en mode manuel*)
+	AUTOR_On_IHM			:=	NOT RESET AND NOT VAR_On  AND MANUAL
+								AND ((EN_On_INT AND EN_On_EXT AND WATER) OR MANUAL_SAFETY_OFF);
+	AUTOR_Off_IHM			:=	NOT RESET  AND VAR_On  AND MANUAL
+								AND (( EN_Off_EXT AND EN_Off_INT) OR MANUAL_SAFETY_OFF);
+	AUTOR_Regen_IHM			:=	NOT RESET  AND NOT VAR_Regen AND MANUAL (*AND VAR_On  *)
+								AND (( EN_Regen_EXT AND EN_Regen_INT) OR MANUAL_SAFETY_OFF);
+
+(*défaut d'arrêt automatique de la pompe*)
+	DEF_Arret_Auto.CONDITION :=             (NOT WATER
+									OR  NOT EN_On_INT
+									OR NOT EN_On_EXT)
+									AND OUT_On AND NOT RESET;
+	DEF_arret_auto.DELAY:=T#0ms;
+	DEF_Arret_Auto();
+
+(* Défaut de marche de la pompe turbo non autorisée en automatique*)
+	DEF_marche_imposs.CONDITION:=	NOT MANUAL AND CO_On AND( NOT EN_On_INT OR NOT EN_On_EXT)
+									AND NOT MANUAL AND NOT RESET AND NOT VAR_On;
+	DEF_marche_imposs.DELAY := T#0ms;
+	DEF_marche_imposs();
+
+(* ARRET POMPE*)
+	IF 		(NOT CO_On AND NOT MANUAL AND EN_Off_INT AND EN_Off_EXT)
+			OR ( RCP_M_On AND AUTOR_Off_ihm)
+			OR RESET
+			OR DEF_arret_auto.DEF
+			THEN
+					VAR_On 				:= 	FALSE;
+					VAR_Regen			:=	FALSE;
+(*MARCHE POMPES*)
+	ELSIF	(CO_On AND NOT MANUAL AND EN_On_INT AND EN_On_EXT)
+			 OR 	( RCP_M_On AND AUTOR_On_IHM) THEN
+					VAR_On 				:= 	TRUE;
+	END_IF
+(*REGEN POMPES*)
+	IF	( CO_Regen AND NOT MANUAL AND EN_Regen_INT AND EN_Regen_EXT)
+			 OR 	( RCP_M_Regen AND AUTOR_Regen_IHM) THEN
+					VAR_Regen 			:= 	TRUE;
+	ELSIF	(VAR_Regen AND STATE_Regen) THEN
+					VAR_Regen			:=	FALSE;
+	END_IF;
+
+Tempo_on_Cryo.PT:=T#8S;
+Tempo_on_Cryo.IN := OUT_On AND NOT IN_On AND NOT DEF_On.DEF;
+PRM_Forcage_Cryo_INT := Tempo_on_Cryo.Q;
+
+(*SORTIE MARCHE POMPE*)
+	OUT_On			:= 	WATER AND VAR_On AND NOT PRM_Forcage_Cryo_INT AND NOT PRM_Forcage_Cryo_EXT;
+(*SORTIE REGEN POMPE*)
+	OUT_Regen		:= 	VAR_Regen;
+(*DEMANDE DE REFROIDISSEMENT DE LA POMPE*)
+	RQ_Cool			:=	VAR_On;
+
+(* Défaut désamorçage *)
+		IF OUT_On AND IN_ST11 AND NOT IN_ST12 THEN
+			VAR_Mem_Ok := TRUE;
+		END_IF;
+		IF NOT OUT_On OR VAR_Regen THEN
+			VAR_Mem_Ok :=	FALSE;
+		END_IF;
+
+		DEF_Desamorcage.DELAY  := T#5s;
+		DEF_Desamorcage.CONDITION := VAR_MEM_Ok AND NOT IN_ST11;
+		DEF_Desamorcage();
+
+(* Défaut de marche de la pompe*)
+		DEF_ON.CONDITION := WATER AND VAR_On AND NOT IN_On;
+		DEF_ON.DELAY:=T#15s;
+		DEF_ON();
+
+(* Défaut d'arrêt de la pompe*)
+		DEF_OFF.CONDITION := NOT OUT_On AND IN_On AND NOT RESET;
+		DEF_OFF.DELAY := T#10s;
+		DEF_OFF();
+
+(*affectation des bits d'état*)
+	STATE_On			:=	OUT_On;
+	STATE_Ok			:=	IN_ST11 AND OUT_On AND IN_On AND NOT IN_ST12;
+	STATE_Regen			:=	IN_ST12;
+	STATE_AR 			:= 	NOT OUT_On;
+	STATE_NOK			:=	DEF_Desamorcage.DEF OR
+							DEF_Marche_imposs.DEF OR
+							DEF_Arret_auto.DEF OR
+							DEF_On.DEF OR
+							DEF_Off.DEF;
+	STATE_Ready			:=	TRUE;
+
+	IF STATE_Ar THEN
+		STATE_Ihm	:=	0;
+	ELSIF STATE_regen THEN
+		STATE_Ihm 	:=	1;
+	ELSIF STATE_on AND NOT STATE_ok THEN
+		STATE_Ihm	:= 	2;
+	ELSIF STATE_On AND STATE_Ok THEN
+		STATE_ihm 	:= 	3;
+	ELSE
+		STATE_ihm 	:=	0;
+	END_IF;
+
+
+(*Gestion compteur*)
+VAR_CPT(I_On:= STATE_On);
+
+(* Reset des ordres *)
+IF M_On AND RCP_M_On THEN
+	M_On		 := FALSE;
+END_IF;
+IF M_Regen AND RCP_M_Regen THEN
+	M_Regen	 := FALSE;
+END_IF;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

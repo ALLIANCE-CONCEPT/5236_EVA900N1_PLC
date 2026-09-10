@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_SYNCHRO_HORAIRE" Id="{1807895a-6442-4e33-af5c-657774a79e39}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_SYNCHRO_HORAIRE
+VAR_INPUT
+	I_ON:		BOOL;
+	PRM_DAY:	USINT;
+	PRM_HOUR:	USINT;
+	PRM_MINUTE: USINT;
+END_VAR
+VAR_OUTPUT
+	STATE_OK:	BOOL;
+END_VAR
+VAR
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*etat ok*)
+STATE_OK := I_ON AND
+			((PRM_DAY = PRG_SEC.STATE_DT.wDayOfWeek) OR (PRM_DAY = 7)) AND
+			(PRM_HOUR = PRG_SEC.STATE_DT.whour) AND
+			(PRM_MINUTE = PRG_SEC.STATE_DT.wMinute);]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_SYNCHRO_HORAIRE">
+      <LineId Id="13" Count="4" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

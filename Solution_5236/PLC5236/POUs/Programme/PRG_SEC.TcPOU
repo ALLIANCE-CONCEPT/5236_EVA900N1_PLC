@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="PRG_SEC" Id="{69d31f0c-f436-4952-b01c-01554268a7a2}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_SEC
+VAR
+(***********************************************************************************)
+(*Fonction de récupération de l'heure locale (Windows) par simple mise à 1 du bEnable au démarrage*)
+(* Version 0 - GV - 06/2017 - Affaire 10315    *)
+(***********************************************************************************)
+
+	fbTime : FB_LocalSystemTime := ( bEnable := TRUE, dwCycle := 1);
+
+
+	_ms:			UINT;
+	_date:			DT;
+	m_string:			STRING;
+	STATE_Date:	STRING;
+	STATE_Time:	STRING;
+	STATE_DT:		TIMESTRUCT;
+
+	STATE_Time_OK:	BOOL;
+
+	VERROU : 		BOOL:=FALSE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbTime();
+
+_Date	:=	SYSTEMTIME_TO_DT(fbTime.systemTime);
+_ms		:=	WORD_TO_UINT(fbTime.systemTime.wMilliseconds);
+
+m_string			:= 	CONCAT(	WORD_TO_STRING(fbTime.systemTime.wDay),'/');
+IF fbTime.systemTime.wMonth < 16#000A THEN		(*mois < 10*)
+	m_string 		:=	CONCAT(	m_string,'0');
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wMonth) );
+ELSE
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wMonth) );
+END_IF;
+m_string			:=	CONCAT(	m_string ,'/' );
+m_string			:=	CONCAT(	m_string , WORD_TO_STRING(fbTime.systemTime.wYear) );
+STATE_DATE 		:= 	m_string;
+
+m_string 			:= 	CONCAT(	WORD_TO_STRING(fbTime.systemTime.wHour),':');
+IF fbTime.systemTime.wMinute < 16#000A THEN
+	m_string 		:=	CONCAT(	m_string,'0');
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wMinute) );
+ELSE
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wMinute) );
+END_IF;
+m_string 			:=	CONCAT(	m_string,':');
+IF fbTime.systemTime.wSecond < 16#000A THEN
+	m_string 		:=	CONCAT(	m_string,'0');
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wSecond) );
+ELSE
+	m_string 		:=	CONCAT(	m_string,WORD_TO_STRING(fbTime.systemTime.wSecond) );
+END_IF;
+STATE_Time 		:= 	m_string;
+STATE_DT	 	:= 	fbTime.systemTime;
+
+STATE_Time_Ok	:=	(fbTime.systemTime.wYear <> 0);]]></ST>
+    </Implementation>
+    <LineIds Name="PRG_SEC">
+      <LineId Id="21" Count="33" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

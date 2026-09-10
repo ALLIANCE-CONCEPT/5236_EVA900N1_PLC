@@ -1,0 +1,235 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Users_Menu" Id="{7b9b9e61-464b-4b36-afdc-d1b0bd370a93}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Gestion des utilisateurs
+"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gestion des utilisateurs</v>
+                <v>User management</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Identifiant"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Identifiant</v>
+                <v>Login</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"Save on disk"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Les groupes et utilisateurs
+vont être sauvegardés sur le disque.
+L'ancienne sauvegarde sera supprimée.
+Confirmer?</v>
+                <v>Users and groups will be 
+saved on disk. 
+Last backup will be deleted. 
+Confirm?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Déconnexion"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Confimez vous la déconnexion?</v>
+                <v>Confirm disconnection?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Identification"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Identification</v>
+                <v>Identification</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Login"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Identifiant</v>
+                <v>Login</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Password"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mot de passe</v>
+                <v>Password</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"Confirm supp groupe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Confirmer la suppression du groupe?</v>
+                <v>Confirm the group deletion?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"Confirm supp user"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Confirmer la suppression de l'utilisateur?</v>
+                <v>Confirm the user deletion?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"Confirm pwd"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Confimation du mot de passe</v>
+                <v>Password confirmation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"30"</v>
+              <v n="TextDefault">"Temps av deco"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps avant déconnexion automatique :</v>
+                <v>Time before automatic logout:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"31"</v>
+              <v n="TextDefault">"Deco auto utilisee"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Utilisation de la déconnexion automatique :</v>
+                <v>Automatic logout used:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"user actu"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Utilisateur actuel</v>
+                <v>Current user</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"group actu"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Groupe</v>
+                <v>Group</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Connexion"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Connexion</v>
+                <v>Connection</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Déconnexion"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Déconnexion</v>
+                <v>Disconnection</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"droits par défaut"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Droits
+par défaut</v>
+                <v>Rights
+by default</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"Users"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Utilisateurs</v>
+                <v>Users</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"Groups"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Groupes</v>
+                <v>Groups</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"Charger"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Charger</v>
+                <v>Load</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"Sauvegarder"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sauvegarder</v>
+                <v>Save</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"Options"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Options</v>
+                <v>Options</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"laod from disk"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Les groupes et utilisateurs
+vont être restaurés depuis le disque
+Les groupes et utilisateurs actuels 
+vont être écrasés. Confirmer?</v>
+                <v>Users and groups will be 
+restored from disk. 
+Current groups and users will be deleted. 
+Confirm?</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{3cb79d0b-7e2a-462e-b4e6-42096df0ce50}</v>
+          <v n="GuidReInit">{2851b3cb-5652-462d-8092-2af7d6a7617b}</v>
+          <v n="GuidExitX">{1b63f239-84c5-47b5-a9ca-c53a794ea089}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

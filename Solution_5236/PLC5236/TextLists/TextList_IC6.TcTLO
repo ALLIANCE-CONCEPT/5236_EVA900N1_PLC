@@ -1,0 +1,156 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_IC6" Id="{c7c98635-c504-44f3-9db1-d2bd2dbc0c10}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Rate"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vitesse (Å/s)</v>
+                <v>Rate (Å/s)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Thickness"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Epaisseur (kÅ)</v>
+                <v>Thickness (kÅ)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Détails"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Détails...</v>
+                <v>Details...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"power"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Puissance (%)</v>
+                <v>Power (%)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Commandes"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v> Commandes</v>
+                <v> Commands</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"start"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>START</v>
+                <v>START</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"stop"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>STOP</v>
+                <v>STOP</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"ZERO"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ZERO</v>
+                <v>ZERO</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"RESET"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>RESET</v>
+                <v>RESET</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"etat quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v> Etat des quartz</v>
+                <v> Crystals state</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"fail"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>FAIL</v>
+                <v>FAIL</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"channel"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Canal actif :</v>
+                <v>Active channel:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"Fréquence"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fréquence</v>
+                <v>Frequency</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"% utilisé"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>% utilisé</v>
+                <v>Life used</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"Etat quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Etat quartz</v>
+                <v>Crystal quartz</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{27515284-d4ff-463b-a6ae-0d9731a6d8ba}</v>
+          <v n="GuidReInit">{4c60d8a8-f706-4288-8e43-bb1fa46f74b6}</v>
+          <v n="GuidExitX">{3da6df26-8153-416b-b487-bcd23b8757c8}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

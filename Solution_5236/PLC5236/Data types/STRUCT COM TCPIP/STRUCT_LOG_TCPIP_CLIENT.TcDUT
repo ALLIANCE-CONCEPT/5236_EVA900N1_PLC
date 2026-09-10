@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <DUT Name="STRUCT_LOG_TCPIP_CLIENT" Id="{4d594b1c-911b-4714-949c-f8552cfc5408}">
+    <Declaration><![CDATA[(*Structure du journal d'émission / réception*)
+TYPE STRUCT_LOG_TCPIP_CLIENT :
+STRUCT
+	RX				: ARRAY[0..MAX_RXBUFFER_SIZE] OF BYTE; 		(*Stockage des répondes du buffer*)
+	TX				: ARRAY[0..MAX_TXBUFFER_SIZE] OF BYTE; 		(*Stockage des répondes du buffer*)
+	ERR			: T_MAXSTRING;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

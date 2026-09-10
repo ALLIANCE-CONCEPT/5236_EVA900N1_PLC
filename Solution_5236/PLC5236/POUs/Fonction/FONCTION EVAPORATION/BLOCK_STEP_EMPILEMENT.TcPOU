@@ -1,0 +1,1144 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_STEP_EMPILEMENT" Id="{18f6e04d-0f14-48e2-a8c8-1fb5128a9feb}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_STEP_EMPILEMENT
+
+(* Gestion empilement de couche *)
+
+(****************historique des versions*****************************)
+
+(* Version 0-0 - SD - VERSION INITIALE CT200 n°7 - 8157 *)
+(* Version 1-0 - GV - Correction du bloc : - Pas de RAZ XTC sur reprise,
+								    - Gestion fin de couche VAR_MEM_COUCHE_TERMINEE
+								    - Pas de rechargement des paramètres XTC sur reprise 
+								    - Pas de répition des boucles si couche suivante
+								    - ...*)
+(* Version 2-0 - GV - Pas de demande de rotation PS si consigne nulle (Etape 6) - 06/2015 - 8866 *)
+(* Version 3-0 - GV - Gestion introduction gaz et regulation de pression - 07/2015 - 9070 *)
+(* Version 4-0 - GV - Ajout gestion de demande de tilt PS + Modification gestion IAD + Modification gestion chauffage*)
+(* Version 5-0 - HG - Ajout option condition gaz/pression pour chaque segment avec application des conditions de gaz et pression si oui, pompage secondaire sans gaz sinon*)
+(* Version 6-0 - GV - Ajout d'un evenement épaisseur déposée en fin de couche*)
+(* Version 6-1 - GV - Correction Reset VAR_Cond_MGaz sur Etape 1*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	I_ON:							BOOL;					(*Condition de déclenchement du grafcet de marche du procédé*)
+
+	I_LAYER_LOADING_OK:				BOOL;					(*L'IHM indique le chargement de la couche ok*)
+	I_LAYER_LOADING_NOK:			BOOL;					(*L'IHM indique le chargement de la couche nok*)
+
+	I_LAYER_ANT_LOADING_OK:			BOOL;					(*chargement de la couche anticipée Ok*)
+	I_LAYER_ANT_LOADING_NOK:		BOOL;					(*chargement de la couche anticipée NOk*)
+
+	I_NO_MORE_LAYER:				BOOL;					(*L'IHM indique qu'il n'y a plus de couche à exécuter*)
+	I_NO_MORE_LAYER_ANT:			BOOL;					(*plus de couche anticipée à lancer*)
+
+(*	I_STEP_NUMBER:				UINT;				(*Numéro de l'étape dans l'empilement*)	*)
+
+	I_ACTION_CONTROLEUR_OK:		BOOL;				(*Retour action contrôleur OK, RESET,RAZ,STOP etc*)
+	I_CONTROLEUR_PHASE:			STRING;				(*Etat du contrôleur *)
+
+	I_PROG_CONTROLEUR_OK:			BOOL;				(*Retour programmation contrôleur OK*)
+	I_END_DEPOT:					BOOL;				(*Retour indiquant que le dépôt est terminé*)
+
+	I_STAB_CHAUFFAGE_OK:			BOOL;				(*Stabilisation chauffage ok*)
+	I_CONTROLEUR_STOPPED:			BOOL;				(*Retour contrôleur de depôt à l'arrêt*)
+
+	I_N_SEGMENT_S1:				USINT;				(*N° de segment en cours pour la source 1*)
+	I_N_SEGMENT_S2:				USINT;				(*N° de segment en cours pour la source 2*)
+	I_N_SEGMENT_S3:				USINT;				(*N° de segment en cours pour la source 3*)
+	I_N_SEGMENT_S4:				USINT;				(*N° de segment en cours pour la source 4*)
+
+	CONF_CHAUFFAGE:					BOOL;				(*Indique s'il y a du chauffage*)
+	CONF_IAD:						BOOL;				(*Indique s'il y a un IAD*)
+
+	I_ROTATION_PS_OK:				BOOL;				(*Retour rotation PS ok*)
+	I_TILT_PS_OK:					BOOL;				(*Retour tilt PS ok*)
+	I_STOP_ROT_PS_OK:				BOOL;				(*Retour rotation PS à l'arrêt*)
+	I_STOP_TILT_PS_OK:				BOOL;				(*Retour tilt PS à l'arrêt*)
+	I_NO_ROTATION_PS:				BOOL;				(*Pas de rotation PS si consigne nulle*)
+	I_MODE_TILT:					INT;					(*Retour de sélection mode tilt (1: Balayage, 2: Position)*)
+	I_MARCHE_CHAUFFAGE_OK:			BOOL;				(*Retour marche Chauffage PS ok*)
+	I_ARRET_CHAUFFAGE_OK:			BOOL;				(*Retour Arrêt chauffage ok*)
+	I_MARCHE_GAZ1_OK:				BOOL;				(*Retour marche gaz 1 ok*)
+	I_MARCHE_GAZ2_OK:				BOOL;				(*Retour marche gaz 2 ok*)
+	I_ARRET_GAZ1_OK:				BOOL;				(*Retour Arrêt gaz 1 ok*)
+	I_ARRET_GAZ2_OK:				BOOL;				(*Retour Arrêt gaz 2 ok*)
+	I_ARRET_REGUL_GAZ_OK:		ARRAY[0..2] OF BOOL;(*Retour arrêt regulation de pression en débit de gaz*)
+	I_MARCHE_POMPAGE_PROC_OK:	BOOL;				(*Retour pompage procédé ok*)
+	I_MARCHE_POMPAGE_SEC_OK:	BOOL;				(*Retour pompage secondaire ok*)
+	I_MARCHE_IAD_OK:				BOOL;				(*Retour marche IAD OK*)
+	I_ARRET_IAD_OK:					BOOL;				(*Retour arrêt IAD OK*)
+	I_POSITIONNEMENT_OK:			BOOL;				(*Retour positionnement de l'axe Z OK*)
+
+	I_PREP_SOURCE1_OK:			BOOL;				(*Retour préparation source 1 ok*)
+	I_PREP_SOURCE2_OK:			BOOL;				(*Retour préparation source 2 ok*)
+	I_PREP_SOURCE3_OK:			BOOL;				(*Retour préparation source 3 ok*)
+	I_PREP_SOURCE4_OK:			BOOL;				(*Retour préparation source 4 ok*)
+
+	I_EVAP1_OK:						BOOL;				(*Source 1 en phase d'évaporation*)
+	I_EVAP2_OK:						BOOL;				(*Source 2 en phase d'évaporation*)
+	I_EVAP3_OK:						BOOL;				(*Source 3 en phase d'évaporation*)
+	I_EVAP4_OK:						BOOL;				(*Source 4 en phase d'évaporation*)
+
+	I_SOURCE1_PREFU:				BOOL;				(*Retour source 1 en préparation, phase de préfusion*)
+	I_SOURCE2_PREFU:				BOOL;				(*Retour source 2 en préparation, phase de préfusion*)
+	I_SOURCE3_PREFU:				BOOL;				(*Retour source 3 en préparation, phase de préfusion*)
+	I_SOURCE4_PREFU:				BOOL;				(*Retour source 4 en préparation, phase de préfusion*)
+
+	I_SOURCE1_IDLE:				BOOL;				(*Retour source 1 en IDLE*)
+	I_SOURCE2_IDLE:				BOOL;				(*Retour source 2 en IDLE*)
+	I_SOURCE3_IDLE:				BOOL;				(*Retour source 3 en IDLE*)
+	I_SOURCE4_IDLE:				BOOL;				(*Retour source 4 en IDLE*)
+
+	I_CLOT_SOURCE1_OK:			BOOL;				(*Cloture de la source 1 ok*)
+	I_CLOT_SOURCE2_OK:			BOOL;				(*Cloture de la source 2 ok*)
+	I_CLOT_SOURCE3_OK:			BOOL;				(*Cloture de la source 3 ok*)
+	I_CLOT_SOURCE4_OK:			BOOL;				(*Cloture de la source 4 ok*)
+
+	I_STOP_EVAP1_OK:				BOOL;				(*Source 1 à l'arrêt*)
+	I_STOP_EVAP2_OK:				BOOL;				(*Source 2 à l'arrêt*)
+	I_STOP_EVAP3_OK:				BOOL;				(*Source 3 à l'arrêt*)
+	I_STOP_EVAP4_OK:				BOOL;				(*Source 4 à l'arrêt*)
+
+	M_NEXT_LAYER:					BOOL;				(*IHM demande le passage à la couche suivante*)
+	PRM_OP_UTIL_IAD:				BOOL;				(*Parametre indiquant l'utilisation d'un IAD*)
+
+	I_DOME_IN_POSITION:			BOOL;		(*Indique si le dome est en position*)
+
+(*Vitesse/Epaisseur de dépôt global*)
+	I_Global_Thick:					REAL;
+	I_Global_Rate:					REAL;
+
+(*Indique si la source est arrêté ou sa cloture est terminée*)
+	I_SOURCE1_ARRET:				BOOL;
+	I_SOURCE2_ARRET:				BOOL;
+	I_SOURCE3_ARRET:				BOOL;
+	I_SOURCE4_ARRET:				BOOL;
+
+(*Temps de préparation des sources*)
+	PRM_TPS_PREPA_SOURCE1:		INT;
+	PRM_TPS_PREPA_SOURCE2:		INT;
+	PRM_TPS_PREPA_SOURCE3:		INT;
+	PRM_TPS_PREPA_SOURCE4:		INT;
+(*Vitesse d'évaporation théorique des sources*)
+	PRM_SOURCE1_RATE:			REAL;
+	PRM_SOURCE2_RATE:			REAL;
+	PRM_SOURCE3_RATE:			REAL;
+	PRM_SOURCE4_RATE:			REAL;
+
+(*Parametres indiquant s'il y a utilisation d'un quartz pour l'étalonnage*)
+	PRM_CTRL_DELAY_SOURCE1:	BOOL;
+	PRM_CTRL_DELAY_SOURCE2:	BOOL;
+	PRM_CTRL_DELAY_SOURCE3:	BOOL;
+	PRM_CTRL_DELAY_SOURCE4:	BOOL;
+
+(*sources utilisées pour couche en cours*)
+	PRM_UTIL_SOURCE1:			BOOL;
+	PRM_UTIL_SOURCE2:			BOOL;
+	PRM_UTIL_SOURCE3:			BOOL;
+	PRM_UTIL_SOURCE4:			BOOL;
+
+(*sources utilisées pour couche anticipée*)
+	PRM_UTIL_SOURCE1_ANT:		BOOL;
+	PRM_UTIL_SOURCE2_ANT:		BOOL;
+	PRM_UTIL_SOURCE3_ANT:		BOOL;
+	PRM_UTIL_SOURCE4_ANT:		BOOL;
+
+	PRM_MAIN_TOOLING:			REAL;	(*Facteur de correction global*)
+	PRM_TOOLING_QZ:				ARRAY[0..11]OF REAL;		(*Facteur de correction de chaque Quartz*)
+	PRM_POIDS_QZ:				ARRAY[0..11]OF REAL;		(*Paramêtres indiquant le poids de chaque quartz dans la mesure*)
+	PRM_ZRATIO_QZ:				ARRAY[0..11]OF REAL;		(*Parametres indiquant le z-ratio afécté au quartz*)
+	PRM_DENSITE_QZ:				ARRAY[0..11]OF REAL;		(*Densité affecté à chaque quartz*)
+	PRM_TIMEPOWER:				BOOL;	(*Réaction en cas de panne du quartz associé au controle vitesse de la source
+																						0 = arrêt de couche
+																						1 = fin de la couche à la puissance moyenne
+																						*)
+
+	PRM_FACTEUR_FINE:			REAL;		(*Facteur de correction fine appliqué au tooling des Quartz*)
+
+	(*Paramètre pompage procédé*)
+	PRM_MODE_PUMPING:			USINT;		(*Option mode de régulation 0:position, 1:pression, 2:gaz 1, 3:gaz 2*)
+	PRM_PR_PUMPING:				REAL;		(*Pression de regulation*)
+	PRM_POS_PUMPING:			REAL;		(*Position vanne asservie*)
+	PRM_PR_HI_PUMPING:			REAL;		(*Pression limite haute*)
+	PRM_PR_LO_PUMPING:			REAL;		(*Pression limite basse*)
+	PRM_TIM_PR_PUMPING:			REAL;		(*Temps stabilisation pression*)
+
+	(**)
+	PRM_MATERIAU_MACHINE:		STRING;		(*Nom du matériau machine (fiche matériau*)
+	PRM_ANTICIPATION_COUCHE:	BOOL;		(*Indique que la couche en cours est anticipée (donc sa prépa a été lancée sur couche précédente)*)
+	PRM_SOURCE_MAITRE:			USINT;
+	PRM_EPAISSEUR:				REAL;		(*Epaisseur de dépôt à atteindre*)
+
+	PRM_NEW_EPAISSEUR:			ARRAY[0..499] OF REAL;	 (*Nouvelles épaisseurs*)
+
+	(*Paramètre de mise en gaz*)
+	PRM_N_SEGMENT_GAZ:			INT;						(*N° de segment pour la mise en gaz*)
+	PRM_FLOW_GAZ1:				REAL;					(*Consigne de débit de gaz ligne 1*)
+	PRM_FLOW_GAZ2:				REAL;					(*Consigne de débit de gaz ligne 2*)
+	PRM_GAZ_PRESSION_SEGMENT:	ARRAY[0..10] OF BOOL;	(*Option utilisation des conditions de gaz/pression indiquées pour le segment, sinon pompage secondaire sans gaz*)
+
+	(*Paramètre de segment de chauffage*)
+	PRM_MODE_CHAUFFAGE:			USINT;					(*mode chauffage*)
+	PRM_WAIT_STAB_TEMP:			BOOL;					(*Attente stabilisation température*)
+	PRM_TEMPERATURE:			REAL;					(*Consigne de température*)
+	PRM_INC_RAMPE_CHAUFFAGE:	REAL;					(*en °C/min*)
+	PRM_DELTA_TEMPERATURE:		REAL;					(*en °C*)
+	PRM_TPS_STAB_TEMP:			REAL;					(*en min*)
+	PRM_TPS_STAB_TEMP_MAX:		REAL;					(*en min*)
+
+	(*Avance ouverture cache IAD*)
+	PRM_AVANCE_IAD:				REAL;					(*Paramètres d'avance ouverture IAD*)
+
+	(*défaut*)
+	DEF_READ_LAYER:				PRCDEF;				(*défaut de lecture d'une étape*)
+	DEF_READ_LAYER_ANT:			PRCDEF;				(*défaut de lecture d'une étape anticipée*)
+
+	EV_LOAD_LAYER:				PRCDEF;				(*Evenement chargement d'une étape*)
+	EV_NEXT_LAYER:				PRCDEF;				(*Evenement de passage à l'étape suivante*)
+	EV_THICK_AGREGATE:			PRCDEF;				(*Evenement information épaisseur réel déposée*)
+	DEF_RAZ_QZ:					PRCDEF;				(*Défaut de raz de l'épaisseur*)
+	DEF_PROG_QZ:				PRCDEF;				(*Défaut de programmation de la couche*)
+	DEF_QF:						PRCDEF;				(*Défaut de panne quartz générale - poids max atteint par un quartz*)
+	DEF_CONTROLLER_STOPPED:		PRCDEF;				(*Défaut de passage en STOP du contrôleur de dépôt pendant l'évaporation*)
+
+(*ajouté par seb*)
+	(*DEF_SURV_TPS_DEPOT:		PRCDEF;			(*Défaut de surveillance du temps de dépôt*)*)
+	EV_RELOAD:					PRCDEF;					(*Evenement de rechargement du programme*)
+
+	OP_RUN:						BLOCK_G7;				(*Grafcet de gestion de l'execution procede*)
+
+
+	PRM_QUARTZ_SOURCE:			BOOL;					(*indique si un quartz est présent sous le cache source*)
+
+
+(*Parametre de boucle , définit s'il faut effectuer une repetition des couches*)
+	PRM_LOOP:					BOOL;		(*Parametre indiquant s'il y a une boucle à effectuer*)
+	PRM_LOOP_FIRST_LAYER:		UINT;		(*Numéro de début de la couche à répeter*)
+	PRM_LOOP_LAST_LAYER:		UINT;		(*Numéro de fin de la couche à répeter*)
+	PRM_NB_LOOP:				UINT;		(*Indique le nombre de repetition de la boucle*)
+
+
+(*Parametre concernant le type de dôme selectionné dans le programme*)
+	PRM_Type_Dome:				USINT;		(*0 =250mm, 1= 350mm, 2= 450mm*)
+
+
+END_VAR
+VAR_INPUT PERSISTENT
+	IsFunction:						BOOL;			(*entité : fonction*)
+	IdXML:							STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:							UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:						STRING;			(*MNEMO de l'appelant*)
+	MNEMO:							STRING;			(*MNEMO de l'entité*)
+	PRM_NQz_Min:					USINT:=1;		(*Nombre mini de quartz avant panne*)
+	PRM_QF_Poids_Max: 				REAL;
+	PRM_QF_VIE_Min:					REAL;
+END_VAR
+VAR_OUTPUT
+	RQ_LOAD_PARAM:				BOOL;			(*Demande de chargement parametre Couche/Quartz dans le contrôleur de dépôt*)
+
+	RQ_PREP_S1:					BOOL;			(*Demande de préparation de la source 1*)
+	RQ_PREP_S2:					BOOL;			(*Demande de préparation de la source 2*)
+	RQ_PREP_S3:					BOOL;			(*Demande de préparation de la source 3*)
+	RQ_PREP_S4:					BOOL;			(*Demande de préparation de la source 4*)
+
+	RQ_NEXT_LAYER:				BOOL;		(*Demande fin de couche*)
+
+	RQ_EVAP_S1:					BOOL;				(*Demande de mise en phase évaporation de la source 1*)
+	RQ_EVAP_S2:					BOOL;				(*Demande de mise en phase évaporation de la source 2*)
+	RQ_EVAP_S3:					BOOL;				(*Demande de mise en phase évaporation de la source 3*)
+	RQ_EVAP_S4:					BOOL;				(*Demande de mise en phase évaporation de la source 4*)
+
+	RQ_ROTATION_PS:				BOOL;			(*Demande rotation PS*)
+	RQ_TILT_PS:					BOOL;			(*Demande de tilt PS*)
+	RQ_STOP_ROTATION_PS:		BOOL;			(*Demande Arrêt rotation PS*)
+	RQ_STOP_TILT_PS:			BOOL;			(*Demande Arrêt tilt PS*)
+	RQ_MARCHE_CHAUFFAGE:		BOOL;			(*Demande de marche du chauffage*)
+	RQ_ARRET_CHAUFFAGE:			BOOL;			(*Demande d'arrêt du chauffage*)
+	RQ_MARCHE_IAD:				BOOL;			(*Demande marche IAD*)
+	RQ_ARRET_IAD:				BOOL;			(*Demande arrêt IAD*)
+
+	RQ_POSITIONNEMENT_Z:		BOOL;			(*Demande de positionnement de l'axe Z*)
+
+	RQ_MARCHE_GAZ:				ARRAY[0..2] OF BOOL;	(*Demande marche des lignes de gaz*)
+	RQ_ARRET_GAZ:				ARRAY[0..2] OF BOOL;	(*Demande arrêt des lignes de gaz*)
+
+	RQ_MARCHE_REGUL_GAZ:		ARRAY[0..2] OF BOOL;	(*Demande marche de la régulation en débit de gaz*)
+	RQ_ARRET_REGUL_GAZ:			ARRAY[0..2] OF BOOL; 	(*Demande arrêt de la régulation en débit de gaz*)
+
+	RQ_STOP_EVAP_S1:				BOOL;		(*Demande d'arrêt de la source 1*)
+	RQ_STOP_EVAP_S2:				BOOL;		(*Demande d'arrêt de la source 2*)
+	RQ_STOP_EVAP_S3:				BOOL;		(*Demande d'arrêt de la source 3*)
+	RQ_STOP_EVAP_S4:				BOOL;		(*Demande d'arrêt de la source 4*)
+
+	RQ_OUV_CC_Iad:					BOOL;		(*Demande ouverture cache IAD*)
+
+	RQ_MARCHE_POMPAGE_PROC:	BOOL;		(*Demande de mise en pompage procédé*)
+	RQ_MARCHE_POMPAGE_SEC:	BOOL;		(*Dempande de mise en pompage secondaire*)
+
+	RQ_READ_LAYER:				BOOL;		(*Demande de lecture de l'étape suivante*)
+	RQ_READ_LAYER_ANT:			BOOL;		(*Demande de lecture de la couche anticipée*)
+(*	RQ_READ_NUM_LAYER:			BOOL;		(*Demande de lecture du numéro d'étape demandé*)
+	OUT_NUM_LAYER_TO_READ:		UINT;		(*Indique le numéro de l'étape à lire*)
+*)
+	OUT_RAZ_THICK_CONTROLEUR:	BOOL;		(*Demande de RAZ epaisseur du contrôleur*)
+	OUT_RESET_CONTROLEUR:		BOOL;		(*Demande de reset du controleur*)
+	OUT_STOP_CONTROLEUR:		BOOL;		(*Demande d'arrêt du contrôleur*)
+
+	STATE_OK:					BOOL;
+	STATUS:						UINT;						(*Etat du grafcet*)
+	STATE_LAYER:				UINT:=1;						(*N° de la couche en cours*)
+	STATE_LAYER_TEXT:			STRING(255);					(*Descriptif de la couche en cours d'exécution*)
+	AUTOR_NEXT_LAYER:			BOOL;
+	STATE_RATE_AGREGATE:		REAL;						(*epaisseur globale*)
+	STATE_THICKNESS_AGREGATE:	REAL;						(*Epaisseur globale*)
+	VAR_MEM_RAZ_THICKNESS:		BOOL;						(*Mémorisation de la variable de remise à 0 de l'épaisseur*)
+	TIMER_RAZ_THICKNESS:		TON;
+	TIMER_RAZ_EPAISSEUR:		TON;
+
+	STATE_END_OF_LAYER:			BOOL;		(*Indique que la couche en cours est terminée*)
+	STATE_EVAP:					BOOL;		(*Indique que l'évaporation est en cours*)
+
+	CONS_MODE:					USINT;	(*Consigne de mode de régulation de la pression*)
+	CONS_PRESSURE:				REAL;	(*Consigne de pression en cas de regulation en pression*)
+	CONS_POSITION:				REAL;	(*Consigne de position en cas de regulation en position*)
+	CONS_HI_PRESSURE:			REAL;	(*Pression limite haute pour stabilisation*)
+	CONS_LOW_PRESSURE:			REAL;	(*Pression limite basse pour stabilisation*)
+	CONS_TIM_PRESSURE:			TIME;	(*Temps pour stabilisation pression*)
+
+END_VAR
+
+VAR_IN_OUT
+	I_MODE_REPRISE:				BOOL;	(*information de mode reprise*)
+
+	CONS_FLOW_GAZ_1:			REAL;	(*Consigne de débit de la mise en gaz*)
+	CONS_FLOW_GAZ_2:			REAL;	(*Consigne de débit de la mise en gaz*)
+
+	(*CONS_POSITION_DOME:		USINT;	(*Consigne de position du dôme*)*)
+END_VAR
+
+VAR
+	TIMER_TIMEOUT:				TON;		(*Timer timemout lecture étape*)
+	TIMER_TIMEOUT_ANT:			TON;		(*Timer timeout lecture étape anticipée*)
+
+	RCP_NEXT_LAYER:				BOOL;
+	FM_ETAPE20:					R_TRIG;
+	FM_ETAPE6:					R_TRIG;
+	FM_ETAPE7:					R_TRIG;
+	FM_ETAPE9:					R_TRIG;
+	FM_ETAPE10:					R_TRIG;
+	FM_ETAPE11:					R_TRIG;
+	FM_ETAPE12:					R_TRIG;
+	FM_ETAPE13:					R_TRIG;
+	FM_ETAPE14:					R_TRIG;
+	FM_COND_MGAZ:				R_TRIG;		(*Condition de mise en gaz *)
+	FD_COND_MGAZ:				F_TRIG;
+
+	VAR_MEM_LAYER_INTERRUPTED:	BOOL;	(*mémoire de dépôt interrompue avant la fin de la couche*)
+	VAR_MEM_COUCHE_TERMINEE:	BOOL;	(*mémoire de couche terminée - utiliser pour le mode reprise*)
+	VAR_MEM_PREP_OPT_TERMINEE:	BOOL;	(*Mémoire de préparation optique terminée*)
+
+	VAR_TPS_PREPA_ANT1:				INT;			(*calcul du temps nécessaire pour préparation des sources anticipées en secondes*)
+	VAR_TPS_PREPA_ANT2:				INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+	VAR_TPS_PREPA_ANT3:				INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+	VAR_TPS_PREPA_ANT4:				INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+
+	VAR_TPS_PREPA_ANT1_2s:			INT;			(*calcul du temps nécessaire pour préparation des sources anticipées en secondes + 2s*)
+	VAR_TPS_PREPA_ANT2_2s:			INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+	VAR_TPS_PREPA_ANT3_2s:			INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+	VAR_TPS_PREPA_ANT4_2s:			INT;			(*calcul du temps nécessaire pour préparation des sources anticipées*)
+
+	VAR_TPS_RESTANT_DEPOT:			INT;			(*temps restant en dépot calculé avec les épaisseurs et vitesses aggrégées, avec le PRM_Epaisseur*)
+	VAR_CALCUL_VITESSE_THEORIQUE:	REAL;		(*vitesse aggrégée théorique*)
+
+	TIMER_Lancement_Ant_S1:			TON;		(*timer de lancement de S1 anticipée*)
+	TIMER_Lancement_Ant_S2:			TON;		(*timer de lancement de S2 anticipée*)
+	TIMER_Lancement_Ant_S3:			TON;		(*timer de lancement de S3 anticipée*)
+	TIMER_Lancement_Ant_S4:			TON;		(*timer de lancement de S4 anticipée*)
+
+	FM_Prepa_Ant_S1:				R_TRIG;		(*Front montant de lancement de source 1 anticipée*)
+	FM_Prepa_Ant_S2:				R_TRIG;		(*Front montant de lancement de source 2 anticipée*)
+	FM_Prepa_Ant_S3:				R_TRIG;		(*Front montant de lancement de source 3 anticipée*)
+	FM_Prepa_Ant_S4:				R_TRIG;		(*Front montant de lancement de source 4 anticipée*)
+
+	VAR_Prepa_S1_Lancee:			BOOL;		(*indicateur de prépa S1 déja lancée*)
+	VAR_Prepa_S2_Lancee:			BOOL;		(*indicateur de prépa S2 deja lancée*)
+	VAR_Prepa_S3_Lancee:			BOOL;		(*indicateur de prépa S3 deja lancée*)
+	VAR_Prepa_S4_Lancee:			BOOL;		(*indicateur de prépa S4 deja lancée*)
+
+	VAR_Util_Gaz:					ARRAY[0..2] OF BOOL;		(*Indicateur des lignes de gaz utilisées*)
+	VAR_Cond_MGaz:					BOOL;
+
+
+	VAR_Cpt_Boucle:					USINT;		(*Compteur de boucle*)
+	VAR_Step_To_Read:				USINT;		(*Indique le numéro de l'étape à lire*)
+	VAR_Loop_In_Process:			BOOL;		(*Variable indiquant qu'une boucle est en cours d'execution*)
+
+	TIMER_Stop_Controller:			TON;		(*timer de demande de stop du controleur de depot*)
+	TIMER_Reset_Controller:			TON;		(*timer de demande de start du controleur de depot*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	DEF_READ_LAYER.IdXML := '0';
+	DEF_READ_LAYER.TagXML := 33;
+
+	DEF_READ_LAYER_ANT.IdXML	:=	'0';
+	DEF_READ_LAYER_ANT.TagXML	:=	33;
+
+	EV_LOAD_LAYER.IdXML := '0';
+	EV_LOAD_LAYER.TagXML :=34;
+	EV_LOAD_LAYER.Groupe := 3;
+
+	EV_NEXT_LAYER.IdXML :='0';
+	EV_NEXT_LAYER.TagXML :=35;
+	EV_NEXT_LAYER.Groupe := 3;
+	
+	EV_THICK_AGREGATE.IdXML := '0';
+	EV_THICK_AGREGATE.TagXML := 43;
+	EV_THICK_AGREGATE.Groupe := 3;
+
+	DEF_RAZ_QZ.IDXML := '14';
+	DEF_RAZ_QZ.TagXML :=5;
+
+	DEF_QF.IDXML := '14';
+	DEF_QF.TagXML :=9;
+
+	DEF_PROG_QZ.IDXML := '14';
+	DEF_PROG_QZ.TagXML :=4;
+
+	DEF_CONTROLLER_STOPPED.IdXML := '14';
+	DEF_CONTROLLER_STOPPED.TagXML := 17;
+
+	EV_RELOAD.IdXML := '7';
+	EV_RELOAD.TagXML := 15;
+	EV_RELOAD.Groupe := 3;
+
+	IdXML :='19';
+	TagXML := 2;
+
+IF  OP_RUN.AR THEN
+	STATE_LAYER_TEXT := '';
+END_IF
+
+(*Reception des ordres*)
+RQ_NEXT_LAYER := FALSE;
+RCP_NEXT_LAYER:= M_NEXT_layer;
+
+
+AUTOR_NEXT_LAYER	 :=	(OP_RUN.Etape.6 OR OP_RUN.Etape.7 OR OP_RUN.Etape.10
+							OR OP_RUN.Etape.11 OR OP_RUN.Etape.12);
+
+(*Evenement de lecture d'une couche*)
+EV_LOAD_LAYER.VAL1 := UINT_TO_STRING(STATE_LAYER);
+EV_LOAD_LAYER.VAL2 := STATE_LAYER_TEXT;
+EV_LOAD_LAYER.CONDITION := OP_RUN.Etape.5 (*AND I_LAYER_LOADING_OK*);
+EV_LOAD_LAYER();
+
+EV_NEXT_LAYER.CONDITION := RCP_NEXT_LAYER AND AUTOR_NEXT_LAYER;
+EV_NEXT_LAYER();
+
+(*Evenement fin de couche*)
+EV_THICK_AGREGATE.VAL1 := LREAL_TO_FMTSTR(REAL_TO_LREAL(STATE_THICKNESS_AGREGATE),3,TRUE);
+EV_THICK_AGREGATE.CONDITION := STATE_END_OF_LAYER;
+EV_THICK_AGREGATE();
+
+
+RUN_PROCESS();
+
+(*Temporisation de time out*)
+TIMER_TIMEOUT	(
+				PT:=T#5s,
+				IN:=OP_RUN.Etape.4 OR OP_RUN.Etape.17
+				);
+
+(*Temporisation de time out de lecture de la couche anticipée*)
+TIMER_TIMEOUT_ANT(
+				PT := T#5s,
+				IN := OP_RUN.Etape.5
+				);
+
+(*Demande de chargement procédé*)
+RQ_READ_LAYER	:= 	OP_run.Etape.4;
+
+
+(*Temporisation de time out de lecture de la couche anticipée*)
+TIMER_Stop_Controller(
+				PT := T#2s,
+				IN := OP_RUN.Etape.2
+				);
+
+
+(*Temporisation de time out de lecture de la couche anticipée*)
+TIMER_Reset_Controller(
+				PT := T#2s,
+				IN := OP_RUN.Etape.3
+				);
+
+
+(*Temporisation de time out de lecture de la couche anticipée*)
+TIMER_RAZ_EPAISSEUR(
+				PT := T#2s,
+				IN := OP_RUN.Etape.11
+				);
+
+(*
+(*Demande de chargement procédé sur le numéro d'étape de la boucle*)
+RQ_READ_NUM_LAYER	:= OP_RUN.Etape.17;
+
+(*Numéro de couche de départ de la boucle*)
+OUT_NUM_LAYER_TO_READ	:= PRM_LOOP_FIRST_LAYER;
+*)
+
+
+(*Demande de lecture de la couche anticipée*)
+RQ_READ_LAYER_ANT	:=	OP_RUN.Etape.5;
+
+
+FM_ETAPE20(CLK:=OP_RUN.Etape.20);
+FM_ETAPE6(CLK:=OP_RUN.Etape.6);
+FM_ETAPE7(CLK:=OP_RUN.Etape.7);
+FM_ETAPE9(CLK:=OP_RUN.Etape.9);
+FM_ETAPE10(CLK:=OP_RUN.Etape.10);
+FM_ETAPE11(CLK:=OP_RUN.Etape.11);
+FM_ETAPE12(CLK:=OP_RUN.Etape.12);
+FM_ETAPE13(CLK:=OP_RUN.Etape.13);
+FM_ETAPE14(CLK:=OP_RUN.Etape.14);
+
+
+IF NOT RQ_READ_LAYER THEN
+	I_LAYER_LOADING_NOK := FALSE;
+	I_LAYER_LOADING_OK:=FALSE;
+	I_NO_MORE_LAYER :=FALSE;
+END_IF
+
+IF NOT RQ_READ_LAYER_ANT THEN
+	I_LAYER_ANT_LOADING_NOK := FALSE;
+	I_LAYER_ANT_LOADING_OK := FALSE;
+	(*dans le cas de la couche anticipée, on ne remet pas le I_no_more_layer_ant à 0 ici*)
+END_IF
+
+(*remise à 0 du I_no_more_layer anticipée en étape 3, c'est à dire lors d'une nouvelle lecture de couche en cours*)
+IF OP_RUN.Etape.4 THEN
+	I_NO_MORE_LAYER_ANT := FALSE;
+END_IF
+
+(*Gestion du I_no_more_layer anticipée, on fait retomber les PRM_Util_sourceX_ant, ce qui inhibe toutes les actions*)
+IF I_NO_MORE_LAYER_ANT THEN
+	PRM_UTIL_SOURCE1_ANT := FALSE;
+	PRM_UTIL_SOURCE2_ANT := FALSE;
+	PRM_UTIL_SOURCE3_ANT := FALSE;
+	PRM_UTIL_SOURCE4_ANT := FALSE;
+END_IF
+
+
+STATE_OK:=OP_RUN.OK;
+
+
+(*Etat du grafcet d'empilement*)
+STATUS	:= 	OP_RUN.STATUS;
+(*Demande marche rotation PS*)
+RQ_ROTATION_PS := FM_ETAPE6.Q AND NOT I_NO_ROTATION_PS;
+(*Demande tilt PS*)
+RQ_TILT_PS := FM_ETAPE7.Q;
+(*Demande d'arrêt rotation PS*)
+RQ_STOP_ROTATION_PS:= (FM_ETAPE6.Q AND I_NO_ROTATION_PS) OR FM_ETAPE14.Q;
+(*Demande d'arrêt tilt PS*)
+RQ_STOP_TILT_PS:=(FM_ETAPE6.Q AND I_MODE_TILT = 2) OR FM_ETAPE14.Q;
+(*Demande marche chauffage*)
+RQ_MARCHE_CHAUFFAGE := FM_ETAPE6.Q  AND (PRM_MODE_CHAUFFAGE = 1) AND CONF_CHAUFFAGE;
+(*Demande arrêt chauffage*)
+RQ_ARRET_CHAUFFAGE := FM_ETAPE6.Q  AND (PRM_MODE_CHAUFFAGE = 0) AND CONF_CHAUFFAGE;
+
+(*Demande de positionnement du dôme à la position souhaitée pendant l'empilement.
+	En fin d'empilement, positionnement du dôme en position haute*)
+RQ_POSITIONNEMENT_Z := FM_ETAPE6.Q OR FM_ETAPE14.Q;
+
+(*Consigne de position du dôme*)
+(*IF RQ_POSITIONNEMENT_Z AND OP_RUN.Etape.14 THEN
+	CONS_POSITION_DOME:= 1;
+ELSIF RQ_POSITIONNEMENT_Z AND NOT OP_RUN.Etape.14 THEN
+	CONS_POSITION_DOME:= PRM_Type_Dome +2;
+END_IF*)
+
+(*Demande marche IAD*)
+RQ_MARCHE_IAD := FM_ETAPE7.Q AND  PRM_OP_UTIL_IAD AND CONF_IAD;
+RQ_ARRET_IAD := (FM_ETAPE7.Q AND  NOT PRM_OP_UTIL_IAD) OR FM_Etape14.Q;
+
+(*Demande ouverture cache IAD *)
+RQ_OUV_CC_Iad := OP_RUN.Etape.12 AND PRM_OP_UTIL_IAD AND CONF_IAD;
+
+(*Demande de chargement des parametres couches/quartz dans le contrôleur de dépôt*)
+RQ_LOAD_PARAM:= OP_RUN.Etape.9;
+
+(*Variable indiquant les lignes de gaz utilisées*)
+VAR_Util_Gaz[1]:= (PRM_FLOW_GAZ1 > 0);
+VAR_Util_Gaz[2]:= (PRM_FLOW_GAZ2 > 0);
+
+(*Gestion présence gaz*)
+(*MARCHE GAZ*)
+IF OP_RUN.Etape.6 AND (PRM_N_SEGMENT_GAZ = 0) 	(*mise en gaz avant prefusion si gaz demandé dès le départ*)
+	OR ( NOT OP_RUN.Etape.0 AND (PRM_N_SEGMENT_GAZ = 0) 		(*mise en gaz sur segments sélectionnés si gaz demandé dès le départ*)
+		AND   (   	(PRM_UTIL_SOURCE1 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S1]) OR
+				(PRM_UTIL_SOURCE2 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S2]) OR
+				(PRM_UTIL_SOURCE3 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S3]) OR
+				(PRM_UTIL_SOURCE4 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S4])	)	)
+	OR ( NOT OP_RUN.Etape.0 AND NOT (PRM_N_SEGMENT_GAZ = 0) 	(*mise en gaz sur segments selectionnés et à partir du segement indiqué*)
+		AND   (   	((I_N_SEGMENT_S1 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE1 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S1]) OR
+				((I_N_SEGMENT_S2 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE2 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S2]) OR
+				((I_N_SEGMENT_S3 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE3 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S3]) OR
+				((I_N_SEGMENT_S4 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE4 AND PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S4])	)	)
+		THEN
+			VAR_Cond_MGaz	:=	TRUE;
+(*ARRET GAZ*)
+ELSIF  ( NOT OP_RUN.Etape.0 AND (PRM_N_SEGMENT_GAZ = 0) 		(*arrêt gaz sur segments sélectionnés si gaz demandé dès le départ*)
+		AND   (   	(PRM_UTIL_SOURCE1 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S1]) OR
+				(PRM_UTIL_SOURCE2 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S2]) OR
+				(PRM_UTIL_SOURCE3 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S3]) OR
+				(PRM_UTIL_SOURCE4 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S4])	)	)
+	OR ( NOT OP_RUN.Etape.0 AND NOT (PRM_N_SEGMENT_GAZ = 0) 	(*arrêt gaz sur segments selectionnés et à partir du segement indiqué*)
+		AND   (   	((I_N_SEGMENT_S1 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE1 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S1]) OR
+				((I_N_SEGMENT_S2 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE2 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S2]) OR
+				((I_N_SEGMENT_S3 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE3 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S3]) OR
+				((I_N_SEGMENT_S4 >= PRM_N_SEGMENT_GAZ) AND PRM_UTIL_SOURCE4 AND NOT PRM_GAZ_PRESSION_SEGMENT[I_N_SEGMENT_S4])	)	)
+	OR OP_RUN.Etape.14		(*fin empilement*)	
+	OR OP_RUN.Etape.1
+		THEN
+			VAR_Cond_MGaz	:=	FALSE;
+
+END_IF
+
+FM_COND_MGAZ.CLK	:=	VAR_Cond_MGaz;
+FM_COND_MGAZ();
+FD_COND_MGAZ.CLK	:=	VAR_Cond_MGaz;
+FD_COND_MGAZ();
+
+(*Ordre de marche gaz*)
+RQ_MARCHE_GAZ[1]  := FM_COND_MGAZ.Q AND VAR_Util_Gaz[1];
+RQ_MARCHE_GAZ[2]  := FM_COND_MGAZ.Q AND VAR_Util_Gaz[2];
+
+(*Demande arrêt des lignes de gaz*)
+RQ_ARRET_GAZ[1] :=(FM_ETAPE6.Q AND NOT VAR_Util_Gaz[1]) OR FD_COND_MGAZ.Q;
+RQ_ARRET_GAZ[2] :=(FM_ETAPE6.Q AND NOT VAR_Util_Gaz[2]) OR FD_COND_MGAZ.Q;
+
+(*Demande marche régulation gaz ligne 1*)
+RQ_MARCHE_REGUL_GAZ[1]:= FM_COND_MGAZ.Q AND (PRM_MODE_PUMPING = 2);
+(*Demande arrêt régulation gaz ligne 1*)
+RQ_ARRET_REGUL_GAZ[1]:= (FM_ETAPE13.Q AND (PRM_MODE_PUMPING = 2)) OR FD_COND_MGAZ.Q;
+
+(*Demande de régulation gaz ligne 2*)
+RQ_MARCHE_REGUL_GAZ[2]:= FM_COND_MGAZ.Q AND (PRM_MODE_PUMPING = 3);
+(*Demande arrêt régulation gaz ligne 2*)
+RQ_ARRET_REGUL_GAZ[2]:= (FM_ETAPE13.Q AND (PRM_MODE_PUMPING = 3)) OR FD_COND_MGAZ.Q;
+
+(*Demande de mise en pompage procédé*)
+RQ_MARCHE_POMPAGE_PROC:= FM_COND_MGAZ.Q AND (PRM_MODE_PUMPING = 0 OR PRM_MODE_PUMPING = 1);
+
+(*Demande de mise en pompage secondaire*)
+RQ_MARCHE_POMPAGE_SEC:=  FD_COND_MGAZ.Q;
+
+(*Gestion des consigne de pompage procédé*)
+IF RQ_MARCHE_POMPAGE_PROC OR RQ_MARCHE_REGUL_GAZ[1] OR RQ_MARCHE_REGUL_GAZ[2] THEN
+	CONS_MODE := PRM_MODE_PUMPING;
+	CONS_PRESSURE := PRM_PR_PUMPING;
+	CONS_POSITION := PRM_POS_PUMPING;
+	CONS_HI_PRESSURE := PRM_PR_HI_PUMPING;
+	CONS_LOW_PRESSURE := PRM_PR_LO_PUMPING;
+	CONS_TIM_PRESSURE :=  REAL_TO_TIME ( PRM_TIM_PR_PUMPING * 1000);
+END_IF
+
+(*Gestion de la consigne pour la ligne de gaz n°1*)
+IF RQ_MARCHE_GAZ[1] THEN
+	CONS_FLOW_GAZ_1 := PRM_FLOW_GAZ1;
+END_IF
+
+(*Gestion de la consigne pour la ligne de gaz n°2*)
+IF RQ_MARCHE_GAZ[2] THEN
+	CONS_FLOW_GAZ_2 := PRM_FLOW_GAZ2;
+END_IF
+
+(*Demande d'arrêt des sources, que si source pas démarrée pour anticipation*)
+RQ_STOP_EVAP_S1 := (FM_ETAPE14.Q AND NOT PRM_UTIL_SOURCE1_ANT) OR (FM_ETAPE10.Q AND NOT PRM_UTIL_SOURCE1);
+RQ_STOP_EVAP_S2 := (FM_ETAPE14.Q AND NOT PRM_UTIL_SOURCE2_ANT) OR (FM_ETAPE10.Q AND NOT PRM_UTIL_SOURCE2);
+RQ_STOP_EVAP_S3 := (FM_ETAPE14.Q AND NOT PRM_UTIL_SOURCE3_ANT) OR (FM_ETAPE10.Q AND NOT PRM_UTIL_SOURCE3);
+RQ_STOP_EVAP_S4 := (FM_ETAPE14.Q AND NOT PRM_UTIL_SOURCE4_ANT) OR (FM_ETAPE10.Q AND NOT PRM_UTIL_SOURCE4);
+
+
+(*Mise à jour du temps de préparation pour les couches anticipées :
+remarque dans le cas de plusieurs sources, elles doivent toutes avoir le même temps de prépa (cf. editeur), mais on prend le max pour sécu*)
+IF PRM_UTIL_SOURCE1_ANT THEN
+	VAR_TPS_PREPA_ANT1 := PRM_TPS_PREPA_SOURCE1;
+	VAR_TPS_PREPA_ANT1_2s := VAR_TPS_PREPA_ANT1 + 5;
+ELSE
+	VAR_TPS_PREPA_ANT1 := 0;
+	VAR_TPS_PREPA_ANT1_2s := 0;
+END_IF
+IF PRM_UTIL_SOURCE2_ANT THEN
+	VAR_TPS_PREPA_ANT2 := PRM_TPS_PREPA_SOURCE2;
+	VAR_TPS_PREPA_ANT2_2s := VAR_TPS_PREPA_ANT2 + 5;
+ELSE
+	VAR_TPS_PREPA_ANT2 := 0;
+	VAR_TPS_PREPA_ANT2_2s := 0;
+END_IF
+IF PRM_UTIL_SOURCE3_ANT THEN
+	VAR_TPS_PREPA_ANT3 := PRM_TPS_PREPA_SOURCE3;
+	VAR_TPS_PREPA_ANT3_2s := VAR_TPS_PREPA_ANT3 + 5;
+ELSE
+	VAR_TPS_PREPA_ANT3 := 0;
+	VAR_TPS_PREPA_ANT3_2s := 0;
+END_IF
+IF PRM_UTIL_SOURCE4_ANT THEN
+	VAR_TPS_PREPA_ANT4 := PRM_TPS_PREPA_SOURCE4;
+	VAR_TPS_PREPA_ANT4_2s := VAR_TPS_PREPA_ANT4 + 5;
+ELSE
+	VAR_TPS_PREPA_ANT4 := 0;
+	VAR_TPS_PREPA_ANT4_2s := 0;
+END_IF
+
+(*
+(*Les nouvelles épaisseurs se trouvent dans le tableau*)
+PRM_EPAISSEUR:= PRM_NEW_EPAISSEUR[STATE_LAYER];
+*)
+
+(*calcul du temps restant : version avec vitesse aggrégée théorique (somme des vitesses ds sources utilisées dans l'étape en cours)*)
+(*calcul vitesse théorique*)
+IF FM_ETAPE12.Q THEN
+	VAR_CALCUL_VITESSE_THEORIQUE := PRM_SOURCE1_RATE * BOOL_TO_INT(PRM_UTIL_SOURCE1) +
+										PRM_SOURCE2_RATE * BOOL_TO_INT(PRM_UTIL_SOURCE2) +
+										PRM_SOURCE3_RATE * BOOL_TO_INT(PRM_UTIL_SOURCE3) +
+										PRM_SOURCE4_RATE * BOOL_TO_INT(PRM_UTIL_SOURCE4);
+ELSIF OP_RUN.Etape.4 THEN
+	VAR_CALCUL_VITESSE_THEORIQUE := 0;
+END_IF
+IF VAR_CALCUL_VITESSE_THEORIQUE <> 0 THEN
+	VAR_TPS_RESTANT_DEPOT := REAL_TO_INT((PRM_EPAISSEUR - I_Global_Thick) / VAR_CALCUL_VITESSE_THEORIQUE);
+END_IF
+
+
+(*temporisation de lissage du bagotage de la vitesse aggrégée si PID pas top, on doit rester inférieur plus de 2s pour lancer la prépa anticipée*)
+TIMER_Lancement_Ant_S1.PT := T#1s;
+TIMER_Lancement_Ant_S1.IN := (VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT1_2s) AND TIMER_RAZ_THICKNESS.Q;
+TIMER_Lancement_Ant_S1();
+
+TIMER_Lancement_Ant_S2.PT := T#1s;
+TIMER_Lancement_Ant_S2.IN := (VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT2_2s) AND TIMER_RAZ_THICKNESS.Q;
+TIMER_Lancement_Ant_S2();
+
+TIMER_Lancement_Ant_S3.PT := T#1s;
+TIMER_Lancement_Ant_S3.IN := (VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT3_2s) AND TIMER_RAZ_THICKNESS.Q;
+TIMER_Lancement_Ant_S3();
+
+TIMER_Lancement_Ant_S4.PT := T#1s;
+TIMER_Lancement_Ant_S4.IN := (VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT4_2s) AND TIMER_RAZ_THICKNESS.Q;
+TIMER_Lancement_Ant_S4();
+
+(*Lancement de la prépa anticipée seulement si pas de Quartz sous le cache source*)
+FM_Prepa_Ant_S1.CLK := 	OP_RUN.Etape.12 AND TIMER_RAZ_THICKNESS.Q AND
+						PRM_UTIL_SOURCE1_ANT AND NOT PRM_CTRL_DELAY_SOURCE1 AND
+						TIMER_Lancement_Ant_S1.Q;
+						(*VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT1_2s;*)
+
+FM_Prepa_Ant_S2.CLK := 	OP_RUN.Etape.12 AND TIMER_RAZ_THICKNESS.Q AND
+						PRM_UTIL_SOURCE2_ANT  AND NOT PRM_CTRL_DELAY_SOURCE2 AND
+						TIMER_Lancement_Ant_S2.Q;
+						(*VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT2_2s;*)
+
+FM_Prepa_Ant_S3.CLK := 	OP_RUN.Etape.12 AND TIMER_RAZ_THICKNESS.Q AND
+						PRM_UTIL_SOURCE3_ANT AND NOT PRM_CTRL_DELAY_SOURCE3 AND
+						TIMER_Lancement_Ant_S3.Q;
+						(*VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT3_2s;*)
+
+FM_Prepa_Ant_S4.CLK := 	OP_RUN.Etape.12 AND TIMER_RAZ_THICKNESS.Q AND
+						PRM_UTIL_SOURCE4_ANT AND NOT PRM_CTRL_DELAY_SOURCE4 AND
+						TIMER_Lancement_Ant_S4.Q;
+						(*VAR_TPS_RESTANT_DEPOT <= VAR_TPS_PREPA_ANT4_2s;*)
+
+FM_Prepa_Ant_S1();
+FM_Prepa_Ant_S2();
+FM_Prepa_Ant_S3();
+FM_Prepa_Ant_S4();
+
+
+(*Demande de préparation : soit étape 8 sur couche classique (mais pas dans le cas ou elle a été anticipée), soit FM de go anticipation
+	(mais que si la source est en étape 0 ou en étape 16, cad arrétée ou cloture finie (sinon le RQ_Evap tombe à l'eau) 
+remarque : dans ce cas le var_prepa_lancée est peut etre redondant 
+
+Pas de demande d'anticipation s'il y a un Quartz d'étalonnage de la vitesse de dépôt sous le cache source*)
+RQ_PREP_S1 := (FM_ETAPE10.Q AND PRM_UTIL_SOURCE1 AND NOT PRM_ANTICIPATION_COUCHE)
+					OR (FM_Prepa_Ant_S1.Q AND NOT  VAR_Prepa_S1_Lancee AND NOT PRM_CTRL_DELAY_SOURCE1
+						AND I_SOURCE1_ARRET );
+
+RQ_PREP_S2 := (FM_ETAPE10.Q AND PRM_UTIL_SOURCE2 AND NOT PRM_ANTICIPATION_COUCHE)
+					OR (FM_Prepa_Ant_S2.Q AND NOT VAR_Prepa_S2_Lancee AND NOT PRM_CTRL_DELAY_SOURCE2
+						AND I_SOURCE2_ARRET);
+
+RQ_PREP_S3 := (FM_ETAPE10.Q AND PRM_UTIL_SOURCE3 AND NOT PRM_ANTICIPATION_COUCHE)
+					OR (FM_Prepa_Ant_S3.Q AND NOT VAR_Prepa_S3_Lancee AND NOT PRM_CTRL_DELAY_SOURCE3
+						AND I_SOURCE3_ARRET);
+
+RQ_PREP_S4 := (FM_ETAPE10.Q AND PRM_UTIL_SOURCE4 AND NOT PRM_ANTICIPATION_COUCHE)
+					OR (FM_Prepa_Ant_S4.Q AND NOT VAR_Prepa_S4_Lancee AND NOT PRM_CTRL_DELAY_SOURCE4
+						AND I_SOURCE4_ARRET);
+
+
+
+(*variable mise à 1 au premier front montant pour éviter de relancer la prépa si bagotage du temps restant de dépot, remis à 0 en 6 cad apres lecture couche suivante*)
+IF FM_Prepa_Ant_S1.Q THEN
+	VAR_Prepa_S1_Lancee := TRUE;
+ELSIF OP_RUN.Etape.6 OR OP_RUN.Etape.0 THEN
+	VAR_Prepa_S1_Lancee := FALSE;
+END_IF
+
+IF FM_Prepa_Ant_S2.Q THEN
+	VAR_Prepa_S2_Lancee := TRUE;
+ELSIF OP_RUN.Etape.6 OR OP_RUN.Etape.0 THEN
+	VAR_Prepa_S2_Lancee := FALSE;
+END_IF
+
+IF FM_Prepa_Ant_S3.Q THEN
+	VAR_Prepa_S3_Lancee := TRUE;
+ELSIF OP_RUN.Etape.6 OR OP_RUN.Etape.0 THEN
+	VAR_Prepa_S3_Lancee := FALSE;
+END_IF
+
+IF FM_Prepa_Ant_S4.Q THEN
+	VAR_Prepa_S4_Lancee := TRUE;
+ELSIF OP_RUN.Etape.6 OR OP_RUN.Etape.0 THEN
+	VAR_Prepa_S4_Lancee := FALSE;
+END_IF
+
+
+(*Lancement évaporation*)
+RQ_EVAP_S1 := OP_RUN.Etape.12 AND PRM_UTIL_SOURCE1;
+RQ_EVAP_S2 := OP_RUN.Etape.12 AND PRM_UTIL_SOURCE2;
+RQ_EVAP_S3 := OP_RUN.Etape.12 AND PRM_UTIL_SOURCE3;
+RQ_EVAP_S4 := OP_RUN.Etape.12 AND PRM_UTIL_SOURCE4;
+
+(*Défaut de lecture d'une étape*)
+DEF_READ_LAYER.VAL1 := UINT_TO_STRING(STATE_LAYER);
+DEF_READ_LAYER.CONDITION := OP_RUN.Etape.20;
+DEF_READ_LAYER();
+
+(*Défaut de lecture d'une étape anticipée*)
+DEF_READ_LAYER_ANT.VAL1 := UINT_TO_STRING(STATE_LAYER + 1);
+DEF_READ_LAYER_ANT.CONDITION := OP_RUN.Etape.21;
+DEF_READ_LAYER_ANT();
+
+(*Défaut time out programmation XTC*)
+DEF_PROG_QZ.CONDITION := OP_RUN.Etape.9;
+DEF_PROG_QZ.DELAY := T#45s;
+DEF_PROG_QZ();
+
+(*Défaut time out raz epaisseur controleur XTC*)
+DEF_RAZ_QZ.CONDITION := OP_RUN.Etape.11;
+DEF_RAZ_QZ.DELAY := T#20s;
+DEF_RAZ_QZ();
+
+(*Défaut de passage en STOP du contrôleur de dépôt pendant l'évaporation*)
+DEF_CONTROLLER_STOPPED.CONDITION := OP_RUN.Etape.12 AND I_CONTROLEUR_PHASE = 'Deposit' AND  I_Controleur_Stopped;
+DEF_CONTROLLER_STOPPED.DELAY:= T#20s;
+DEF_CONTROLLER_STOPPED();
+
+(*
+(*Défaut de panne quartz générale*)
+DEF_QF.CONDITION := I_PC_QUARTZ.STATE_Qz_general_failure AND NOT OP_RUN.Etape.0;
+DEF_QF.VAL1 := USINT_TO_STRING(I_PC_QUARTZ.STATE_QF_code);
+DEF_QF;
+*)
+
+(*reset des ordres*)
+IF RCP_NEXT_LAYER AND M_NEXT_LAYER THEN
+	M_NEXT_LAYER:=FALSE;
+END_IF;
+
+
+STATE_RATE_AGREGATE := I_Global_Rate;			(*vitesse globale renvoyé par le contrôleur*)
+STATE_THICKNESS_AGREGATE  := I_Global_Thick;	(*epaisseur globale renvoyé par le contrôleur*)
+
+STATE_END_OF_LAYER := OP_RUN.Etape.13;
+STATE_EVAP := OP_RUN.Etape.12;
+
+IF OP_RUN.Etape.17 THEN
+	VAR_Loop_In_Process:= TRUE;
+ELSIF OP_RUN.Etape.4 THEN
+	VAR_Loop_In_Process:= FALSE;
+END_IF
+
+(*Sorties contrôleur*)
+OUT_RAZ_THICK_CONTROLEUR:= OP_RUN.Etape.11 AND (NOT I_MODE_REPRISE OR NOT VAR_MEM_LAYER_INTERRUPTED) AND NOT VAR_MEM_COUCHE_TERMINEE;
+OUT_RESET_CONTROLEUR:= OP_RUN.Etape.3;
+OUT_STOP_CONTROLEUR:= OP_RUN.Etape.2 OR OP_RUN.Etape.13;
+
+
+IF  OP_RUN.Etape.10 AND (NOT I_MODE_REPRISE OR NOT VAR_MEM_LAYER_INTERRUPTED) THEN
+	VAR_MEM_RAZ_THICKNESS := FALSE;
+END_IF;
+TIMER_RAZ_THICKNESS.PT := T#3s;
+TIMER_RAZ_THICKNESS.IN := VAR_MEM_RAZ_THICKNESS;
+TIMER_RAZ_THICKNESS();]]></ST>
+    </Implementation>
+    <Action Name="RUN_PROCESS" Id="{f8919a84-15bc-4d5d-b0f9-491a280a5994}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET EXECUTION PROCEDE*)
+(* initialisation du grafcet*)
+
+OP_RUN(
+	N_STEP_OP_OK:=15,
+	N_STEP_OP_NOK:= 0);
+
+(* initialisation du grafcet*)
+IF 		OP_RUN.Etape = 0 THEN
+				OP_RUN.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF  NOT I_ON THEN
+				OP_Run.Etape:= 0;			(*RAZ grafcet*)
+				OP_Run.Etape.0:=TRUE;
+(*Repositionnement sur demande fin de couche*)
+ELSIF (OP_RUN.Etape.6 OR OP_RUN.Etape.7 OR OP_RUN.Etape.9 OR OP_RUN.Etape.10 OR OP_RUN.Etape.11 OR OP_RUN.Etape.12) AND
+		(RCP_NEXT_LAYER)  THEN
+				(*si evaporation en cours sur les sources*)
+				IF  (OP_RUN.Etape.10 OR OP_RUN.Etape.11 OR OP_RUN.Etape.12) THEN
+					RQ_NEXT_LAYER := TRUE; 	(*demande de fin de couche au bloc de gestion des sources*)
+				END_IF
+				I_MODE_REPRISE := FALSE;
+				VAR_MEM_COUCHE_TERMINEE := TRUE;
+				(*VAR_Cpt_Boucle:=1;*)	(*RAZ du compteur de boucle*)
+				OP_RUN.Etape := 0;
+				OP_RUN.Etape.13 := TRUE;
+(*étape 0-1 attente ordre execution de l'empilement*)
+ELSIF OP_RUN.etape.0 AND I_ON THEN
+				OP_RUN.Etape.1 	:=TRUE;
+				OP_RUN.Etape.0 	:=FALSE;
+(*étape 1-2 *)
+ELSIF	OP_RUN.Etape.1 AND NOT I_MODE_REPRISE THEN
+				VAR_MEM_LAYER_INTERRUPTED  := FALSE;
+				VAR_MEM_COUCHE_TERMINEE := FALSE;
+				VAR_MEM_PREP_OPT_TERMINEE := FALSE;
+				VAR_Cpt_Boucle:= 1;
+				STATE_LAYER:= 1;
+				OP_RUN.Etape.2:=TRUE;
+				OP_RUN.Etape.1:=FALSE;
+(*étape 1-2*)
+ELSIF OP_RUN.Etape.1 AND
+				(NOT VAR_MEM_LAYER_INTERRUPTED AND I_MODE_REPRISE)
+				THEN (*STOP et RESET si mode reprise et pas couche interrompue*)
+				OP_RUN.Etape.2:= TRUE;
+				OP_RUN.Etape.1:= FALSE;
+(*étape 1-4 *)
+ELSIF	OP_RUN.Etape.1 AND
+				(VAR_MEM_LAYER_INTERRUPTED  AND I_MODE_REPRISE)
+				THEN (*Pas de STOP ni de RESET si mode reprise et couche interrompue*)
+				OP_RUN.Etape.4:=TRUE;
+				OP_RUN.Etape.1:=FALSE;
+
+(*etape 2-3*)
+ELSIF OP_RUN.Etape.2  AND TIMER_Stop_Controller.Q(*AND I_ACTION_CONTROLEUR_OK*) THEN
+				OP_RUN.Etape.3:=TRUE;
+				OP_RUN.Etape.2:=FALSE;
+
+(*etape 3-4*)
+ELSIF OP_RUN.Etape.3
+				AND TIMER_Reset_Controller.Q (*AND I_ACTION_CONTROLEUR_OK*) AND I_CONTROLEUR_PHASE = 'Ready' THEN		(*IC6 à l'état READY si la RAZ empilement à été effectué *)
+				OP_RUN.Etape.4:=TRUE;
+				OP_RUN.Etape.3	:=FALSE;
+
+(*etape 4-20*)
+ELSIF OP_RUN.Etape.4 AND
+				(TIMER_TIMEOUT.Q OR I_LAYER_LOADING_NOK) THEN
+				OP_RUN.Etape.20:=TRUE;
+				OP_RUN.Etape.4	:=FALSE;
+
+(*etape 4-5*)
+ELSIF OP_RUN.Etape.4 AND I_LAYER_LOADING_OK THEN
+				OP_RUN.Etape.5		:=TRUE;
+				OP_RUN.Etape.4		:=FALSE;
+
+(*etape 5-21*)
+ELSIF OP_RUN.Etape.5 AND
+				(TIMER_TIMEOUT_ANT.Q OR I_LAYER_ANT_LOADING_NOK) THEN
+				OP_RUN.Etape.21 := TRUE;
+				OP_RUN.Etape.5 := FALSE;
+
+(*etape 5-6*)
+ELSIF OP_RUN.Etape.5 AND (I_LAYER_ANT_LOADING_OK OR I_NO_MORE_LAYER_ANT) THEN	(*Couche anticipée chargé ou pas de couche anticipée*)
+				OP_RUN.Etape.6 := TRUE;
+				OP_RUN.Etape.5 := FALSE;
+
+(*etape 6-7*)
+ELSIF OP_RUN.Etape.6 AND
+				((I_ROTATION_PS_OK AND NOT I_NO_ROTATION_PS) OR (I_STOP_ROT_PS_OK AND I_NO_ROTATION_PS))
+				AND ((I_STOP_TILT_PS_OK AND I_MODE_TILT = 2) OR (I_MODE_TILT = 1))
+				AND I_DOME_IN_POSITION
+				AND (
+				(I_MARCHE_CHAUFFAGE_OK AND (PRM_MODE_CHAUFFAGE = 1)
+						AND (I_STAB_CHAUFFAGE_OK OR NOT PRM_WAIT_STAB_TEMP)
+				 )
+				OR
+				(I_ARRET_CHAUFFAGE_OK AND (PRM_MODE_CHAUFFAGE = 0))
+				OR (PRM_MODE_CHAUFFAGE = 2)
+				)
+				AND(( I_ARRET_GAZ1_OK OR VAR_Util_Gaz[1]) AND (I_ARRET_GAZ2_OK OR VAR_Util_Gaz[2]))
+				THEN
+				OP_RUN.Etape.7:=TRUE;
+				OP_RUN.Etape.6:= FALSE;
+
+(*etape 7-9*)
+ELSIF OP_RUN.Etape.7 AND (
+				(I_MARCHE_IAD_OK AND PRM_OP_UTIL_IAD) OR
+				(I_ARRET_IAD_OK AND NOT PRM_OP_UTIL_IAD) OR NOT CONF_IAD
+				)
+				AND I_TILT_PS_OK
+				AND NOT I_MODE_REPRISE
+				THEN
+				OP_RUN.Etape.9:=TRUE;
+				OP_RUN.Etape.7:=FALSE;
+
+(*etape 7-10 - On ne recharge pas les paramètres dans l'XTC en cas de reprise*)
+ELSIF OP_RUN.Etape.7 AND (
+				(I_MARCHE_IAD_OK AND PRM_OP_UTIL_IAD) OR
+				(I_ARRET_IAD_OK AND NOT PRM_OP_UTIL_IAD) OR NOT CONF_IAD
+				)
+				AND I_TILT_PS_OK
+				AND I_MODE_REPRISE
+				THEN
+				OP_RUN.Etape.10:=TRUE;
+				OP_RUN.Etape.7:=FALSE;
+
+(*Etape 9-10*)
+ELSIF OP_RUN.Etape.9 AND I_PROG_CONTROLEUR_OK THEN		(*Programmation contrôleur ok*)
+				OP_RUN.Etape.10:=TRUE;
+				OP_RUN.Etape.9:=FALSE;
+
+(*Etape 10-11*)
+ELSIF OP_RUN.Etape.10
+	    AND (I_PREP_SOURCE1_OK OR (NOT PRM_UTIL_SOURCE1 AND I_STOP_EVAP1_OK))
+	    AND (I_PREP_SOURCE2_OK OR (NOT PRM_UTIL_SOURCE2 AND I_STOP_EVAP2_OK))
+	    AND (I_PREP_SOURCE3_OK OR (NOT PRM_UTIL_SOURCE3 AND I_STOP_EVAP3_OK))
+	    AND (I_PREP_SOURCE4_OK OR (NOT PRM_UTIL_SOURCE4 AND I_STOP_EVAP4_OK))
+	THEN
+				OP_RUN.Etape.11:=TRUE;
+				OP_RUN.Etape.10:=FALSE;
+
+(*Demande RAZ épaisseur si pas de mode reprise*)
+(*Etape 11-12*)
+ELSIF OP_RUN.Etape.11  AND
+				(*On vérifie que l'épaisseur à bien été remis à 0*)
+				((I_Global_Thick <= 0.1) OR
+				(VAR_MEM_LAYER_INTERRUPTED  AND I_MODE_REPRISE) OR
+				(VAR_MEM_COUCHE_TERMINEE AND I_MODE_REPRISE)
+				)
+				AND TIMER_RAZ_EPAISSEUR.Q
+				THEN
+				(*on déclenche la temporisation aprés RAZ épaisseur*)
+				IF (I_Global_Thick<= 0.1) THEN
+					VAR_MEM_RAZ_THICKNESS := TRUE;
+				END_IF
+				VAR_MEM_LAYER_INTERRUPTED := TRUE;
+				OP_RUN.Etape.12:=TRUE;
+				OP_RUN.Etape.11:=FALSE;
+
+(*Etape 12-13 épaisseur atteinte et tempo de validation de remise à 0 de l'épaisseur*)
+ELSIF OP_RUN.Etape.12  AND
+			((I_END_DEPOT OR VAR_MEM_COUCHE_TERMINEE) AND TIMER_RAZ_THICKNESS.Q) THEN
+				I_MODE_REPRISE := FALSE;
+				VAR_MEM_LAYER_INTERRUPTED := FALSE;
+				VAR_MEM_COUCHE_TERMINEE := TRUE;
+				OP_RUN.Etape.13:=TRUE;
+				OP_RUN.Etape.12:=FALSE;
+
+(*Cloture des sources*)
+(*Etape 13-16*)
+ELSIF OP_RUN.Etape.13
+	    AND (I_CLOT_SOURCE1_OK OR NOT PRM_UTIL_SOURCE1
+				OR PRM_UTIL_SOURCE1_ANT OR PRM_UTIL_SOURCE2_ANT OR PRM_UTIL_SOURCE3_ANT OR PRM_UTIL_SOURCE4_ANT)
+	    AND (I_CLOT_SOURCE2_OK OR NOT PRM_UTIL_SOURCE2
+				OR PRM_UTIL_SOURCE1_ANT OR PRM_UTIL_SOURCE2_ANT OR PRM_UTIL_SOURCE3_ANT OR PRM_UTIL_SOURCE4_ANT)
+	    AND (I_CLOT_SOURCE3_OK OR NOT PRM_UTIL_SOURCE3
+				OR PRM_UTIL_SOURCE1_ANT OR PRM_UTIL_SOURCE2_ANT OR PRM_UTIL_SOURCE3_ANT OR PRM_UTIL_SOURCE4_ANT)
+	    AND (I_CLOT_SOURCE4_OK OR NOT PRM_UTIL_SOURCE4
+				OR PRM_UTIL_SOURCE1_ANT OR PRM_UTIL_SOURCE2_ANT OR PRM_UTIL_SOURCE3_ANT OR PRM_UTIL_SOURCE4_ANT)
+	    AND (((I_ARRET_REGUL_GAZ_OK[1] AND I_MARCHE_POMPAGE_SEC_OK)  OR NOT (PRM_MODE_PUMPING = 2)) OR ((I_ARRET_REGUL_GAZ_OK[2] AND I_MARCHE_POMPAGE_SEC_OK)  OR NOT (PRM_MODE_PUMPING = 3)))
+		THEN
+				STATE_LAYER := STATE_LAYER +1;
+				(*RAZ des flags*)
+				VAR_MEM_LAYER_INTERRUPTED := FALSE;
+				VAR_MEM_COUCHE_TERMINEE := FALSE;
+				OP_RUN.Etape.16:=TRUE;
+				OP_RUN.Etape.13:=FALSE;
+
+(*Boucle à effectuer*)
+(*Etape 16-17*)
+ELSIF OP_RUN.Etape.16
+		AND (PRM_LOOP AND ((STATE_LAYER = PRM_LOOP_LAST_LAYER +1) AND (VAR_Cpt_Boucle < PRM_NB_LOOP)))
+			THEN
+				STATE_LAYER := PRM_LOOP_FIRST_LAYER;
+				VAR_Cpt_Boucle:= VAR_Cpt_Boucle + 1;
+				OP_RUN.Etape.17:= TRUE;
+				OP_RUN.Etape.16:= FALSE;
+
+(*Pas de boucle à effectuer ou nombre de boucle OK*)
+(*Etape 16-2*)
+ELSIF OP_RUN.Etape.16
+		AND ( NOT PRM_LOOP OR NOT (VAR_Cpt_Boucle > PRM_NB_LOOP))  THEN
+				OP_RUN.Etape.2	:= TRUE;
+				OP_RUN.Etape.16	:= FALSE;
+(*
+(*Chargement du numéro de couche de départ*)
+(*Etape 17-6*)
+ELSIF OP_RUN.Etape.17
+		AND I_LAYER_LOADING_OK THEN
+				OP_RUN.Etape.6:= TRUE;
+				OP_RUN.Etape.17:= FALSE;
+*)
+(*
+(*Etape 17-20*)
+ELSIF OP_RUN.Etape.17 AND
+		(TIMER_TIMEOUT.Q OR I_LAYER_LOADING_NOK) THEN
+				OP_RUN.Etape.20:= TRUE;
+				OP_RUN.Etape.17:= FALSE;
+*)
+
+(*Etape 17-2*)
+ELSIF OP_RUN.Etape.17 THEN
+				OP_RUN.Etape.2:=TRUE;
+				OP_RUN.Etape.17:=FALSE;
+(*Etape 4-14*)
+ELSIF OP_RUN.Etape.4 AND  I_NO_MORE_LAYER THEN
+				OP_RUN.Etape.14:=TRUE;
+				OP_RUN.Etape.4:=FALSE;
+
+(*Etape 14-15*)
+ELSIF OP_RUN.Etape.14 AND  I_STOP_EVAP1_OK AND I_STOP_EVAP2_OK AND I_STOP_EVAP3_OK
+		AND I_DOME_IN_POSITION
+		AND I_STOP_ROT_PS_OK
+		AND I_STOP_TILT_PS_OK
+		AND I_ARRET_REGUL_GAZ_OK[1]
+		AND I_ARRET_REGUL_GAZ_OK[2]
+		AND I_MARCHE_POMPAGE_SEC_OK
+		AND I_STOP_EVAP4_OK  AND I_ARRET_GAZ1_OK AND I_ARRET_GAZ2_OK
+		AND (I_ARRET_IAD_OK OR NOT CONF_IAD) THEN
+				OP_RUN.Etape.15:=TRUE;
+				OP_RUN.Etape.14:=FALSE;
+END_IF
+
+OP_RUN.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_STEP_EMPILEMENT">
+      <LineId Id="375" Count="12" />
+      <LineId Id="1237" Count="3" />
+      <LineId Id="388" Count="39" />
+      <LineId Id="1618" Count="0" />
+      <LineId Id="1617" Count="0" />
+      <LineId Id="1619" Count="0" />
+      <LineId Id="1621" Count="0" />
+      <LineId Id="1623" Count="0" />
+      <LineId Id="428" Count="159" />
+      <LineId Id="2000" Count="0" />
+      <LineId Id="588" Count="272" />
+    </LineIds>
+    <LineIds Name="BLOCK_STEP_EMPILEMENT.RUN_PROCESS">
+      <LineId Id="0" Count="242" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

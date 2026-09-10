@@ -1,0 +1,146 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_LIGNE_REF" Id="{0813ebf4-bd6c-45ad-929e-9f5c46f38941}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_LIGNE_REF
+
+(* Fonction de gestion d'une ligne d'eau simple (Vanne avec ou sans débitmètre à seuil*)
+
+(****************historique des versions*****************************)
+(* Version 1-0 - SP - VERSION INITIALE - 6844*)
+(* Version 1-1 - AB - Compatible eau chaude / eau froide - 6970*)
+(*Version 2-0 SP - ajout des paramètres de définition d'objet - SP - 7326 BA8 *)
+(*************************************************************************)
+VAR_INPUT
+
+	RESET:				BOOL;
+	MANUAL:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)
+	IN_DExT:			BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*débitmètre d'eau*)
+
+	CO_On:				BOOL;													(*commande de marche*)
+
+	I_Cond_need_Ref:			BOOL;													(*condition qui necessite le refroidissement*)
+	I_inhibe_surv_ref:			BOOL;													(*Condition d'inhibition de la surveillance du débit*)
+	I_Cond_ref_Ok:				BOOL;													(*Condition de validation du bon refroidissment (Temp, ...) *)
+
+	VEx:						BLOCK_ACTUATOR2;										(*vanne d'eau simple*)
+
+	DEF_Ref:				PRCDEF;												(*défaut de refroidissement*)
+	DEF_Dex:				PRCDEF;												(*défaut de fonctionnement du débitmètre*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_NO_DexT:			BOOL;													(*option pas de débitmètre*)
+	CONF_TIM_OFF:			TIME;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*temps entre la perte de la condition absolue de refroidissement
+																					et la fermeture de la vanne d'eau*)
+	CONF_No_Def_Dex:		BOOL;													(*pas de surveillance du défaut de fermeture de la vanne*)
+
+	CONF_Eau_chaude:		BOOL;			(*ligne d'eau raccordée à un circuit eau chaude/froide*)
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : assemblage*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+	MNEMO_Dex:		STRING;			(*MNEMO du débitmètre*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Ok:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*refroidissement ok*)
+	STATE_Ar:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*refroidissement à l'arrêt*)
+	STATE_Nok:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*refroidissement à l'arrêt*)
+	STATE_DexT:				BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)		(*seuil débitmètre*)
+END_VAR
+
+VAR
+	TIMER_OFF:				TON;
+	VAR_Etape:				USINT;												(*Etape du grafcet de gestion de la servitudes*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Def_Ref.IdXML		:=	'8';
+Def_Ref.TagXML		:=	1;
+
+DEF_Dex.IdXML		:=	'8';
+DEF_Dex.TagXML		:=	2;
+
+VEx.IdParent				:=	MNEMO;
+VEx.IdXML					:=	'1';
+VEx.TagXML					:=	1;
+VEx.DEF_Off_auto.IdXML		:=	'3';
+VEx.DEF_Off_auto.TagXML		:=	11;
+VEx.DEF_Off_Imposs.IdXML	:=	'3';
+VEx.DEF_Off_Imposs.TagXML	:=	9;
+VEx.DEF_On_Imposs.IdXML		:=	'3';
+VEx.DEF_On_Imposs.TagXML	:=	6;
+
+
+(* initialisation du grafcet*)
+IF 		VAR_etape = 0
+		THEN
+				VAR_etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET
+		THEN
+				VAR_etape := 0;				(*RAZ grafcet*)
+				VAR_etape.0:= TRUE;
+(*étape 0-1*)
+ELSIF 	VAR_etape.0
+		AND CO_On
+		THEN
+				VAR_etape.1:= TRUE;
+				VAR_etape.0:= FALSE;
+(*étape 1-0*)
+ELSIF 	VAR_etape.1
+		AND NOT CO_on AND TIMER_OFF.Q
+		THEN
+				VAR_etape.0:= TRUE;
+				VAR_etape.1:= FALSE;
+END_IF;
+
+(*Traitement en sortie*)
+TIMER_OFF.PT	:=	CONF_TIM_OFF;
+TIMER_OFF.IN	:=	VAR_Etape.1 AND NOT  I_Cond_need_Ref;
+TIMER_OFF();
+
+(*bit d'état*)
+IF		((VAR_Etape.1 AND (IN_DExT OR CONF_NO_DExT) AND NOT MANUAL AND VEx.OUT_On)
+		OR (MANUAL AND (IN_DExT OR CONF_NO_DExT)  AND VEx.OUT_On)) AND I_Cond_ref_Ok THEN
+	STATE_Ok	:=	TRUE;
+ELSIF	(NOT VAR_Etape.1AND NOT MANUAL)
+		OR DEF_Ref.DEF
+		OR (MANUAL AND NOT IN_DExT AND NOT CONF_NO_DExT AND VEx.OUT_On)
+		OR NOT VEx.OUT_On
+		OR NOT I_Cond_ref_Ok THEN
+	STATE_Ok	:=	FALSE;
+END_IF
+STATE_Ar		:=	(VAR_Etape.0 AND NOT MANUAL) OR (MANUAL AND NOT VEx.OUT_ON) OR RESET;
+STATE_NOk		:=	DEF_Dex.DEF OR DEF_Ref.DEF;
+STATE_DexT		:=	(IN_DExT OR CONF_NO_DexT);
+
+(*Pilotage de la vanne*)
+VEx(
+	RESET:=				RESET ,
+	MANUAL:=				MANUAL ,
+	CO_On:=					VAR_Etape.1,
+	CONF_EN_On:= 			1,
+	CONF_No_Safety_Auto:=	0,
+	CONF_Tim_Valid_On:=		T#200ms,
+	CONF_Tim_Valid_Off:= 	T#200ms);
+
+
+(*Défaut de refroidissement*)
+DEF_Ref.CONDITION		:=	VEx.OUT_On AND NOT IN_DExt AND NOT CONF_NO_DexT AND NOT RESET
+							AND NOT I_Inhibe_Surv_Ref;
+DEF_Ref();
+
+(*Défaut débitmètre ou fermeture vanne*)
+DEF_DEx.CONDITION		:=	NOT VEx.OUT_On AND IN_DExT AND NOT CONF_No_Def_Dex AND NOT RESET AND NOT CONF_NO_DexT;
+DEF_DEx.DELAY			:= 	T#60s;
+DEF_DEx();]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_LIGNE_REF">
+      <LineId Id="56" Count="79" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_USER_ACK" Id="{4f886420-3406-4d21-8dcd-5aea4b650c89}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_USER_ACK
+VAR_INPUT
+	PRM_TEXT:		STRING(255);
+	I_ON:			BOOL;
+	M_GOON:		BOOL;
+END_VAR
+VAR_OUTPUT
+	STATE_EC:	BOOL;
+	STATE_OK:		BOOL;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF  I_ON AND NOT STATE_OK THEN
+	STATE_EC := TRUE;
+END_IF;
+IF NOT I_ON OR STATE_OK THEN
+	STATE_EC:=FALSE;
+END_IF
+
+IF I_ON AND M_GOON THEN
+	STATE_OK:=TRUE;
+ELSIF NOT I_ON THEN
+	STATE_OK:=FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_USER_ACK">
+      <LineId Id="13" Count="11" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

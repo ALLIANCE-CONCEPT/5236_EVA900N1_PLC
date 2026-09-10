@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_G7" Id="{20ef6149-6478-4271-be84-bc4d7a91c0f7}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_G7
+
+(* Fonction de gestion d'un G7 standard*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - ?? - VERSION INIITIALE - 15/02/2010*)
+(* Verstion 1.1 - SP - Rationnalisation du bloc *)
+(*************************************************************************)
+
+
+VAR_INPUT
+	N_STEP_OP_OK:				UINT (0..31);				(*n° d'étape correspondant à l'état OPERATION OK - 0 = inhibé*)
+	N_STEP_OP_NOK:				UINT (0..31);				(*n° d'étape correspondant à l'état OPERATION NOK - 0 = inhibé*)
+	OK:							BOOL;					(*code d'état OK de l'opération*)
+	EC:							BOOL;					(*code d'état EN COURS de l'opération*)
+	AR:							BOOL;					(*code d'état de l'opération à l'ARRET*)
+	NOK:						BOOL;					(*code d'état de l'opération Non OK*)
+	Etape:						UDINT;					(*étape du grafcet*)
+END_VAR
+
+VAR_OUTPUT
+	STATUS:						UINT;	(* ~ (OPC : 1 : available for OPC-clients) *)				(*code d'état de l'opération*)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[RETURN;]]></ST>
+    </Implementation>
+    <Action Name="POST" Id="{9a30b6f9-361c-45f2-9fb1-c0a87c7b4336}">
+      <Implementation>
+        <ST><![CDATA[(*renvoi du code d'état de l'opération*)
+STATUS 	:= 		LREAL_TO_UINT(LN(UDINT_TO_REAL(etape)) / LN(2));
+
+(*drapeau d'état de la fonction*)
+OK		:=		(ETAPE=EXPT(2,N_STEP_OP_OK)) AND (N_STEP_OP_OK>0);
+AR		:=		ETAPE.0;
+EC 		:= 		NOT OK AND NOT AR;
+NOK		:=		(ETAPE=EXPT(2,N_STEP_OP_NOK)) AND (N_STEP_OP_NOK>0);]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_G7">
+      <LineId Id="25" Count="0" />
+    </LineIds>
+    <LineIds Name="BLOCK_G7.POST">
+      <LineId Id="0" Count="7" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

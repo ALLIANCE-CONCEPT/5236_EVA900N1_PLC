@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Config_IAD" Id="{73e3e62e-ea9d-4ab8-bc8c-0eac0882a323}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Config IAD"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Configuration IAD</v>
+                <v>IAD Configuration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Seuil ala"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil d'alarme</v>
+                <v>Alarm threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Temps av ala"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps avant alarme</v>
+                <v>Delay before alarm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Seuil def"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de défaut</v>
+                <v>Default threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Temps av def"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps avant défaut</v>
+                <v>Delay before fault</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Tension anode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Tension d'anode</v>
+                <v>Anode voltage</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Courant anode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Courant d'anode</v>
+                <v>Anode current</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Courant neut"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Courant neutraliseur</v>
+                <v>Neutralization current</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{f4553d88-c8e5-4260-b2ee-1c51ba2f8595}</v>
+          <v n="GuidReInit">{d6ee012d-a84a-42b9-9de9-3e898cc5469b}</v>
+          <v n="GuidExitX">{63524109-9ab6-4bbe-92e9-a92bacb24c95}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

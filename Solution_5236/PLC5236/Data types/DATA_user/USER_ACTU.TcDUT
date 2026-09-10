@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <DUT Name="USER_ACTU" Id="{51292674-ef8e-40b7-95cc-30a2b73a93dd}">
+    <Declaration><![CDATA[TYPE USER_ACTU :
+STRUCT
+	LOGIN:					STRING[30];
+	PASS:					STRING[30];
+	NOM:					STRING[30];
+	PRENOM:				STRING[30];
+	GROUPE:				STRING[30];
+	PROGRAMMATION:		BOOL;			(*Edition de procédé*)
+	MAINTENANCE:			BOOL;			(*Passage en mode maintenance, consignation, journal des évènements*)
+	SUPERVISEUR:			BOOL;
+	PRODUCTION:			BOOL;			(*Passage en production, arrêt production, interruption/reprise procédé, arrêt procédé, pause procédé*)
+	CONF_MACHINE:			BOOL;			(*Configuration machine hors motorisation transfert*)
+	FONCTION_SA:			BOOL;			(*Fonctions avancées hors production*)
+	CONF_TRF:				BOOL;			(*Configuration machine spécifique motorisation transfert*)
+	MODIF_ENLIGNE:			BOOL;			(*Rechargement, passage étape suivante, modification consignes sa en production*)
+	ARCHIVE_EV:			BOOL;			(*Gestion du journal des évènements, TR'AC*)
+	DECONSIGNATION:		BOOL;			(*Déconsignation module*)
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

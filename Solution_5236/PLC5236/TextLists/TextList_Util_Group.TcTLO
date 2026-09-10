@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Util_Group" Id="{dc107d42-fa29-4400-8e39-aa81e20d6b3a}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Liste des groupes"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Liste des groupes</v>
+                <v>Group list</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Edition procédés"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Edition procédés</v>
+                <v>Process edition</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Maintenance"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Maintenance</v>
+                <v>Maintenance</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Administrateur"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Administrateur</v>
+                <v>Administrator</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Production"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Production</v>
+                <v>Production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Configuration"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Configuration</v>
+                <v>Settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Fonctions avancées"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fonctions avancées</v>
+                <v>Advanced functions</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Modif groupe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Modification du groupe</v>
+                <v>Group modification</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Creation groupe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Création d'un groupe</v>
+                <v>Group creation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{28e638c4-4223-4ffe-8493-9c30a36d2e47}</v>
+          <v n="GuidReInit">{c66ce943-c759-4af6-be8f-2b0829a0ac4d}</v>
+          <v n="GuidExitX">{2b557d8d-8d2e-469f-9cbe-450b33afb7aa}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

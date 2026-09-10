@@ -1,0 +1,150 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CPT_USURE" Id="{95e118b4-2c71-48b9-895c-08a4f42d77ca}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CPT_USURE
+
+VAR_INPUT
+	I_Machine_prod:				BOOL;				(*Indicateur de machine en process*)
+	I_PRE_EVAP_ON:				BOOL;				(*Indicateur début pré-évaporation*)
+	I_EVAP_OFF:					BOOL;				(*Indicateur de fin d'évaporation IDLE*)
+	I_EVAP_ON:					BOOL;				(*Indicateur de début d'évaporation*)
+	I_LAYER_LOAD_OK:			BOOL;				(*Indicateur chargement couche ok*)
+	COUNTER_Evap_Time:		BLOCK_CPT_TEMPS;	(*Compteur temps évaporation*)
+END_VAR
+
+VAR
+	O_Rapport:					BOOL;		(*demande d'édition du rapport de consommation, c'est l'outil externe qui la fait retomber*)
+
+	FM_Prod:					R_TRIG;		(*Front montant de debut de prod*)
+	FM_Layer_Load_Ok:			R_TRIG;		(*Front montant de chargement couche ok*)
+	FM_Layer:					R_TRIG;		(*Front montant début évaporation*)
+
+	FD_O_Rapport:				F_TRIG;		(*Front descendant de demande d'édition du rapport*)
+	FD_Layer:					F_TRIG;		(*Front descendant de fin de couche*)
+	FD_Prod:					F_TRIG;		(*Front descendant de fin de prod*)
+
+	VAR_Log_Needed:			BOOL;		(*Indique si un fichier log doit être crée*)
+	VAR_Layer_Done:			BOOL;		(*Indique si la couche a été effectué*)
+
+	pt_Compteur:					POINTER TO UDINT;
+
+
+END_VAR
+
+VAR_OUTPUT
+	(*Données du rapport*)
+	STATE_User_Login:			STRING[30];	(*Login user ayant lancé la prod*)
+	STATE_User_Name:			STRING[30];	(*Nom user ayant lancé la prod*)
+	STATE_User_First:			STRING[30];	(*Prénom user ayant lancé la prod*)
+
+	STATE_Process_Name:		STRING;		(*Nom du procédé lancé*)
+	STATE_Date_Deb:			DT;			(*Debut du process*)
+
+	STATE_Config:				STRING;		(*Configuration utilisé*)
+	STATE_Crucible:				USINT;		(*Numéro du creuset utilisé*)
+	STATE_Material:				STRING;		(*Nom du matériau utilisé*)
+
+	STATE_THICK_Consigne:		REAL;		(*Epaisseur saisie par l'utilisateur au début de la recette*)
+	STATE_THICK_Obtenue:		REAL;		(*Epaisseur obtenue en fin de couche ou sur arrêt procédé*)
+
+	STATE_Date_Deb_Evap:		DT;			(*Début d'évaporation*)
+	STATE_Date_Fin_Evap:		DT;			(*Fin évaporation*)
+	STATE_Temps_Depot:			INT;		(*Temps du dépôt*)
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Gestion du compteur de temps d'évaporation*)
+COUNTER_Evap_Time(I_On := I_EVAP_ON);
+
+pt_Compteur:=ADR(COUNTER_Evap_Time.STATE_CPT);
+
+(*Gestion des fronts*)
+FM_Prod(clk := I_Machine_prod);
+
+
+FD_Prod(clk := I_Machine_prod);
+
+FM_Layer(clk := I_PRE_EVAP_ON );
+FD_Layer(clk := I_EVAP_OFF);
+
+FM_Layer_Load_Ok(clk := I_LAYER_LOAD_OK);
+
+FD_O_Rapport(clk := O_Rapport);
+
+(*Remise à 0 des valeurs*)
+IF FD_O_Rapport.Q THEN
+	STATE_Config				:= '';
+	STATE_Crucible				:= 0;
+	STATE_Material				:= '';
+	STATE_THICK_Consigne		:= 0;
+	STATE_THICK_Obtenue			:= 0;
+END_IF
+
+(*Enregistrement des données en début de process*)
+IF FM_Prod.Q THEN
+	STATE_User_Login			:=	PRG_USER.ACTU_USER.LOGIN;
+	STATE_User_Name				:=	PRG_USER.ACTU_USER.NOM;
+	STATE_User_First			:=	PRG_USER.ACTU_USER.PRENOM;
+
+	STATE_Process_Name		:=	EXECPROC.PRM_PROCESS_NAME;
+	STATE_Date_Deb			:=	PRG_SEC._date;
+
+END_IF
+
+
+(*Enregistrement des données liées à l'empilement*)
+IF FM_Layer_Load_Ok.Q THEN
+	(*CASE MAIN.STEP_EMPILEMENT.PRM_Type_Dome OF
+		0:
+			STATE_Config	:=	'250';
+		1:
+			STATE_Config	:=	'350';
+		2:
+			STATE_Config	:=	'450';
+	END_CASE*)
+	STATE_Crucible				:= PRG_EVAP.EVAPS1.PRM_NCR;
+	STATE_Material				:= PRG_EVAP.CRUCIBLE1.PRM_MAT[STATE_Crucible];
+	STATE_THICK_Consigne		:= MAIN.STEP_EMPILEMENT.PRM_EPAISSEUR;
+END_IF
+
+
+(*Enregistrements des données en début de couche*)
+IF FM_Layer.Q THEN
+	(*RAZ compteur*)
+	pt_Compteur^			:= 0;
+	VAR_Layer_Done			:= FALSE;
+	VAR_Log_Needed			:= TRUE;
+	STATE_Date_Deb_Evap		:= PRG_SEC._date;
+END_IF
+
+
+(*Enregistrements des données en fin de couche*)
+IF FD_Layer.Q THEN
+	STATE_Date_Fin_Evap		:= PRG_SEC._date;
+	STATE_THICK_Obtenue		:= MAIN.STEP_EMPILEMENT.STATE_THICKNESS_AGREGATE;
+	STATE_Temps_Depot		:= UDINT_TO_INT(COUNTER_Evap_Time.STATE_Cpt);
+
+	(*Levée du bit de demande de création d'un nouveau fichier*)
+	O_Rapport				:=	TRUE;
+	VAR_Layer_Done			:=	TRUE;
+	VAR_Log_Needed			:=	FALSE;
+END_IF
+
+
+(*Enreistrement des données en fin de production si la couche ne s'est pas terminée*)
+IF FD_Prod.Q THEN
+	IF NOT VAR_Layer_Done AND VAR_Log_Needed THEN
+		STATE_Date_Fin_Evap		:= PRG_SEC._date;
+		STATE_THICK_Obtenue		:= MAIN.STEP_EMPILEMENT.STATE_THICKNESS_AGREGATE;
+		STATE_Temps_Depot		:= UDINT_TO_INT(COUNTER_Evap_Time.STATE_Cpt);
+		(*Levée du bit de demande de création d'un nouveau fichier*)
+		O_Rapport				:=	TRUE;
+		VAR_Log_Needed			:=	FALSE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CPT_USURE">
+      <LineId Id="51" Count="88" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="PRCDEF" Id="{e8ed4647-f8bf-48e2-a8cf-7636a2b1a791}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK PRCDEF
+
+(* Fonction standard AC de gestion de défaut *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE*)
+(* Version 2-0 - HG - Adaptation pour journal des évènements externe - 24/06/2011*)
+
+(*************************************************************************)
+
+
+VAR_INPUT
+	CONDITION:	  				BOOL;				(* ~ (OPC : 1 : available for OPC-clients) *)			(*condition d'apparition du défaut*)
+	DISABLE:					BOOL:=FALSE;													(*condition de désactivation du défaut*)
+	AR_DEF:   					BOOL:=TRUE; 		(* ~ (OPC : 1 : available for OPC-clients) *)			(* Accusé de reception du défaut *)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	DELAY:		  				TIME;		 		(* ~ (OPC : 1 : available for OPC-clients) *)			(* Delais du défaut pour l'obtention de la réaction*)
+	COUNT_APP:				UDINT;				(* ~ (OPC : 1 : available for OPC-clients) *)			(* Nombre d'apparition du défaut*)
+
+	(*Entité*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	Groupe:			UINT:=0;			(*0:defaut, 1:alarme, 2:utilisateur, 3:évènement, 4:consignation, 5:note*)
+	VAL1:			STRING(255);		(*attribut pour affichage intitulé*)
+	VAL2:			STRING;			(*attribut pour affichage intitulé*)
+	VAL3:			STRING;			(*attribut pour affichage intitulé*)
+	ID:				UINT;			(*identifiant du défaut*)
+END_VAR
+
+VAR_OUTPUT
+	DEF:   						BOOL; 															(* indicateur de défaut *)
+	APP	:						BOOL;															(* bit activé à l'apparition du défaut*)
+	DIS:							BOOL;															(* bit activé à la disparition du défaut*)
+END_VAR
+
+VAR
+	T_delay:						TON;															(*timer délais défaut*)
+	FM_DEF:					R_TRIG;															(*APP du défaut*)
+	FD_DEF:						F_TRIG;															(*DIS du défaut*)
+	TIMER_AR:					TON;															(*Timer pour accusé de réception du délais de défaut*)
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	T_DELAY.IN:= CONDITION AND NOT DISABLE;
+	T_delay(	PT:=DELAY);
+
+	TIMER_AR.PT	:=	T#5s;
+	TIMER_AR.IN	:=	DEF;
+	TIMER_AR();
+
+	(************************************************************************************************)
+	(* TRAITEMENT DES DEFAUTS AVEC DELAIS = 0 (APPARITION IMMEDIATE) *)
+	(************************************************************************************************)
+
+	IF		DELAY = T#0s THEN				 (* [Delais<>0] *)
+
+		(* mis à 1 du défaut si la condition est vraie *)
+		IF		CONDITION AND NOT DISABLE THEN
+			DEF:=TRUE;
+		END_IF;
+
+	(* RAZ du defaut si pas condition *)
+		IF (NOT CONDITION AND DEF AND AR_DEF) OR	DISABLE THEN
+			DEF := FALSE;
+		END_IF;
+
+		(*TODO - A SHUNTER SI JEV OK*)
+		IF (NOT CONDITION AND DEF  AND TIMER_AR.Q ) OR	DISABLE THEN
+			DEF := FALSE;
+		END_IF;
+	ELSE
+	(************************************************************************************************)
+	(* TRAITEMENT DES DEFAUT AVEC DELAIS > 0                                                            *)
+	(************************************************************************************************)
+
+		IF T_delay.Q THEN
+			DEF := TRUE;
+		END_IF;
+		IF	(DEF  AND AR_DEF AND NOT CONDITION) OR DISABLE THEN
+				DEF:=FALSE;
+		END_IF;
+		(*TODO - A SHUNTER SI JEV OK*)
+		IF	(DEF  AND TIMER_AR.Q AND NOT CONDITION) OR DISABLE THEN
+				DEF:=FALSE;
+		END_IF;
+	END_IF;
+
+
+	FM_DEF(CLK:=DEF , Q=>APP );
+	FD_DEF(CLK:=DEF , Q=>DIS );
+
+	IF APP THEN
+		COUNT_APP:=COUNT_APP+1;
+		LOG_EVENT(
+			_ID:=ID,
+			_VAL1:=VAL1,
+			_VAL2:=VAL2,
+			_VAL3:=VAL3,
+			_TYPE:=TRUE);
+
+	END_IF;
+	IF DIS THEN
+			LOG_EVENT(
+			_ID:=ID,
+			_VAL1:=VAL1,
+			_VAL2:=VAL2,
+			_VAL3:=VAL3,
+			_TYPE:=FALSE);
+	END_IF
+	IF ID < SIZEOF(PRG_DEF_MANAGEMENT.TABLE_DEF) * 32 THEN
+		 PRG_DEF_MANAGEMENT.TABLE_DEF[ ID / 32] := CSETBIT32(
+			inVal32:= PRG_DEF_MANAGEMENT.TABLE_DEF[ ID / 32],
+			BitNo:=UINT_TO_USINT( ID MOD 32),
+			BitVal:= DEF);
+	ELSE
+			ADSLOGSTR(ADSLOG_MSGTYPE_ERROR,'indice de table de défaut dépassé', '');
+	END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="PRCDEF">
+      <LineId Id="46" Count="73" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

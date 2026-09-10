@@ -1,0 +1,185 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.11">
+  <POU Name="BLOCK_TELEMARK_DIGITAL_SWEEP" Id="{0a93afd0-8bf7-467b-a6b1-e79a43e7dff1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_TELEMARK_DIGITAL_SWEEP
+
+(* Gestion d'un controleur de balayage telemark Digital Sweep 8 motifs*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - GV - 22/05/15 - VERSION INIITIALE EVA450 n°17 - 8950 *)
+(* Version 2-0 - HG - 06/11/23 - Ajout sorties interlock et remote 14035
+									Ajout Timer_valid_off*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	MANUAL:					BOOL;		(*Mode de pilotage manuel *)
+	RESET:					BOOL;		(*Condition de réinitialisation de la fonction *)
+	DOOR:					BOOL;		(*Porte fermée*)
+
+	I_SW_REM:				BOOL;		(*Balayage en mode remote*)
+	I_SW_RUN:				BOOL;		(*Balayage en marche*)
+	I_SW_RDY:				BOOL;		(*Balayage prêt*)
+
+	PRM_NbBal:				USINT:=1;	(*Commande de position*)
+	
+	CO_Remote:				BOOL;		(*Demande d'activation du mode remote en automatique*)
+END_VAR
+
+VAR
+	TIMER_Valid_On:			TON;
+	TIMER_Valid_Off:		TOF;
+	M_Remote:				BOOL;	(* Ordre de changement commande remote *)
+	RCP_M_Remote:			BOOL;	(* Bit de reception de l'ordre de remote du module de balayage*)
+	VAR_Remote:				BOOL;	(* Variable intermédiaire commande remote du module de balayage*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_SWB1:			BOOL;		(*sélection du motif*)
+	OUT_SWB2:			BOOL;		(*sélection du motif*)
+	OUT_SWB3:			BOOL;		(*sélection du motif*)
+	OUT_SWB4:			BOOL;		(*sélection du motif*)
+	OUT_ITLK:			BOOL;		(*Interlock*)
+	OUT_RMT:			BOOL;		(*Remote*)
+	STATE_NbBal:		USINT;
+	STATE_BAL:			STRING;
+	STATE_REM:			BOOL;		(*Module de balayage en mode Remote*)
+	STATE_LOC:			BOOL;		(*Module de balayage en mode Local*)
+	STATE_ON:			BOOL;		(*Module de balayage en marche*)
+	STATE_OFF:			BOOL;		(*Module de balayage à l'arrêt*)
+	STATE_RDY:			BOOL;		(*Module de balayage à prêt*)
+	AUTOR_Remote_IHM:			BOOL;		(*indique que le changement mode remote est autorisé en mode manuel depuis l'IHM*)
+	AUTOR_Remote_PLC:			BOOL;		(*indique que le changement more remote est autorisé en mode automatique depuis l'automate*)
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+
+	PRM_BAL: 		ARRAY[0..8] OF STRING;		(*nom du programme de balayage*)
+
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Gestion des ordres en mode manuel *)
+RCP_M_Remote			:=	M_Remote;
+
+(*affectation des bits d'état*)
+STATE_REM			:=	I_SW_REM;
+STATE_LOC			:=	NOT I_SW_REM;
+STATE_OFF			:=	NOT I_SW_RUN;
+STATE_RDY			:=	I_SW_RDY;
+
+(*indicateur  STATE_ON*)
+TIMER_Valid_On.IN	:=	I_SW_RUN;
+TIMER_Valid_On(PT:=T#500ms);
+TIMER_Valid_Off.IN	:=	I_SW_RUN;
+TIMER_Valid_Off(PT:=T#200ms);
+STATE_ON			:=	Timer_Valid_On.Q AND TIMER_Valid_Off.Q;
+
+(*gestion des bits d'autorisation en mode manuel*)
+AUTOR_Remote_IHM		:=	NOT RESET AND MANUAL;
+AUTOR_Remote_PLC		:=	NOT RESET AND NOT MANUAL;
+
+(*Selection du mode de balayage*)
+CASE PRM_NbBal OF
+		8:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := TRUE;
+		7:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		6:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		5:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		4:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := TRUE;
+			OUT_SWB4 := FALSE;
+		3:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+		2:
+			OUT_SWB1 := FALSE;
+			OUT_SWB2 := TRUE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+		1:
+			OUT_SWB1 := TRUE;
+			OUT_SWB2 := FALSE;
+			OUT_SWB3 := FALSE;
+			OUT_SWB4 := FALSE;
+END_CASE
+STATE_NbBal := PRM_NbBal;
+IF STATE_NbBal > 0 THEN
+	STATE_BAL:= PRM_BAL[STATE_NbBal];
+ELSE
+	STATE_BAL:= '';
+END_IF
+
+(*gestion interlock*)
+OUT_ITLK	:=	NOT RESET AND DOOR;
+
+(*gestion remote*)
+IF	(CO_Remote AND AUTOR_Remote_PLC)
+		 OR 	(RCP_M_Remote AND NOT VAR_Remote AND AUTOR_Remote_IHM) THEN
+			VAR_Remote 		:= 	TRUE;
+ELSIF (NOT CO_Remote AND NOT RESET AND NOT MANUAL)
+		OR 	(RCP_M_Remote AND VAR_Remote AND AUTOR_Remote_IHM)
+		OR 	RESET THEN
+			VAR_Remote		:=	FALSE;
+END_IF;
+OUT_RMT	:=	VAR_Remote;
+
+(* Reset des ordres*)
+IF M_Remote	AND RCP_M_Remote THEN
+	M_Remote			:=	FALSE;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_TELEMARK_DIGITAL_SWEEP">
+      <LineId Id="226" Count="0" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="228" Count="0" />
+      <LineId Id="52" Count="4" />
+      <LineId Id="330" Count="4" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="235" Count="0" />
+      <LineId Id="238" Count="1" />
+      <LineId Id="233" Count="0" />
+      <LineId Id="62" Count="43" />
+      <LineId Id="254" Count="4" />
+      <LineId Id="253" Count="0" />
+      <LineId Id="259" Count="0" />
+      <LineId Id="167" Count="0" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="241" Count="1" />
+      <LineId Id="244" Count="6" />
+      <LineId Id="240" Count="0" />
+      <LineId Id="260" Count="0" />
+      <LineId Id="263" Count="3" />
+      <LineId Id="261" Count="0" />
+      <LineId Id="113" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

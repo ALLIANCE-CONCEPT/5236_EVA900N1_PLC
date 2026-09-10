@@ -1,0 +1,1627 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_RS232_ONBOARD_V4" Id="{33992f4c-58a8-4b88-bb69-d1e546411176}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_RS232_ONBOARD_V4
+(* Communication RS232 - pour module On-Board Brooks *)
+(*Gestion d'une seule pompe*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - HG - VERSION INIITIALE*)
+(* Version 2-0 - LDS - 14136 - 04/2024 - Ajout parametrage cryo *)
+(* Version 3-0 - LDS - 14136 - 07/2024 - Ajout gestion lecture information regen auto *)
+(* Version 3-1 - LDS - 14624 - 21/03/2025 - Fusion des deux blocs avec déclaration conditionnel *)
+
+(*************************************************************************)
+
+VAR_INPUT
+	CO_Etat:					BOOL;							(* Commande 1 = Marche de la pompe*)
+	CO_Regen:					BOOL;							(* Demande de mise en régénération de la pompe *)
+	CO_StopRegen:				BOOL;							(* Demande arrêt de la regeneration *)
+	CO_Param_ParDefaut:			BOOL;							(* Demande paramétrage par defaut de regen cryo*)
+	CO_states_regen:            BOOL;							(* Demande info regen lors d'un lancement auto*)
+	
+	CO_Ecriture:                BOOL;							(* Permet d'écrire les entré des parametres de la regen ds la pompe*)
+	CO_Lecture:					BOOL;							(* Permet de lire les parametres de la regen enregistrer ds la pompe*)
+	CO_RoughValve: 				BOOL;							(* Commande 1 = ouverture de la rough valve*)
+	CO_PurgeValve:				BOOL;							(* Commande 1 = Marche de la purge valve*)
+	CO_InfoPompe:				BOOL; 							(* demande Info de la Pompe *)
+	CO_PumpTc:					BOOL; 							(* demande activation TC pump *)
+	
+	CO_Lecture_Relay:           BOOL;							(* permet de lire les relays(qd = true les infos des relais sont recupérées)*)
+	CO_Envoie_Param_Relay:   	BOOL;							(* permet d'envoyer les parametres du relay*)
+	CO_Param_usine_Relay:       BOOL;							(* parametrage par defaut des 2 relays *)
+	
+	CO_Forcage:					BOOL;							(* Permet de forcer sur une trame particuliere numero de trame dans ValeurForcageCptSend *)
+	CONF_Forcage:				USINT;			(* Numero de la trame qui doit etre forcer avec le bool ForcageCptSend *)
+	
+	RESET:						BOOL;			(* Reset du driver*)
+	OFF:						BOOL;			(* Désactivation du driver *)
+
+	CO_ModeManu:				BOOL;			(* Passage en envoi manuel *)
+	CO_EnvoiManu:				BOOL;			(* Commande d'envoi en mode manuel *)
+	PRM_TrameManu:				STRING;			(* Contient la trame pour l'envoi manuel *)
+	
+
+
+	DEF_Port_com:				PRCDEF;			(* Defaut du port de communication rs232*)
+	
+    IN_COM			AT %I* :	PcComInData; 	//a mettre si liaison RS direct
+    //IN_COM			AT %I* :	EL6inData22B;	//a mettre si liaison via carte EL6001
+END_VAR
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+	
+	
+	PRM_PowerFailRecovery:   USINT;
+	PRM_PumpStartDelay:		 REAL;							(*parametres de la regen*)
+	PRM_PumpRestartDelay:	 REAL;
+	PRM_ExtendedPurgeTime:	 UINT;
+	PRM_RepurgeCycles:	     USINT;
+	PRM_RoughToPressure:	 USINT;
+	PRM_ROR:	             USINT;
+	PRM_RORCycles:	         USINT;
+	PRM_StartUpTemperature:	 USINT;
+	PRM_RoughValveInterlock: BOOL;
+	PRM_RepurgeTime:	     REAL;
+	PRM_1st_stage_control_temp: USINT:=65; 
+												 			(*parametres des relais*)
+	PRM_Relay:               USINT:=1;      (*num relais*)
+	PRM_Action:				 USINT;	 	 (*commande*)
+	PRM_Valeur:              UINT;		 (*valeur numerique associé a la commande*)
+	PRM_ONOFF:               BOOL;		 (*Etat du relais*)
+	PRM_Mode:				 BOOL;		 (*mode du relais*)
+END_VAR
+VAR_IN_OUT PERSISTENT
+
+END_VAR 
+VAR_OUTPUT
+	REGEN_ERROR:                STRING;        			(* Donne l'erreur qui a stoppé la regen uniquement en anglais donc plus utilisé mais tjr fonctionnel*)
+	STATE_Temperature:			ARRAY[0..1] OF REAL;	(* Donne la température de chaque étage d'une pompe *)
+    STATE_Pressure:				REAL:=0.0;				(* Donne la pression "Thermocouple Gauge Pressure" *)
+	STATE_Regen:				BOOL;			   	   	(* Donne l'etat de la regen *)
+	Regen_completed:            BOOL;					(* Donne l'info si la regen a ete complete ou interrompu *)
+	STEP_Regen:                 STRING;			 		(* Donne où en est la pompe dans le processus de regen*)
+	STATE_Pompe:				BOOL;			 		(* Donne l'etat du moteur de la cryo *)
+	STATE_Rough_valve: 			BOOL;					(*etat de la rough valve*)
+	STATE_Purge_valve: 			BOOL;					(* etat de la vanne de purge*)
+	STATE_Pump_TC: 				BOOL;					(* etat du pump TC*)
+	Reponse_ModeManu:           STRING;					(* renvoie une chaine de caractere correspondant a la trame envoyé manuellement *)
+	STATE_Tps_restant:          INT;					(* Donne le tps restant d'une étape de la regen *)
+	STEP_REGEN_ID: 				UINT;					(* Donne l'étape de la regen en INT (utilisé pour les traduction) *)
+	Pump_Serial_Number_affiche: STRING;    		        (* donne le numéro de serie de la pompe (complet) *)
+	Number_Of_Complete_Regen:   UINT;					(* donne le nombre de cycle de regen completé *)
+	Time_Since_Last_Regen:      UINT;					(* donne le tps depuis la dernière regen*)
+	SoftwareRevisionLevel:      STRING;					(* donne la version du logiciel *)
+	ElaspedTime:				UDINT;					(* donne le tps ecoulé*)
+	ID_ERREUR_REGEN:            UINT:=1000;				(* donne l'ID de l'erreur (permet la traduction) *)
+	NB_FAIL_PURGE_REPURGE:      UINT;					(* permet de  savoir le nombre d'echec de purge*)
+	
+
+    OUT_Com     AT %Q* : 	PcComOutData; 	//a mettre si liaison RS direct
+    //OUT_Com		AT %Q* : 	EL6outData22B;	//a mettre si liaison via carte EL6001
+	
+	(*OUT_DTR_RTS 	AT %Q* : 		UINT;*)
+	STATE_Ready:				BOOL;			(* Driver en fonctionnement *)
+	STATE_NOK:					BOOL;			(* Driver en défaut *)
+	
+	VAR_Affichage :       		    STRING:='';		(*variable qui permette d'affiche des info supplémentaire sur l'étage de la regen*)
+	VAR_Affichage_Commande_Relay:   UINT :=1000;		(*variable qui permet d'affiche la commande correspondant a la valeur numérique*)
+	VAR_Affichage_Valeur_Relay:     STRING;			(*variable qui permet d'affiche la valeur actuelle enregistrer dans le relais (lié au champs de txt IHM*)
+	TAB_Affichage_Etat_Relay:       ARRAY[1..2] OF BOOL;(*tableau permettant de stocker la valeur de l'état des 2 relais ON/OFF*)
+	TAB_Affichage_Mode_relay:	    ARRAY[1..2] OF BOOL;(*tableau permettant de stocker la valeur du mode des 2 relais AUTO/MANU*)
+	VAR_Affichage_ValeurTIME_Relay: STRING;			(*variable qui permet d'affiche la valeur du timer actuelle enregistrer dans le relais (lié au champs de txt IHM*)
+	
+	STATE_ROR_nb: 				 INT;				(*Nombre de cycle ROR*)
+	LAST_ROR_Value:				 INT;				(*dernière valeur ROR*)
+	VAR_Derniere_commande_Relay: STRING;			(*variable qui contient la dernière commande utilisé*)
+	
+	ID_COMBOBOX:                USINT;				(* ID de la combox permettant de le choix PowerFailRecovery*)
+	ID_COMBOBOX_relay:          USINT;
+	
+	iCounter_Regen_lecture:     INT:=0;				(*compteur permettant de lire chaque parametre de la regen*)
+END_VAR
+
+VAR
+	TIMER_Cadence: 				TON;			(*Timer cadencement communication*)
+	TIMER_Demarrage: 			TON;			(*timer pour le démarrage et lorsqu'il arrete de communiquer*) 
+	TIMER_Delay_Relay:          TON;			(*timer qui permet d'appliquer le délai lorqu'on repasse le relais en mode auto*) 
+	TIMER_Delay_Relay2:         TON;			(*timer qui permet d'appliquer le délai lorqu'on change l'etat du relais (on/off)*)
+	Var_lancement_timer_ONOFF: BOOL;			(* .IN du timer_delay_relay2 *)
+ 
+	VAR_Cadence:				USINT;			(*Numéro de la trame en cours*)
+	VAR_Mem_Cadence:			USINT;			(*Mémorisation numéro dela trame*)
+
+	OUT_Send_Data:				SendString;		(*Fonction d'envoi*)
+	OUT_Buffer: 				ComBuffer;		(*Buffer trame d'envoi *)
+
+	IN_Receive_Data:			ReceiveString;	(*Fonction de réception*)
+	IN_Buffer: 					ComBuffer;		(*Buffer trame de réception *)
+
+	VAR_ClearBuffer: 			ClearComBuffer;	(*Fonction de RAZ buffer*)
+
+	(* background communication with the COM port device *)
+	VAR_COMportControl: 		SerialLineControl;
+	VAR_COMportControlError: 	BOOL;
+	VAR_COMportControlErrorID: 	ComError_t;
+												(*ensembles des variables qui permettent de structurer les trames*)
+	VAR_NB:						USINT;		 
+	VAR_NB2:					USINT;
+	VAR_BuffString:				STRING;
+	VAR_TrameRetour:            STRING;
+	VAR_STR1:					STRING[1];
+	VAR_STR2:					STRING[1];
+	VAR_ReceptionOk:			BOOL;
+												(*ensemble des fronts montants/descendants pour la memorisation des commandes*)
+	FM_Param: 					R_TRIG;				
+	FM_On:						R_TRIG;
+	FD_Off:						F_TRIG;
+	FM_Regen:					R_TRIG;
+	FM_StopRegen:				R_TRIG;
+	FM_Ecriture:				R_TRIG;
+	FM_Lecture:                 R_TRIG;
+	FM_RoughValveOn:			R_TRIG;
+	FM_RoughValveOff:			F_TRIG;
+	FM_PurgeValveOn:            R_TRIG;
+	FM_PurgeValveOff:           F_TRIG;
+	FM_pump_TC_ON:				R_TRIG;
+	FM_pump_TC_OFF:				F_TRIG;
+	FM_EnvoieParamRelay:        R_TRIG;
+	FM_InfoPompe  :             R_TRIG;
+	FM_LectureRelay  :          R_TRIG;
+	FM_ParamUsineRelay:         R_TRIG;
+	FM_states_regen:            R_TRIG;
+												(*ensemble des variables memorisation des commandes*)
+	VAR_Mem_CO_Info_Pompe:     		BOOL;
+	VAR_Mem_CO_RoughValve_on:  	 	BOOL;
+	VAR_Mem_CO_RoughValve_off:  	BOOL;
+	VAR_Mem_CO_PumpTC_on:  	 		BOOL;
+	VAR_Mem_CO_PumpTC_off:  		BOOL;
+	VAR_Mem_CO_PurgeValve_on:   	BOOL;
+	VAR_Mem_CO_PurgeValve_off:  	BOOL;
+	VAR_Mem_CO_Param_ParDefaut: 	BOOL;
+	VAR_Mem_CO_On:					BOOL;
+	VAR_Mem_CO_Off:					BOOL;
+	VAR_Mem_CO_Regen:				BOOL;
+	VAR_Mem_CO_StopRegen:      	    BOOL;
+	VAR_Mem_CO_Ecriture:        	BOOL;
+	VAR_Mem_CO_Lecture:         	BOOL;
+	VAR_Reception_Parametre:    	BOOL := TRUE;
+	VAR_Mem_Regen_Aborted:      	BOOL;
+	VAR_Mem_CO_Lecture_Relay:      	BOOL;
+	VAR_Mem_CO_Envoie_Param_Relay: 	BOOL;
+	VAR_Mem_etape_Regen : 			BOOL;   (* variable qui permet de savoir si il faut lire les etapes de la regen*)
+	VAR_Mem_CO_Param_usine_Relay:   BOOL;
+	
+	A_error: ComError_t;
+	
+	
+	
+	iCounter_ModeManu_lectureRegen:         INT:=0;
+	iCounter_Regen_ecriture:                INT:=0;		(*compteur permettant d'affecter chaque parametre de la regen*)
+	iCounter_Valeur_Num_Regen: 				INT:=0;		(*compteur permettant de demande les valeurs numériques de la regen (pour les étapes)*)
+	iCounter_Info_Pompe: 					INT:=0;		(*compteur permettant de demande les infos de la pompe*)
+	iCounter_Evitement_1ere_requete_regen:  INT:=0;
+	iCounter_Param_Relay_lecture: 			INT:=0;
+	
+	VAR_Affichage1 :              STRING;			(*variables qui permettent de stocker des info supplémentaire sur l'étape de la regen (var concatenées)*)
+	VAR_Affichage2 :              STRING;
+	VAR_Affichage3 :              STRING;
+	VAR_Affichage_ValeurUL_Relay: STRING;			(*var stocker la valeur UL du relais (concaténer dans une variable d'affichage total) *)
+	VAR_Affichage_ValeurLL_Relay: STRING;			(*var stocker la valeur LL du relais (concaténer dans une variable d'affichage total) *)
+	
+	Pump_Serial_Number:	STRING;			            (* première partie du numéro de serie de la pompe *)
+			
+	STOP_LOAD:                   BOOL := FALSE;			(* Variables permettant de stopper la barre de chargement sur l'IHM*)
+	VAR_Visibilite_valeur_relay: BOOL := FALSE;			(* Variables permettant de rendre invisible l'entre des valeur pour certaine commande dans les relays*)
+	iCounter_Param_ParDefaut_Relay_lecture: INT;
+	
+	Message_alerte_invisible: BOOL:= TRUE;
+	Message_alerte_invisible2: BOOL:= TRUE;
+	Message_confirm_invisible: BOOL:= TRUE;
+	Message_confirm_invisible_regen: BOOL:= TRUE;
+	var_STRING: STRING(255);
+	VAR_Demande_Erreur: BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Cadence :
+Trame 1 : Demande état marche/arrêt - A?
+Trame 2 : Demande état regen - O
+Trame 3 : Demande si il y a eu des erreurs de regen  - e
+Trame 6 : Demande température étage 1 - J
+Trame 7 : Demande température étage 2 - K
+Trame 5 : Demande pression - L
+Trame 4 : Demande rought valve - D?
+Trame 5 : Demande purge valve - E?
+Trame 9 : Demande de regen d'une pompe / arret de regen - N1 / N0
+Trame 10 : Demande de marche ou d'arrêt d'une pompe - A1 / A0
+Trame 11 : Paramétrage regen P + [0 - 6,A,G][5 digit number]  ecriture
+Trame 12 : Paramétrage regen P + [0 - 6,A,G][?]  lecture
+Trame 13 : Demande étape dans la regen - O
+Trame 14 : Demande d'ouverture de la rough valve - D0/D1
+Trame 15 : Demande d'ouverture de la purge valve - E0/E1
+Trame 16 : Demande info pompe
+Trame 17 : Ecriture des parameres dans le relais
+Trame 18 : Lecture des infos du relais (uniquement)
+*)
+
+(* Paramètre statique *)
+IdXML							:=	'8';
+TagXML							:=	2;
+
+DEF_Port_com.IdXml				:=	'11';
+DEF_Port_com.TagXml				:=	1;
+
+(*Gestion PRM_Action impossible*)
+IF PRM_Action = 9 OR PRM_Action = 14 THEN 
+	PRM_Action := 0;
+END_IF
+
+IF PRM_Action =10 OR PRM_Action =11 OR PRM_Action =12 OR PRM_Action =13 OR PRM_Action =15 THEN
+	VAR_Visibilite_valeur_relay:= TRUE;
+ELSE
+	VAR_Visibilite_valeur_relay:= FALSE;
+END_IF
+
+(*Gestion des fronts demandes*)
+FM_On.CLK	:=	CO_Etat;
+FM_On();
+IF FM_On.Q THEN
+	VAR_Mem_CO_On	:=	TRUE;
+END_IF
+FD_Off.CLK	:=	CO_Etat;
+FD_Off();
+IF FD_Off.Q THEN
+	VAR_Mem_CO_Off	:=	TRUE;
+END_IF
+FM_Regen.CLK	:=	CO_Regen;
+FM_Regen();
+IF FM_Regen.Q THEN
+	VAR_Mem_CO_Regen	:=	TRUE;
+	VAR_Mem_etape_Regen := TRUE;
+END_IF
+FM_states_regen.CLK	:=	CO_states_regen;
+FM_states_regen();
+IF FM_states_regen.Q THEN
+	VAR_Mem_etape_Regen := TRUE;
+END_IF
+FM_StopRegen.CLK	:=	CO_StopRegen;
+FM_StopRegen();
+IF FM_StopRegen.Q THEN
+	VAR_Mem_CO_StopRegen	:=	TRUE;
+	VAR_Mem_etape_Regen := FALSE;
+END_IF
+FM_Param.CLK	:=	CO_Param_ParDefaut;
+FM_Param();
+IF FM_Param.Q THEN
+	VAR_Mem_CO_Param_ParDefaut	:=	TRUE;
+END_IF           
+FM_Ecriture.CLK	:=	CO_Ecriture;
+FM_Ecriture();
+IF FM_Ecriture.Q THEN
+	VAR_Mem_CO_Ecriture	:=	TRUE;
+END_IF
+FM_Lecture.CLK	:=	CO_Lecture;
+FM_Lecture();
+IF FM_Lecture.Q THEN
+	VAR_Mem_CO_Lecture	:=	TRUE;
+END_IF
+FM_RoughValveOn.CLK	:=	CO_RoughValve;
+FM_RoughValveOn();
+IF FM_RoughValveOn.Q THEN
+	VAR_Mem_CO_RoughValve_On	:=	TRUE;
+END_IF
+FM_PurgeValveOn.CLK	:=	CO_PurgeValve;
+FM_PurgeValveOn();
+IF FM_PurgeValveOn.Q THEN
+	VAR_Mem_CO_PurgeValve_On	:=	TRUE;
+END_IF
+FM_RoughValveOff.CLK	:=	CO_RoughValve;
+FM_RoughValveOff();
+IF FM_RoughValveOff.Q THEN
+	VAR_Mem_CO_RoughValve_Off	:=	TRUE;
+END_IF
+FM_PurgeValveOff.CLK	:=	CO_PurgeValve;
+FM_PurgeValveOff();
+IF FM_PurgeValveOff.Q THEN
+	VAR_Mem_CO_PurgeValve_Off	:=	TRUE;
+END_IF
+
+FM_pump_TC_ON.CLK	:=	CO_PumpTc;
+FM_pump_TC_ON();
+IF FM_pump_TC_ON.Q THEN
+	VAR_Mem_CO_PumpTC_on	:=	TRUE;
+END_IF
+FM_pump_TC_OFF.CLK	:=	CO_PumpTc;
+FM_pump_TC_OFF();
+IF FM_pump_TC_OFF.Q THEN
+	VAR_Mem_CO_PumpTC_off	:=	TRUE;
+END_IF
+
+
+
+FM_InfoPompe.CLK	:=	CO_InfoPompe;
+FM_InfoPompe();
+IF FM_InfoPompe.Q THEN
+	VAR_Mem_CO_Info_Pompe	:=	TRUE;
+END_IF
+FM_LectureRelay.CLK := CO_Lecture_Relay;
+FM_LectureRelay();
+IF FM_LectureRelay.Q THEN
+	VAR_Mem_CO_Lecture_Relay:=TRUE;
+END_IF
+FM_EnvoieParamRelay.CLK	:=	CO_Envoie_Param_Relay;
+FM_EnvoieParamRelay();
+IF FM_EnvoieParamRelay.Q THEN
+	VAR_Mem_CO_Envoie_Param_Relay	:=	TRUE;
+END_IF
+FM_ParamUsineRelay.CLK	:=	CO_Param_usine_Relay;
+FM_ParamUsineRelay();
+IF FM_ParamUsineRelay.Q THEN
+	VAR_Mem_CO_Param_usine_Relay	:=	TRUE;
+END_IF
+
+IF NOT CO_Etat THEN
+	STATE_Pompe:= FALSE;
+END_IF
+
+A_error:= OUT_Send_Data.Error;
+
+
+(*RESET ou DESACTIVATION Driver*)
+IF RESET OR OFF THEN
+	VAR_Cadence                 := 0;
+	STATE_Temperature[0]		:=	0;
+	STATE_Temperature[1]		:=	0;
+	STATE_Pressure        		:=  0;
+	REGEN_ERROR                 := '';
+	Reponse_ModeManu            := '';
+	STEP_Regen                  := '';
+	STATE_ROR_nb                := 0;
+	LAST_ROR_Value              := 0;
+	STATE_Rough_valve           := FALSE;
+	STATE_Purge_valve           := FALSE;
+	STEP_REGEN_ID               := 1000;
+	VAR_Affichage               := '';
+	Pump_Serial_Number_affiche	:= '';
+	Number_Of_Complete_Regen    := 0;
+	Time_Since_Last_Regen       := 0;
+	SoftwareRevisionLevel       := '';
+	ElaspedTime                 := 0;
+	STATE_Tps_restant           := 0;
+	VAR_Mem_CO_Ecriture   		:= FALSE;
+	VAR_Mem_CO_Param_ParDefaut  := FALSE;
+	VAR_Mem_CO_On				:= FALSE;
+	VAR_Mem_CO_Off		  		:= TRUE ;
+	VAR_Mem_CO_Regen	 		:= FALSE;
+	VAR_Mem_CO_StopRegen 		:= TRUE ;
+	VAR_Mem_CO_PurgeValve_off   := TRUE ;
+	VAR_Mem_CO_PurgeValve_on    := FALSE;
+	VAR_Mem_CO_RoughValve_off   := TRUE ;
+	VAR_Mem_CO_RoughValve_on    := FALSE;
+	VAR_Mem_CO_Info_Pompe		:= FALSE;
+	RETURN;
+END_IF
+
+
+
+TIMER_Demarrage.IN 	:= 	NOT IN_Receive_Data.Busy AND NOT OUT_Send_Data.Busy AND NOT VAR_ReceptionOk;
+TIMER_Demarrage.PT	:=	T#5S;
+TIMER_Demarrage();
+IF TIMER_Demarrage.Q  THEN
+	VAR_ReceptionOk	:=	TRUE;
+	VAR_Cadence 	:= 	1;
+END_IF
+
+(*Cadencement des trames*)
+TIMER_Cadence(IN:=VAR_ReceptionOk, PT:=T#500MS);
+VAR_Mem_Cadence	:=	VAR_Cadence;
+
+
+
+(*GESTION ENVOI*)
+IF TIMER_Cadence.Q AND NOT OUT_Send_Data.Busy AND NOT CO_ModeManu THEN
+	VAR_STR2 := CHR(36);	(*$ = hex 24 = dec 36*)
+
+	(* Remplissage trame : $ + code + checksum + 0D*)
+	CASE VAR_Cadence OF
+
+			1: 	(* Demande état on/off pompe*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'A?');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+
+			2: 	(* Demande état regen pompe*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'O');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+				
+			3:	(* Demande erreur regen *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'e');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+				
+			4: 	(* Demande etat rough valve *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'D?');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString	:=	VAR_BuffString;
+				
+			5: 	(* Demande etat purge valve *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'E?');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString	:=	VAR_BuffString;
+		
+			
+			6: 	(* Demande température étage 1*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'J');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHR(13));
+				VAR_TrameRetour     :=  VAR_BuffString;
+				OUT_Send_Data.SendString	:=	VAR_BuffString;
+				
+			7: 	(* Demande température étage 2*)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'K');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+				
+			8: 	(* Demande pression *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'L');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString	:=	VAR_BuffString;
+				
+			9: 	(* Demande etat pump TC *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				VAR_BuffString		:=	CONCAT(VAR_BuffString, 'B?');
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString	:=	VAR_BuffString;	
+		
+			10:	(* Demande de regen/arret regen d'une pompe *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				IF VAR_Mem_CO_Regen AND NOT VAR_Mem_CO_StopRegen THEN
+					VAR_BuffString		:=	CONCAT(VAR_BuffString,'N1');
+				ELSIF VAR_Mem_CO_StopRegen THEN
+					VAR_BuffString		:=	CONCAT(VAR_BuffString,'N0');
+				END_IF
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+				
+			11: 	(* Demande de marche ou d'arrêt d'une pompe *)
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				IF	CO_ETAT THEN
+					VAR_BuffString	:=	CONCAT(VAR_BuffString,'A1');
+				ELSE
+					VAR_BuffString	:=	CONCAT(VAR_BuffString,'A0');
+				END_IF
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				OUT_Send_Data.SendString		:=	VAR_BuffString;
+				
+			12:  (*paramètre de la regen en ecriture*)
+				PRM_PowerFailRecovery:= ID_COMBOBOX;
+				IF VAR_Mem_CO_Ecriture AND VAR_Reception_Parametre THEN
+				VAR_BuffString	:= 	'';
+				VAR_BuffString	:=	VAR_STR2;
+				CASE iCounter_Regen_ecriture OF 
+					0:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(REAL_TO_UINT(LIMIT(0,60 * PRM_PumpRestartDelay,59994))));
+					1:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(0,PRM_ExtendedPurgeTime,9999)));
+					2:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(0,PRM_RepurgeCycles,20)));
+					3:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+					   	VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(25,PRM_RoughToPressure,200)));
+					4:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(1,PRM_ROR,100)));
+					5:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(0,PRM_RORCycles,40)));
+					6:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(iCounter_Regen_ecriture));
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(10,PRM_StartUpTemperature,80)));
+					7:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'A');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(BOOL_TO_INT(PRM_RoughValveInterlock)));
+					8:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'G');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,REAL_TO_STRING(LIMIT(0,PRM_RepurgeTime,9999)));
+					9:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'j');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(REAL_TO_UINT(LIMIT(0,60*PRM_PumpStartDelay,9999))));
+					10:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'i');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,USINT_TO_STRING(LIMIT(0,PRM_PowerFailRecovery,2)));
+					11:    
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'H');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(0,PRM_1st_stage_control_temp,320)));    
+				END_CASE
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+				iCounter_Regen_ecriture := iCounter_Regen_ecriture + 1;
+				OUT_Send_Data.SendString := VAR_BuffString;
+				IF iCounter_Regen_ecriture >=12 THEN
+					iCounter_Regen_ecriture := 0;
+				END_IF
+				VAR_Reception_Parametre := FALSE;	
+				END_IF
+			13:(*paramètre de la regen en lecture*)
+				IF VAR_Mem_CO_Lecture AND VAR_Reception_Parametre THEN
+				VAR_BuffString		:= 	'';
+				VAR_BuffString		:=	VAR_STR2;
+				
+				CASE iCounter_Regen_lecture OF 
+					0:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'i');
+					1:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'6');
+					2:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'j');
+					3:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(0));
+					4:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(1));
+					5:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(2));
+					6:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'G');
+					7:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+					    VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(4));
+					8:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(5));
+					9:	
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,INT_TO_STRING(3));
+					10:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'P');
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'A');
+					11:
+						VAR_BuffString	:=	CONCAT(VAR_BuffString,'H');
+				END_CASE
+				VAR_BuffString	:=	CONCAT(VAR_BuffString,'?');
+				VAR_BuffString	:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+				VAR_BuffString	:=	CONCAT(VAR_BuffString,'$0D');
+				
+				OUT_Send_Data.SendString  :=	VAR_BuffString;
+				VAR_Reception_Parametre := FALSE;
+				END_IF	
+				
+			14: (* lecture des informations de la regen *)
+				CASE iCounter_Valeur_Num_Regen OF 
+					0:	
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'O');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString :=	VAR_BuffString;
+						
+					1:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'K');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					2:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'L');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+					
+					3: 
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'e');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					4:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'k');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					5:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'm');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+					
+					6:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'n');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					7:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'A?');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					8: 	(* Demande rough valve *)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'D?');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString	:=	VAR_BuffString;
+				
+					9: 	(* Demande purge valve *)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'E?');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString	:=	VAR_BuffString;
+						
+					10: (*demande nombre de cycle de purge fail*)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'l');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+					11:	
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, 'J');
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+				END_CASE
+				
+					15:	(* Demande de ouverture/fermeture rough valve *)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						IF CO_RoughValve THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'D1');
+						ELSIF NOT CO_RoughValve THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'D0');
+						END_IF
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+					
+					16:	(* Demande de ouverture/fermeture purge valve *)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						IF CO_PurgeValve THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'E1');
+						ELSIF NOT CO_PurgeValve THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'E0');
+						END_IF
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					17: (* informations supplémentaire pompe*)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						CASE iCounter_Info_Pompe OF 
+							0:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'VA?');		(*premiere parti du num de serie*)
+							1:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'VQ?');		(*deuxième parti du num de serie*)
+							2:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'Z?');		(*nb de regen complete*)
+							3:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'a');			(*tps depuis la dernière regen*)
+							4:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'@');			(*version logiciel*)	
+							5:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'Y?');		(*tps de fonctionnement de la pompe*)
+						END_CASE
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					18:
+						(*envoie param relay*)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						var_STRING :=	BYTE_TO_HEXSTR(USINT_TO_BYTE(PRM_Action),1,FALSE);
+								IF PRM_Mode THEN
+									VAR_BuffString		:=	CONCAT(VAR_BuffString,'[B' );
+									VAR_BuffString      :=  CONCAT(VAR_BuffString,USINT_TO_STRING(PRM_Relay));
+								ELSIF PRM_Mode=FALSE THEN
+									IF PRM_Action =10 OR PRM_Action =11 OR PRM_Action =12 OR PRM_Action =13 OR PRM_Action =15 THEN
+										VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );
+										VAR_BuffString      :=  CONCAT(VAR_BuffString,USINT_TO_STRING(PRM_Relay));
+										VAR_BuffString		:=	CONCAT(VAR_BuffString,BYTE_TO_HEXSTR(USINT_TO_BYTE(PRM_Action),1,FALSE));
+									ELSE
+										VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );
+										VAR_BuffString      :=  CONCAT(VAR_BuffString,USINT_TO_STRING(PRM_Relay));
+										VAR_BuffString		:=	CONCAT(VAR_BuffString,BYTE_TO_HEXSTR(USINT_TO_BYTE(PRM_Action),1,FALSE));
+										IF PRM_Action=0 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(30,PRM_Valeur,310)));
+										ELSIF PRM_Action=1 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(30,PRM_Valeur,310)));
+										ELSIF PRM_Action=2 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(10,PRM_Valeur,310)));
+										ELSIF PRM_Action=3 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(10,PRM_Valeur,310)));
+										ELSIF PRM_Action=4 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(1,PRM_Valeur,999)));
+										ELSIF PRM_Action=5 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(1,PRM_Valeur,999)));
+										ELSIF PRM_Action=6 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(1,PRM_Valeur,999)));
+										ELSIF PRM_Action=7 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(1,PRM_Valeur,999)));
+										ELSIF PRM_Action=8 THEN
+											VAR_BuffString	:=	CONCAT(VAR_BuffString,UINT_TO_STRING(LIMIT(0,PRM_Valeur,9999)));
+										END_IF	
+									END_IF
+								END_IF
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						Var_lancement_timer_ONOFF := TRUE;
+					19:
+						(* lecture des parametres des relais*)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, USINT_TO_STRING(PRM_Relay));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString, '?');
+						CASE iCounter_Param_Relay_lecture OF 
+							0:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '2');
+							1:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '0');
+							2: 
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '1');             
+							3:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'8');
+						END_CASE
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+					20:
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						CASE iCounter_Param_ParDefaut_Relay_lecture OF 
+							0:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );	
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '1');	//relai
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, 'C');	//commande
+							1:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '2');	 //relai
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '2');     //commande
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '15');    //valeur
+							2:
+								VAR_BuffString		:=	CONCAT(VAR_BuffString,'T' );
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '2');	 //relai
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '3');	 //commande
+								VAR_BuffString		:=	CONCAT(VAR_BuffString, '25');    //valeur
+						END_CASE
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+						
+					21:	(* Demande de ouverture/fermeture rough valve *)
+						VAR_BuffString		:= 	'';
+						VAR_BuffString		:=	VAR_STR2;
+						IF CO_PumpTc THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'B1');
+						ELSIF NOT CO_PumpTc THEN
+							VAR_BuffString		:=	CONCAT(VAR_BuffString,'B0');
+						END_IF
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,CHECKSUM(VAR_BuffString,TRUE));
+						VAR_BuffString		:=	CONCAT(VAR_BuffString,'$0D');
+						OUT_Send_Data.SendString		:=	VAR_BuffString;
+	END_CASE	
+	
+
+	(*Envoi*)
+	OUT_Send_Data(TXbuffer:= OUT_Buffer);
+
+	(* Reset timer *)
+	VAR_ReceptionOk := FALSE;
+ELSE
+	IF CO_ModeManu AND CO_EnvoiManu THEN
+		OUT_Send_Data.SendString	:=	VAR_BuffString;
+		(*Envoi*)
+		OUT_Send_Data(TXbuffer:= OUT_Buffer);
+		CO_EnvoiManu		:=	FALSE;
+		VAR_ReceptionOk 	:= 	FALSE;
+	END_IF
+END_IF
+
+IF VAR_Mem_CO_Param_ParDefaut THEN 					(*paramètre de regen par defaut + envoie*)
+	PRM_PumpRestartDelay :=	0;                   
+	ID_COMBOBOX := 1;
+	PRM_ExtendedPurgeTime := 60;
+	PRM_RepurgeCycles:=  10;
+	PRM_RoughToPressure := 80;
+	PRM_ROR := 16;
+	PRM_RORCycles := 20;
+	PRM_StartUpTemperature := 45;
+	PRM_RoughValveInterlock := 0;
+	PRM_RepurgeTime := 10;
+	PRM_PumpStartDelay := 0.1;
+	VAR_Mem_CO_Ecriture:= TRUE;
+	VAR_Mem_CO_Param_ParDefaut:=FALSE;
+END_IF
+IF CO_ModeManu THEN               (*trame mode manu*)
+		VAR_STR1 		:= 	CHECKSUM(PRM_TrameManu ,FALSE);
+		VAR_STR2		:=	chr(36);
+		VAR_BuffString	:=	CONCAT(VAR_STR2,PRM_TrameManu);
+		VAR_BuffString	:=	CONCAT(VAR_BuffString,VAR_STR1);
+		VAR_BuffString	:=	CONCAT(VAR_BuffString,CHR(13));
+END_IF
+
+(*GESTION RECEPTION*)
+(*Réception*)
+IN_Receive_Data(
+	(*Prefix := chr(36),*)
+	Suffix:= chr(13),
+	Timeout:= T#1S,
+	Reset :=OFF,
+	ReceivedString := VAR_TrameRetour,
+	RXbuffer := IN_Buffer);
+ 
+	
+(*interprétation trame retour*)
+IF IN_Receive_Data.StringReceived THEN
+	IF NOT CO_ModeManu THEN
+		CASE VAR_Cadence OF
+
+			1: (* Demande état On/off pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Pompe	:=	(VAR_STR1 = '1');
+
+			2: (* Demande état regen pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Regen	:=	NOT((VAR_STR1 = 'V') OR (VAR_STR1 = 'P'));
+				IF (VAR_STR1 = 'P') THEN
+					STEP_Regen := 'REGEN COMPLETED';
+					STEP_REGEN_ID := 34;
+					Regen_completed:= TRUE;
+				ELSIF (VAR_STR1 = 'V') THEN
+					STEP_Regen := 'REGEN ABORTED';
+					STEP_REGEN_ID := 35;
+					Regen_completed:=FALSE;
+				END_IF
+				
+			3:  (* Demande erreur regen *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				IF (VAR_STR1 = 'B') THEN 
+							ID_ERREUR_REGEN := 58 ;
+							REGEN_ERROR := 'WARMUP TIMEOUT';
+				ELSIF (VAR_STR1 = '@')AND (CO_Regen = FALSE) THEN
+							ID_ERREUR_REGEN := 59;
+							REGEN_ERROR := 'NO ERROR'; 
+				ELSIF (VAR_STR1 = 'C') THEN
+							ID_ERREUR_REGEN := 60;
+							REGEN_ERROR := 'COOLDOWN TIMEOUT';
+				ELSIF (VAR_STR1 = 'D') THEN
+							ID_ERREUR_REGEN := 61;
+							REGEN_ERROR := 'ERROR IN ROR';
+				ELSIF (VAR_STR1 = 'E') THEN
+							ID_ERREUR_REGEN := 62;
+							REGEN_ERROR := 'ROR CYCLE LIMIT WAS REACHED';
+				ELSIF (VAR_STR1 = 'F') THEN 
+							ID_ERREUR_REGEN := 63;
+							//REGEN_ERROR := 'MANUAL ABORT';
+				ELSIF (VAR_STR1 = 'G') THEN
+							ID_ERREUR_REGEN := 64;
+							REGEN_ERROR := 'ROUGH VALVE TIMEOUT';
+				ELSIF (VAR_STR1 = 'H') THEN
+					ID_ERREUR_REGEN := 65;
+					REGEN_ERROR := 'system bug';
+				ELSE
+					ID_ERREUR_REGEN := 1000;
+				END_IF
+				VAR_Affichage1 := '';          						(*affichage de l'erreur, ce qui arreté la regen*)
+				VAR_Affichage2 := '';       
+				VAR_Affichage3 := '';
+				VAR_Affichage:= CONCAT(VAR_Affichage1, VAR_Affichage2);
+				VAR_Affichage:=CONCAT(VAR_Affichage, VAR_Affichage3);
+				
+			4: (* set rough valve*)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Rough_valve	:=	(VAR_STR1 = '1');
+			
+			5: (* set purge valve*)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Purge_valve	:=	(VAR_STR1 = '1');
+				
+			6: (* demande température étage 1*)
+				STATE_Temperature[0]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+
+			7: (* demande température étage 2*)
+				STATE_Temperature[1]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+				
+			8: (* demande pression*)
+				STATE_Pressure	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+			
+			9: (* set pump TC*)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				STATE_Pump_TC	:=	(VAR_STR1 = '1');
+				
+			10: (* Demande de regen ou arrêt regen d'une pompe *)
+				VAR_Mem_CO_StopRegen	:=	FALSE;
+				VAR_Mem_CO_Regen	:=	FALSE;
+				
+				
+			11: (* Demande de marche ou d'arrêt d'une pompe *)
+				VAR_Mem_CO_Off	:=	FALSE;
+				VAR_Mem_CO_On	:=	FALSE;
+				
+			12: (*ecriture parametre regen ecriture *)
+				VAR_Reception_Parametre := TRUE;
+				IF iCounter_Regen_ecriture = 0 THEN 
+					VAR_Mem_CO_Ecriture := FALSE;
+				END_IF
+				
+			13:  (* Demande lecture parametre regen pompe *)
+				VAR_Reception_Parametre := TRUE;
+				CASE iCounter_Regen_lecture OF 
+					0:
+						ID_COMBOBOX := STRING_TO_USINT(MID(VAR_TrameRetour,1,3));
+						(*PRM_PowerFailRecovery_lecture := STRING_TO_USINT(MID(VAR_TrameRetour,1,3));*)
+						PRM_PowerFailRecovery := STRING_TO_USINT(MID(VAR_TrameRetour,1,3));
+					1: 
+						PRM_StartUpTemperature := STRING_TO_USINT(MID(VAR_TrameRetour,2,8));
+					2:
+						PRM_PumpStartDelay := STRING_TO_REAL(MID(VAR_TrameRetour,4,4))/60;
+					3: 
+						PRM_PumpRestartDelay :=	STRING_TO_REAL(MID(VAR_TrameRetour,5,4))/60;                   (*ajouter la fonction lecture valeur*)
+					4:
+						PRM_ExtendedPurgeTime := STRING_TO_UINT(MID(VAR_TrameRetour,4,4));
+					5:
+						PRM_RepurgeCycles  := STRING_TO_USINT(MID(VAR_TrameRetour,2,4));
+					6: 
+						PRM_RepurgeTime := STRING_TO_USINT(MID(VAR_TrameRetour,4,4));
+					7:
+						PRM_ROR := STRING_TO_USINT(MID(VAR_TrameRetour,3,4));
+					8:
+						PRM_RORCycles := STRING_TO_USINT(MID(VAR_TrameRetour,2,4));
+					9:
+						PRM_RoughToPressure  :=	STRING_TO_USINT(MID(VAR_TrameRetour,3,4));
+					10:
+						PRM_RoughValveInterlock := STRING_TO_BOOL(MID(VAR_TrameRetour,1,3));
+					11:
+						PRM_1st_stage_control_temp := STRING_TO_USINT(MID(VAR_TrameRetour,6,4));
+				END_CASE
+				iCounter_Regen_lecture := iCounter_Regen_lecture + 1;
+				IF iCounter_Regen_lecture >=12 THEN
+					iCounter_Regen_lecture := 0;
+					VAR_Mem_CO_lecture := FALSE;
+					CO_Lecture:=FALSE;
+				END_IF
+				
+		
+						
+			14:  (* Demande étape regen pompe + affichage numérique*)
+				STATE_Regen:= NOT(VAR_STR1 = 'P' OR VAR_STR1 = 'V');
+				CASE iCounter_Valeur_Num_Regen OF
+					0:
+						VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+						IF (VAR_STR1 = 'A') OR (VAR_STR1 = '\')THEN 
+							STEP_Regen := 'CRYO OFF';
+							VAR_Affichage1 := '';          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := '';
+							STEP_REGEN_ID := 44 ;
+							ID_ERREUR_REGEN := 1000;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'B') OR (VAR_STR1 ='C')OR (VAR_STR1 = 'E') OR (VAR_STR1 ='Q') OR  (VAR_STR1 ='R') OR (VAR_STR1 ='^')  OR (VAR_STR1 =']') THEN 
+							STEP_Regen := 'WARM-UP';
+							VAR_Affichage1 := REAL_TO_STRING(STATE_Temperature[0]);          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := '/310K';
+							STEP_REGEN_ID := 26 ;
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'D') OR (VAR_STR1 ='F')OR (VAR_STR1 = 'G') THEN
+							STEP_Regen := 'PURGE GAS FAILURE';
+							STEP_REGEN_ID := 27 ;
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'H') AND (NB_FAIL_PURGE_REPURGE = 0 )THEN
+							STEP_Regen := 'PURGE';
+							STEP_REGEN_ID := 28 ;
+							VAR_Affichage1 := INT_TO_STRING(STATE_Tps_restant);          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := 'm';
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'H') AND (NB_FAIL_PURGE_REPURGE <> 0 )THEN
+							STEP_Regen := 'REPURGE';
+							STEP_REGEN_ID := 86 ;
+							VAR_Affichage1 := CONCAT('#',UINT_TO_STRING(NB_FAIL_PURGE_REPURGE));          
+							VAR_Affichage2 := INT_TO_STRING(STATE_Tps_restant);       
+							VAR_Affichage3 := ' m';
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'I') OR (VAR_STR1 ='J')OR (VAR_STR1 = 'K') OR (VAR_STR1 ='T') THEN
+							STEP_Regen := 'ROUGH TO BASE';
+							STEP_REGEN_ID := 29 ;
+							VAR_Affichage1 := REAL_TO_STRING(STATE_Pressure);          
+							VAR_Affichage2 := 'u/';       
+							VAR_Affichage3 := CONCAT(REAL_TO_STRING(PRM_RoughToPressure), 'μ');
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'L') THEN 
+							STEP_Regen := 'ROR';
+							STEP_REGEN_ID := 30 ;
+							VAR_Affichage1 := CONCAT('#',INT_TO_STRING(STATE_ROR_nb));          
+							VAR_Affichage2 := CONCAT(', ',INT_TO_STRING(LAST_ROR_Value));       
+							VAR_Affichage3 := CONCAT('/',INT_TO_STRING(PRM_ROR));
+							VAR_Affichage3 := CONCAT(VAR_Affichage3, ' μ/Min');
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'M') OR (VAR_STR1 ='N') THEN
+							STEP_Regen := 'COOLDOWN';
+							STEP_REGEN_ID := 31;
+							VAR_Affichage1 := REAL_TO_STRING(STATE_Temperature[0]);          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := '/17K';
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'W') THEN
+							STEP_Regen := 'DELAY RESTART';
+							STEP_REGEN_ID := 32;
+							VAR_Affichage1 := REAL_TO_STRING(STATE_Tps_restant);          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := 'm';
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'Z') THEN
+							STEP_Regen := 'DELAY START';
+							STEP_REGEN_ID := 33 ;
+							VAR_Affichage1 := INT_TO_STRING(STATE_Tps_restant);          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := 'm';
+							ID_ERREUR_REGEN := 1001;
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=FALSE;
+						ELSIF (VAR_STR1 = 'P') THEN
+							STATE_Regen := FALSE;
+							STEP_REGEN_ID := 34 ;
+							IF iCounter_Evitement_1ere_requete_regen <> 0 THEN
+								VAR_Mem_etape_Regen := FALSE;
+							END_IF
+							STEP_Regen := 'REGEN COMPLETED';
+							Regen_completed:=TRUE;
+							VAR_Demande_Erreur:=TRUE;
+						ELSIF (VAR_STR1 = 'V') THEN
+							STEP_Regen := 'REGEN ABORTED';
+							STEP_REGEN_ID := 35;
+							STATE_Regen := FALSE;
+							VAR_Affichage1 := '';          
+							VAR_Affichage2 := '';       
+							VAR_Affichage3 := '';
+							Regen_completed:=FALSE;
+							VAR_Demande_Erreur:=TRUE;
+						END_IF
+						VAR_Affichage:= CONCAT(VAR_Affichage1, VAR_Affichage2);
+						VAR_Affichage:=CONCAT(VAR_Affichage, VAR_Affichage3);
+						
+					1: (* demande température étage 2*)
+						STATE_Temperature[1]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+					2:	(* demande pression*)
+						STATE_Pressure	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+					3:
+							(* Demande erreur regen *)
+						IF VAR_Demande_Erreur THEN
+					 		VAR_STR1 :=	MID(VAR_TrameRetour,1,3);
+							IF (VAR_STR1 = 'B') THEN 
+								ID_ERREUR_REGEN := 58 ;
+								REGEN_ERROR := 'WARMUP TIMEOUT';         (* garde pour debugger l'ID avec les textlist prend le dessus dans l'IHM*)
+							ELSIF (VAR_STR1 = '@')AND (CO_Regen = FALSE) THEN
+								ID_ERREUR_REGEN := 59;
+								REGEN_ERROR := 'NO ERROR'; 
+							ELSIF (VAR_STR1 = 'C') THEN
+								ID_ERREUR_REGEN := 60;
+								REGEN_ERROR := 'COOLDOWN TIMEOUT';
+							ELSIF (VAR_STR1 = 'D') THEN
+								ID_ERREUR_REGEN := 61;
+								REGEN_ERROR := 'ERROR IN ROR';
+							ELSIF (VAR_STR1 = 'E') THEN
+								ID_ERREUR_REGEN := 62;
+								REGEN_ERROR := 'ROR CYCLE LIMIT WAS REACHED';
+							ELSIF (VAR_STR1 = 'F') THEN 
+								ID_ERREUR_REGEN := 63;
+								REGEN_ERROR := 'MANUAL ABORT';
+							ELSIF (VAR_STR1 = 'G') THEN
+								ID_ERREUR_REGEN := 64;
+								REGEN_ERROR := 'ROUGH VALVE TIMEOUT';
+							ELSIF (VAR_STR1 = 'H') THEN
+								ID_ERREUR_REGEN := 65;
+								REGEN_ERROR := 'system bug';
+							ELSE
+								ID_ERREUR_REGEN := 1001;
+							END_IF
+						END_IF	
+					4:  (* tps restant pour les étapes avec une durée*)
+						STATE_Tps_restant := STRING_TO_INT(MID(VAR_TrameRetour,3,4));
+					5:  (*nb de test ROR effectué*)
+						STATE_ROR_nb := STRING_TO_INT(MID(VAR_TrameRetour,2,4));
+					6:
+						LAST_ROR_Value := STRING_TO_INT(MID(VAR_TrameRetour,3,4));
+					7:
+						VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+						STATE_Pompe	:=	(VAR_STR1 = '1');
+					8: (* set rough valve*)
+						VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+						STATE_Rough_valve	:=	(VAR_STR1 = '1');
+			
+					9: (* set purge valve*)
+						VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+						STATE_Purge_valve	:=	(VAR_STR1 = '1');
+					10: 
+						NB_FAIL_PURGE_REPURGE	:=	STRING_TO_UINT(MID(VAR_TrameRetour,2,4));
+					11: (* demande température étage 1*)
+						STATE_Temperature[0]	:=	STRING_TO_REAL(MID(VAR_TrameRetour,6,4));
+				END_CASE
+				iCounter_Valeur_Num_Regen:= iCounter_Valeur_Num_Regen+1;
+				IF iCounter_Valeur_Num_Regen>=12 THEN
+					iCounter_Valeur_Num_Regen:=0;
+				END_IF	
+				iCounter_Evitement_1ere_requete_regen := iCounter_Evitement_1ere_requete_regen+1;
+			15:
+				VAR_Mem_CO_RoughValve_on	:=	FALSE;
+				VAR_Mem_CO_RoughValve_off	:=	FALSE;
+			16:
+				VAR_Mem_CO_PurgeValve_on	:=	FALSE;
+				VAR_Mem_CO_PurgeValve_off	:=	FALSE;
+			
+			17:
+				CASE iCounter_Info_Pompe OF
+					0:
+						Pump_Serial_Number := MID(VAR_TrameRetour,8,3);
+					1:
+						Pump_Serial_Number_affiche := CONCAT(Pump_Serial_Number,MID(VAR_TrameRetour,4,3));
+					2:
+						Number_Of_Complete_Regen := STRING_TO_UINT(MID(VAR_TrameRetour,4,4));
+					3:
+						Time_Since_Last_Regen := STRING_TO_UINT(MID(VAR_TrameRetour,4,4));
+					4:
+						SoftwareRevisionLevel := MID(VAR_TrameRetour,7,3);
+					5:
+						ElaspedTime := STRING_TO_UINT(MID(VAR_TrameRetour,6,4));
+				END_CASE
+				iCounter_Info_Pompe:=iCounter_Info_Pompe+1;
+				IF iCounter_Info_Pompe >=6 THEN
+					iCounter_Info_Pompe:=0;
+					VAR_Mem_CO_Info_Pompe := false;
+				END_IF
+				
+			18: 
+				VAR_Reception_Parametre := TRUE;
+				VAR_Mem_CO_Envoie_Param_Relay := FALSE;
+				
+			19:
+				TIMER_Delay_Relay.IN := PRM_Mode;
+				TIMER_Delay_Relay.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+				TIMER_Delay_Relay();
+				IF TIMER_Delay_Relay.Q  THEN
+					TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+					PRM_Mode := FALSE;
+				END_IF
+				VAR_Reception_Parametre := TRUE;
+				CASE iCounter_Param_Relay_lecture OF 
+					0:
+						VAR_Derniere_commande_Relay := MID(VAR_TrameRetour,1,3);
+					1:
+						VAR_Affichage_ValeurUL_Relay := lecture_valeur(VAR_TrameRetour);
+					2: 
+						VAR_Affichage_ValeurLL_Relay := lecture_valeur(VAR_TrameRetour);                 
+					3:
+						VAR_Affichage_ValeurTIME_Relay := lecture_valeur(VAR_TrameRetour);
+				END_CASE
+				iCounter_Param_Relay_lecture := iCounter_Param_Relay_lecture+1;
+				IF iCounter_Param_Relay_lecture >= 4 THEN
+					iCounter_Param_Relay_lecture := 0;
+					VAR_Mem_CO_Lecture_Relay:=FALSE;
+				END_IF
+				IF VAR_Derniere_commande_Relay = '0' OR VAR_Derniere_commande_Relay = '1' THEN
+					VAR_Affichage_Commande_Relay := 70;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+					VAR_Affichage_Valeur_Relay := CONCAT('LL=', VAR_Affichage_ValeurUL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, '°K, UL=');
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, VAR_Affichage_ValeurLL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, '°K');
+				ELSIF VAR_Derniere_commande_Relay = '2' OR VAR_Derniere_commande_Relay = '3' THEN
+					VAR_Affichage_Commande_Relay := 71;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+					VAR_Affichage_Valeur_Relay := CONCAT('LL=', VAR_Affichage_ValeurUL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, '°K, UL=');
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, VAR_Affichage_ValeurLL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, '°K');
+				ELSIF VAR_Derniere_commande_Relay = '4' OR VAR_Derniere_commande_Relay = '5' THEN
+					VAR_Affichage_Commande_Relay := 72;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+					VAR_Affichage_Valeur_Relay := CONCAT('LL=', VAR_Affichage_ValeurUL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, 'u, UL=');
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, VAR_Affichage_ValeurLL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, 'u');
+				ELSIF VAR_Derniere_commande_Relay = '6' OR VAR_Derniere_commande_Relay = '7' THEN
+					VAR_Affichage_Commande_Relay := 73;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+					VAR_Affichage_Valeur_Relay := CONCAT('LL=', VAR_Affichage_ValeurUL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, 'u, UL=');
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, VAR_Affichage_ValeurLL_Relay);
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_Valeur_Relay, 'u');
+				ELSIF VAR_Derniere_commande_Relay = '8' THEN
+					VAR_Affichage_Commande_Relay := 74;
+					VAR_Affichage_Valeur_Relay := CONCAT(VAR_Affichage_ValeurTIME_Relay, ' sec');
+				ELSIF VAR_Derniere_commande_Relay = 'A' THEN
+					VAR_Affichage_Commande_Relay := 75;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := TRUE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := FALSE;
+					VAR_Affichage_Valeur_Relay := '';
+				ELSIF VAR_Derniere_commande_Relay = 'B' THEN
+					VAR_Affichage_Commande_Relay := 76;
+					VAR_Affichage_Valeur_Relay := '';
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := FALSE;
+				ELSIF VAR_Derniere_commande_Relay = 'C' THEN
+					VAR_Affichage_Commande_Relay := 77;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					VAR_Affichage_Valeur_Relay := 'ON';
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+				ELSIF VAR_Derniere_commande_Relay = 'D' THEN
+					VAR_Affichage_Commande_Relay := 78;
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					VAR_Affichage_Valeur_Relay := 'ON';
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+				ELSIF VAR_Derniere_commande_Relay = 'F' THEN
+					VAR_Affichage_Commande_Relay := 79;
+					VAR_Affichage_Valeur_Relay := 'ON';
+					TIMER_Delay_Relay2.IN := Var_lancement_timer_ONOFF;
+					TIMER_Delay_Relay2.PT := UINT_TO_TIME(STRING_TO_UINT(VAR_Affichage_ValeurTIME_Relay)*1000);
+					TIMER_Delay_Relay2();
+					IF TIMER_Delay_Relay2.Q  THEN
+						TAB_Affichage_Etat_Relay[PRM_Relay] := FALSE;
+						Var_lancement_timer_ONOFF := FALSE;
+					END_IF
+					TAB_Affichage_Mode_relay[PRM_Relay] := TRUE;
+				END_IF
+			20:
+				iCounter_Param_ParDefaut_Relay_lecture:= iCounter_Param_ParDefaut_Relay_lecture+1;
+				IF iCounter_Param_ParDefaut_Relay_lecture>=3 THEN
+					iCounter_Param_ParDefaut_Relay_lecture:=0;
+					VAR_Mem_CO_Param_usine_Relay:=false;
+				END_IF
+			21:
+				VAR_Mem_CO_pumpTC_On	:=	FALSE;
+				VAR_Mem_CO_pumpTC_Off	:=	FALSE;
+		END_CASE
+
+		(*trame suivante*)
+		IF NOT CO_Forcage THEN
+			IF VAR_Mem_CO_Off OR VAR_Mem_CO_On THEN
+				VAR_Cadence := 11;
+			ELSIF VAR_Mem_CO_RoughValve_On OR VAR_Mem_CO_RoughValve_Off THEN
+				VAR_Cadence := 15;
+			ELSIF VAR_Mem_CO_PurgeValve_On OR VAR_Mem_CO_PurgeValve_Off THEN
+				VAR_Cadence := 16;
+			ELSIF VAR_Mem_CO_pumpTC_On OR VAR_Mem_CO_pumpTC_Off THEN
+				VAR_Cadence := 21;
+			ELSIF VAR_Mem_CO_Ecriture THEN
+				VAR_Cadence := 12;
+			ELSIF VAR_Mem_CO_Lecture THEN
+				VAR_Cadence := 13;
+			ELSIF VAR_Mem_CO_Info_Pompe THEN
+				VAR_Cadence := 17;
+			ELSIF VAR_Mem_CO_Regen OR Var_Mem_CO_StopRegen THEN
+				VAR_Cadence := 10;
+			ELSIF VAR_Mem_Etape_Regen THEN
+				VAR_Cadence := 14;
+			ELSIF VAR_Mem_CO_Envoie_Param_Relay THEN
+				VAR_Cadence := 18;
+			ELSIF VAR_Mem_CO_Param_usine_Relay THEN
+				VAR_Cadence := 20;
+			ELSIF VAR_Mem_CO_Lecture_Relay THEN
+				VAR_Cadence := 19;
+			ELSE
+				VAR_Cadence := VAR_Cadence + 1;
+				IF VAR_Cadence >= 10 THEN
+					VAR_Cadence	:=	1;
+					STOP_LOAD:= TRUE;
+				END_IF
+			END_IF
+		ELSE
+			VAR_Cadence 	 := 	CONF_Forcage;
+		END_IF
+	ELSE
+		IF CO_ModeManu THEN													(* gestion retour commande du mode manu*)
+		IF PRM_TrameManu = 'A?' THEN
+				(* Demande état On/off pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				Reponse_ModeManu	:=	BOOL_TO_STRING((VAR_STR1 = '1'));
+		ELSIF PRM_TrameManu = 'O' THEN
+				(* Demande état regen pompe *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				IF (VAR_STR1 = 'B') OR (VAR_STR1 ='C')OR (VAR_STR1 = 'E') OR (VAR_STR1 ='Q') OR  (VAR_STR1 ='R') OR (VAR_STR1 ='^')  OR (VAR_STR1 =']') THEN 
+					Reponse_ModeManu := 'WARM-UP'; 
+				ELSIF (VAR_STR1 = 'D') OR (VAR_STR1 ='F')OR (VAR_STR1 = 'G') THEN
+					Reponse_ModeManu := 'PURGE GAS FAILURE';
+				ELSIF (VAR_STR1 = 'H') THEN
+					Reponse_ModeManu := 'REPURGE';
+				ELSIF (VAR_STR1 = 'I') OR (VAR_STR1 ='J')OR (VAR_STR1 = 'K') OR (VAR_STR1 ='T') THEN
+					Reponse_ModeManu := 'ROUGH TO BASE';
+				ELSIF (VAR_STR1 = 'L') THEN 
+					Reponse_ModeManu := 'ROR';
+				ELSIF (VAR_STR1 = 'M') OR (VAR_STR1 ='N') THEN
+					Reponse_ModeManu := 'COULDOWN';
+				ELSIF (VAR_STR1 = 'W') THEN
+					Reponse_ModeManu := 'DELAY RESTART';
+				ELSIF (VAR_STR1 = 'Z') THEN
+					Reponse_ModeManu := 'DELAY START';
+				ELSIF (VAR_STR1 = 'P') THEN
+					Reponse_ModeManu := 'REGEN COMPLETED';
+				ELSIF (VAR_STR1 = 'V') THEN
+					Reponse_ModeManu := 'REGEN ABORTED';
+				END_IF
+
+		ELSIF PRM_TrameManu = 'J' THEN
+				(* demande température étage 1*)
+				Reponse_ModeManu	:=	REAL_TO_STRING(STRING_TO_REAL(MID(VAR_TrameRetour,6,4)));
+		ELSIF PRM_TrameManu = 'K' THEN
+				(* demande température étage 2*)
+				Reponse_ModeManu	:=	REAL_TO_STRING(STRING_TO_REAL(MID(VAR_TrameRetour,6,4)));
+		ELSIF PRM_TrameManu = 'L' THEN		
+				(* demande pression*)
+				Reponse_ModeManu	:=	REAL_TO_STRING(STRING_TO_REAL(MID(VAR_TrameRetour,6,4)));
+		ELSIF PRM_TrameManu = 'e' THEN		
+				(* Demande erreur regen *)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				IF (VAR_STR1 = 'B') THEN 
+					Reponse_ModeManu := 'WARMUP TIMEOUT';
+				ELSIF (VAR_STR1 = '@') THEN
+					Reponse_ModeManu := 'NO ERROR'; 
+				ELSIF (VAR_STR1 = 'C') THEN
+					Reponse_ModeManu := 'COOLDOWN TIMEOUT';
+				ELSIF (VAR_STR1 = 'D') THEN
+					Reponse_ModeManu := 'ERROR IN ROR';
+				ELSIF (VAR_STR1 = 'E') THEN
+					Reponse_ModeManu := 'ROR CYCLE LIMIT WAS REACHED';
+				ELSIF (VAR_STR1 = 'F') THEN 
+					Reponse_ModeManu := 'MANUAL ABORT';
+				ELSIF (VAR_STR1 = 'G') THEN
+					REGEN_ERROR := 'ROUGH VALVE TIMEOUT';
+				ELSIF (VAR_STR1 = 'H') THEN
+					Reponse_ModeManu := 'system bug';
+				END_IF
+				
+		ELSIF PRM_TrameManu ='P1?' OR PRM_TrameManu ='P0?'OR PRM_TrameManu ='P2?'OR PRM_TrameManu ='P3?'OR PRM_TrameManu ='P4?'OR PRM_TrameManu ='P5?' OR PRM_TrameManu = 'P6?' OR PRM_TrameManu = 'PA?'  OR PRM_TrameManu = 'PG?' OR PRM_TrameManu = 'i?' OR PRM_TrameManu = 'j?'THEN					
+				(* Demande lecture parametre regen pompe en mode manuel *)
+				IF MID(PRM_TrameManu,1,2)='A' THEN
+					Reponse_ModeManu := BOOL_TO_STRING(STRING_TO_BOOL(MID(VAR_TrameRetour,1,3)));
+				ELSIF MID(PRM_TrameManu,1,2)= 'G' THEN
+					Reponse_ModeManu := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,4,4)));
+				ELSIF MID(PRM_TrameManu,1,1)= 'i' THEN
+					Reponse_ModeManu := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,1,3)));
+				ELSIF MID(PRM_TrameManu,1,1)= 'j' THEN
+					Reponse_ModeManu := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,4,4)));
+				ELSE
+					iCounter_ModeManu_lectureRegen := STRING_TO_INT(MID(PRM_TrameManu,1,3));
+				CASE iCounter_ModeManu_lectureRegen OF 
+					0: 
+						Reponse_ModeManu :=	UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,5,4)));                   (*ajouter la fonction lecture valeur*)
+					1:
+						Reponse_ModeManu := UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,4,4)));
+					2:
+						Reponse_ModeManu  := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,2,4)));
+					3:
+						Reponse_ModeManu  :=USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,3,4)));
+					4:
+						Reponse_ModeManu := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,3,4)));
+					5:
+						Reponse_ModeManu := USINT_TO_STRING(STRING_TO_USINT(MID(VAR_TrameRetour,2,4))); 
+					6:
+						Reponse_ModeManu := UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,6,4)));
+				END_CASE
+				END_IF
+			ELSIF PRM_TrameManu = 'D?'  THEN	
+				(* read rough valve*)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				Reponse_ModeManu	:=	BOOL_TO_STRING(VAR_STR1 = '1');
+			ELSIF PRM_TrameManu = 'E?'  THEN	
+				(* read purge valve*)
+				VAR_STR1	:=	MID(VAR_TrameRetour,1,3);
+				Reponse_ModeManu	:=	BOOL_TO_STRING(VAR_STR1 = '1');
+			ELSIF PRM_TrameManu = 'N1' OR PRM_TrameManu = 'N0' THEN		
+				(* Demande de regen ou arrêt regen d'une pompe *)
+				VAR_Mem_CO_StopRegen	:=	FALSE;
+				VAR_Mem_CO_Regen	:=	FALSE;
+				Reponse_ModeManu := 'Ok';
+			ELSIF PRM_TrameManu = 'A1' OR PRM_TrameManu = 'A0' THEN		
+				(* Demande de marche ou d'arrêt d'une pompe *)
+				VAR_Mem_CO_Off	:=	FALSE;
+				VAR_Mem_CO_On	:=	FALSE;
+				Reponse_ModeManu := 'Ok';
+			ELSIF MID(PRM_TrameManu,1,1) = 'P' OR MID(PRM_TrameManu,1,1) = 'i' OR MID(PRM_TrameManu,1,1) = 'j'   THEN	
+				VAR_Reception_Parametre := TRUE;
+				IF iCounter_Regen_ecriture = 0 THEN 
+					VAR_Mem_CO_Ecriture := FALSE;
+				END_IF
+				Reponse_ModeManu := 'Ok';
+			ELSIF PRM_TrameManu = 'D1' OR PRM_TrameManu ='D0' THEN	
+				VAR_Mem_CO_RoughValve_on	:=	FALSE;
+				VAR_Mem_CO_RoughValve_off	:=	FALSE;
+				Reponse_ModeManu := 'Ok';
+			ELSIF PRM_TrameManu = 'E1' OR PRM_TrameManu ='E0' THEN	
+				VAR_Mem_CO_PurgeValve_on	:=	FALSE;
+				VAR_Mem_CO_PurgeValve_off	:=	FALSE;
+				Reponse_ModeManu := 'Ok';
+			
+			ELSIF PRM_TrameManu = 'Z?'  THEN
+				Reponse_ModeManu := UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,4,4)));
+			ELSIF PRM_TrameManu = 'VA?'  THEN
+				Reponse_ModeManu := MID(VAR_TrameRetour,8,3);
+			ELSIF PRM_TrameManu = 'VQ?'  THEN
+				Reponse_ModeManu := MID(VAR_TrameRetour,4,3);
+			ELSIF PRM_TrameManu = 'Y?'  THEN
+				Reponse_ModeManu := UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,6,4)));
+			ELSIF PRM_TrameManu = 'a'  THEN
+				Reponse_ModeManu := UINT_TO_STRING(STRING_TO_UINT(MID(VAR_TrameRetour,4,4)));
+			ELSIF PRM_TrameManu = '@'  THEN
+				Reponse_ModeManu := MID(VAR_TrameRetour,7,3);
+			END_IF
+		END_IF
+	END_IF
+
+	VAR_ReceptionOk := TRUE;
+
+	(*Effacement buffer réception*)
+	VAR_ClearBuffer(Buffer := IN_Buffer);
+END_IF
+
+(* GESTION COMMUNICATION *)
+VAR_COMportControl(
+	Mode:= SERIALLINEMODE_PC_COM_PORT,
+	pComIn:= ADR(IN_COM),
+	pComOut:= ADR(OUT_COM),
+	SizeComIn:=SIZEOF(IN_COM),
+	TxBuffer:= OUT_Buffer,
+	RxBuffer:= IN_Buffer,
+	Error=> VAR_COMportControlError,
+	ErrorID=> VAR_COMportControlErrorID );
+
+(*GESTION DEFAUTS*)
+Def_port_com.DELAY :=T#0s;
+Def_port_com.CONDITION := VAR_COMportControlError;
+Def_port_com();
+
+(*Etat*)
+STATE_Ready		:=	NOT OFF;
+STATE_NOK		:=	Def_port_com.DEF;
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <DUT Name="STRUCT_ClientConnect" Id="{6bdb8e87-5780-446d-9516-e846d3bccc45}">
+    <Declaration><![CDATA[(*structure de variable associée à la gestion d'un client TCPIP*)
+TYPE STRUCT_ClientConnect :
+STRUCT
+	fbConnectTON:		TON;	(*temporisation de reconnexion sur le client*)
+	fbDataExchaTON:		TON;		(*temporisation cyclique de requête sur le client*)
+	eStep:				E_ClientSteps;	(*Etat de la séquence de gestion du client*)
+	bBusy:				BOOL;	(*indicateur de gestion du client*)
+	bError:				BOOL;	(*indicateur d'erreur*)
+	nErrid:				UDINT;	(*N° d'erreur*)
+	ErrDescription		: T_MAXSTRING;
+	bEnable				:BOOL;	(*autorisation de lecture cyclique des paramètres*)
+	bConnected:			BOOL;	(*etat de connexion*)
+	nStepInError:			UDINT;	(*N° d'étape en erreur*)
+	nRequest:			UINT;	(*N° de requete à envoyer*)
+	fbConnect			: FB_SocketConnect := ( sSrvNetId := ''  );
+	fbClose				: FB_SocketClose := ( sSrvNetId := '', tTimeout := DEFAULT_ADS_TIMEOUT );
+	fbClientDataExcha		: BLOCK_XTC_CLIENT_EXCHANGE;
+	hSocket				: T_HSOCKET;
+	ConnectTime			: TIME;	(*Valeur de la temporisation avant reconnexion du port*)
+	ExchangeCycleTime	: TIME;	(*Valeur de temporisation d'échange*)
+	Compteur_connection	: UDINT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

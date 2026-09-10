@@ -1,0 +1,140 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_EcoMode" Id="{4e113988-9321-43c0-8b72-edce0f3adacc}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Activation Eco-veille"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Activation Eco-veille</v>
+                <v>Eco-sleep activation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Temps inav"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'inactivité avant Eco-veille</v>
+                <v>Inactivity time before eco-sleep</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Process deep eco-sleep"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Procédé Eco-veille profond</v>
+                <v>Deep eco-sleep process</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Record"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Enregistrement</v>
+                <v>Record</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Select"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>...</v>
+                <v>...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Canon actif"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Evap. active</v>
+                <v>Evap. on</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"On/Off"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Activation/Désactivation</v>
+                <v>On/Off</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Evap On/Off"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Activation/Désactivation Evap.</v>
+                <v>Evap. On/Off</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Eco Mode"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Eco-veille</v>
+                <v>Eco-sleep</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Config"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Configuration</v>
+                <v>Configuration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Eco Mode actif"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Eco-veille actif</v>
+                <v>Eco-sleep On</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"Inactivité"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Inactivité :</v>
+                <v>Inactivity :</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">" Lancement du procédé eco-veille profond à l'issue de la production"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v> Lancement du procédé Eco-veille profond à l'issue de la production</v>
+                <v>Start the deep eco-sleep process at the end of the production</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{0be8c7d0-6149-443d-9b6e-039de1074588}</v>
+          <v n="GuidReInit">{fb6c7c91-6a59-4191-897d-83a869f58186}</v>
+          <v n="GuidExitX">{1307a6de-f010-430a-bedb-1219574197c1}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

@@ -1,0 +1,152 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <TextList Name="TextList_Navigation" Id="{c226c0a9-96ce-4186-b78d-b2b4a426ad0d}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Syn pomp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Synoptique
+Pompage</v>
+                <v>Pumping
+Synoptic</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Syn proc"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Synoptique
+Procédé</v>
+                <v>Process
+Synoptic</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"SA"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Conf pomp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage</v>
+                <v>Pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Conf evap"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Evaporation</v>
+                <v>Evaporation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Conf mvts"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mouvements</v>
+                <v>Movements</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"sa pomp ch"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage chambre</v>
+                <v>Chamber pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"sa pomp sas"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage sas</v>
+                <v>Loadlock pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Conf gaz	"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz</v>
+                <v>Gas</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Conf IAD"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>IAD</v>
+                <v>IAD</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Conf Chauf"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Chauffage</v>
+                <v>Heating</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"Effluvage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Effluvage</v>
+                <v>Glow discharge</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"Conf Serv"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Servitudes</v>
+                <v>Easements</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"Cryo"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Cryo</v>
+                <v>Cryo</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{5e89b7d8-aecf-4f60-8414-27a305116775}</v>
+          <v n="GuidReInit">{b0774a80-4e34-4b62-9dc1-41eb0c88d9f6}</v>
+          <v n="GuidExitX">{87f9e990-e03c-496f-b1d4-cb118d56634a}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

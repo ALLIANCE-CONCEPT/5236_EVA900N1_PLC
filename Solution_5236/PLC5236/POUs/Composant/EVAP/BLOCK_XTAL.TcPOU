@@ -1,0 +1,167 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_XTAL" Id="{645da3ce-f08b-4d37-9232-09e5a3b8a020}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_XTAL
+VAR_INPUT
+	I_APPLY_PARAMETER:		BOOL;
+
+	RESET:					BOOL;
+	MANUAL:					BOOL;
+	CO_OUV_CACHE:			BOOL;		(*Demande d'ouverture du cache*)
+
+	IN_QF:					BOOL;		(*Quartz en panne*)
+	IN_RATE:				REAL;		(*Vitesse de dépot mesurée sur le quartz*)
+	IN_FREQ:				REAL;		(*Frequence du quartz*)
+	IN_THICKNESS:			REAL;		(*Epaisseur*)
+	IN_LIFE:				REAL;		(*Vie du quartz*)
+	IN_ACTIVITY:			REAL;		(*Activité du quartz*)
+	IN_ACTIVE_CRYSTAL:		USINT;		(*Numéro du crystal active*)
+
+	(*Consigne*)
+	CONS_MATERIAL:	 		STRING;		(*Materiau*)
+	CONS_POID:				REAL;		(*Poids du quartz pour la calcul du quartz*)
+	CONS_ZRATIO:			REAL;		(*Valeur du Zratio*)
+	CONS_DENSITE:			REAL;		(*Valeur de densité*)
+	CONS_TOOLING:			REAL;		(*Facteur de correction de chaque quartz*)
+
+(*Défauts*)
+	DEF_QZ:					PRCDEF;	(*Défaut quartz*)
+
+(*Alarme*)
+	ALM_SURV_ACTIVITY:		PRCDEF;		(*Alarme surveillance activité quartz*)
+	ALM_SURV_LIFE:			PRCDEF;		(*Alarme surveillance vie quartz*)
+(*Evenements*)
+	EV_SWITCH_XTAL:			PRCDEF;		(*Evenement en cas de basculement sur le quartz principal*)
+	EV_SWITCH_BACKUP:		PRCDEF;		(*Evenement en cas de basculement sur le quartz de secours*)
+
+(*Opérations*)
+	CQZ:					BLOCK_ACTUATOR2;
+
+END_VAR
+
+VAR_OUTPUT
+	STATE_LIFE:				REAL;
+	STATE_ACTIVITY:			REAL;
+	STATE_FREQUENCY:		REAL;
+	STATE_THICKNESS:		REAL;
+	STATE_RATE:				REAL;
+	STATE_MATERIAL:			STRING;
+	STATE_NOK:				BOOL;
+	OUT_MATERIAL:			STRING;
+	OUT_POIDS:				REAL;
+	OUT_ZRATIO:				REAL;
+	OUT_DENSITE:			REAL;
+	OUT_TOOLING:			REAL;
+
+	OUT_CQZ AT%Q*:			BOOL;		(*Ouverture du cache Quartz *)
+
+
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:	BOOL;			(*entité : composant*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+
+	PRM_Seuil_Life:			REAL;	(*Seuil d'alarme pour la vie du quartz*)
+	PRM_Seuil_Activity:		REAL;	(*Seuil d'alarme pour l'activité du quartz*)
+END_VAR
+
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[TagXML:= 9;
+IdXML:=	'16';
+DEF_QZ.IdXML := '14';
+DEF_QZ.TagXML := 3;
+
+CQZ.IdParent:= MNEMO;
+CQZ.IdXML := '4';
+CQZ.TagXML := 1;
+
+(*Défaut*)
+CQZ.DEF_Off_Auto.IdXml		:=	'3';
+CQZ.DEF_Off_Auto.TagXml		:=	10;
+CQZ.DEF_On_imposs.IdXml		:=	'3';
+CQZ.DEF_On_imposs.TagXml	:=	5;
+CQZ.DEF_Off_imposs.IdXml	:=	'3';
+CQZ.DEF_Off_imposs.TagXml	:=	8;
+
+(*Alarme surveillance*)
+ALM_SURV_ACTIVITY.IdXml		:=	'0';
+ALM_SURV_ACTIVITY.TagXml	:=	8;
+ALM_SURV_ACTIVITY.Groupe	:=	1;
+
+ALM_SURV_LIFE.IdXML			:=	'0';
+ALM_SURV_LIFE.TagXML		:=	8;
+ALM_SURV_LIFE.Groupe		:= 	1;
+
+EV_SWITCH_XTAL.IdXML		:=	'14';
+EV_SWITCH_XTAL.TagXML		:=	23;
+EV_SWITCH_XTAL.Groupe		:=	3;
+
+EV_SWITCH_BACKUP.IdXML		:=	'14';
+EV_SWITCH_BACKUP.TagXML		:=	22;
+EV_SWITCH_BACKUP.Groupe		:= 	3;
+
+IF I_APPLY_PARAMETER THEN
+	OUT_DENSITE 	:=	CONS_DENSITE;
+	OUT_POIDS		:=	CONS_POID;
+	OUT_ZRATIO		:=	CONS_ZRATIO;
+	OUT_MATERIAL	:= 	CONS_MATERIAL;
+	OUT_TOOLING		:=	CONS_TOOLING;
+END_IF
+
+CQZ(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	CO_On:=CO_OUV_CACHE ,
+	EN_On_INT:=TRUE,
+	EN_Off_INT:= TRUE,
+	CONF_No_Safety_Auto:=FALSE ,
+	CONF_EN_On:= 0 ,
+	CONF_Tim_Valid_On:= T#0ms,
+	CONF_Tim_Valid_Off:= T#0ms
+);
+
+OUT_CQZ:= CQZ.OUT_On;
+
+
+STATE_FREQUENCY	:= 	IN_FREQ;
+STATE_RATE		:= 	IN_RATE;
+STATE_THICKNESS	:= 	IN_THICKNESS;
+STATE_LIFE			:=	IN_LIFE;
+STATE_ACTIVITY	:= 	IN_ACTIVITY;
+STATE_MATERIAL	:=	OUT_MATERIAL;
+STATE_NOK			:=	DEF_QZ.DEF;
+
+(*Alarme Activité < Seuil d'activité limite*)
+ALM_SURV_ACTIVITY.CONDITION	:=	(IN_ACTIVITY < PRM_Seuil_Activity);
+ALM_SURV_ACTIVITY();
+
+(*Alarme Vie > Seuil de vie limite*)
+ALM_SURV_LIFE.CONDITION	:=	(IN_LIFE > PRM_Seuil_Life);
+ALM_SURV_LIFE();
+
+(*Evenement en cas de basculement sur le quartz principal*)
+EV_SWITCH_XTAL.CONDITION		:=	CQZ.STATE_Off;
+EV_SWITCH_XTAL();
+
+(*Evenement en cas de basculement sur le quartz de secours*)
+EV_SWITCH_BACKUP.CONDITION	:=	CQZ.STATE_On;
+EV_SWITCH_BACKUP();
+
+
+DEF_QZ(
+		CONDITION:=	IN_QF,
+		DELAY:=			T#0s);]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_XTAL">
+      <LineId Id="72" Count="84" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

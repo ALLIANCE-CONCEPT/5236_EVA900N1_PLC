@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="LOG_EVENT" Id="{21dd757c-744e-41f9-a297-f1472e4fd8f8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION LOG_EVENT : BOOL
+VAR_INPUT
+	_ID:		UINT;	(*indentifiant du défaut*)
+	_VAL1:	STRING;
+	_VAL2:	STRING;
+	_VAL3:	STRING;
+	_TYPE:	BOOL;	(*0=disparition , 1= apparition*)
+END_VAR
+VAR
+	I:	UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	FOR I:=0 TO 99 DO
+		IF PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._ID = 0 THEN
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._ID:=_ID;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._VAL1:=_VAL1;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._VAL2:=_VAL2;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._VAL3:=_VAL3;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._TYPE:=_TYPE;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._HORODAT:= PRG_SEC._date;
+			PRG_DEF_MANAGEMENT.EVENT_MAILBOX[i]._MS:=PRG_SEC._ms;
+			EXIT;
+		END_IF
+		(*PRG_DEF_MANAGEMENT.EVENT_MAILBOX_FULL;*)
+	END_FOR]]></ST>
+    </Implementation>
+    <LineIds Name="LOG_EVENT">
+      <LineId Id="11" Count="12" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

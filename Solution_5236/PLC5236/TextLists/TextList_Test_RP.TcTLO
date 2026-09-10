@@ -1,0 +1,92 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Test_RP" Id="{807aab10-fa02-44ce-8175-c92933fa0975}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"tes trp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Test de remontée de pression</v>
+                <v>Pressure rise test</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"init"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression initiale</v>
+                <v>Initial pressure</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"tps isol"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée d'isolement</v>
+                <v>Standby duration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"volume"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Volume</v>
+                <v>Volume</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"tps ecoul"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée écoulée</v>
+                <v>Elapsed time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"result"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Résultat :</v>
+                <v>Result:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"arret"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt</v>
+                <v>Stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{2f4c1e67-36a8-40b8-b22b-89c2edb36327}</v>
+          <v n="GuidReInit">{c3ab870b-d271-44e7-8b84-b6170cb90c42}</v>
+          <v n="GuidExitX">{e644f2b4-5e1d-42c4-8f90-d6cd15c9dab4}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

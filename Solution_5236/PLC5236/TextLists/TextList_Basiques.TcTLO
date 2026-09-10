@@ -1,0 +1,222 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <TextList Name="TextList_Basiques" Id="{f858b758-ab46-4477-97dd-d76d30a4cb47}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"OK"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>OK</v>
+                <v>OK</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Annul"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Annuler</v>
+                <v>Cancel</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Modifier"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Modifier</v>
+                <v>Modify</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Oui"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Oui</v>
+                <v>Yes</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Non"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Non</v>
+                <v>No</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Créer..."</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Créer...</v>
+                <v>Create...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Modifier..."</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Modifier...</v>
+                <v>Modify...</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Supprimer"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Supprimer</v>
+                <v>Delete</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Fermer"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fermer</v>
+                <v>Close</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Nom"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nom</v>
+                <v>Name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Prénom"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Prénom</v>
+                <v>First name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"Créer"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Créer</v>
+                <v>Create</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"OPTIONS"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>OPTIONS</v>
+                <v>OPTIONS</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"Mode_Manuel"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Manuel</v>
+                <v>Manual</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"Mode_Auto"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Automatique</v>
+                <v>Automatic</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"res"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>RESET</v>
+                <v>RESET</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"Transfert"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Transfert</v>
+                <v>Transfer</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"ch ouvert"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Chambre ouverte</v>
+                <v>Chamber open</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"sas ouvert"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sas ouvert</v>
+                <v>Loadlock open</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"modif en ligne"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Modification
+en ligne</v>
+                <v>Online
+modification</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"durée rampe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée rampe :</v>
+                <v>Ramp duration:</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"Trac absent"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ATTENTION : Le logiciel de traçabilité n'est pas lancé! Lancez TrAC</v>
+                <v>WARNING: Traceability software is not started! Start TrAC</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"ACSoft absent"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ATTENTION : Le logiciel de gestion des évènements n'est pas lancé! Lancez ACSoftware</v>
+                <v>WARNING: Event logger software is not started! Start ACSoftware</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{973453f8-30ed-4e94-a77a-dc238e0d3d26}</v>
+          <v n="GuidReInit">{8019187f-3eb3-49d0-9eff-5d4c65c7a7cd}</v>
+          <v n="GuidExitX">{60fc4c65-f23c-4ca6-9389-dfd506df87d6}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

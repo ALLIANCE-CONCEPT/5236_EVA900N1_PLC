@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="WRITE_CoE_BOOL" Id="{9749b53d-40c3-49ae-baa9-9b804f9cf6a5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK WRITE_CoE_BOOL
+(* Fonction standard AC d'écriture d'un paramètre CoE de type bool *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - Version initiale - aff 8760*)
+(* Codage selon exemple d'utilisation de  FB_EcCoESdoWrite dans InfoSystem *)
+(*************************************************************************)
+
+VAR_INPUT
+	IN_NetId 		: T_AmsNetId; 				(* NetId of EtherCAT Master : on le trouve dans le .tsm, sur le device ethercat , onglet ethercat, champ NetId *)
+	IN_SlaveAddr 	: UINT; 						(* Port Number of EtherCAT Slave *)
+	IN_Index 		: WORD; 						(* CoE Object Index *)
+	IN_SubIndex	 	: BYTE; 						(* Subindex of CoE Object *)
+	IN_Value 		: BOOL;						(* variable to be written to the CoE Object *)
+	IN_ON		 	: BOOL;						(* rising edge starts writing to the CoE Object *)
+END_VAR
+
+
+VAR
+	fbSdoWrite 	: FB_EcCoESdoWrite;
+	FD_Busy:	F_TRIG;				(*front descendant du state_busy pour etre sur de le voir passer*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Busy:		BOOL;					(*en cours de traitement*)
+	STATE_Error:		BOOL;					(* envoi raté si valeur à 1*)
+	STATE_ErrId:			UDINT;					(* code erreur de l'échec de l'envoi*)
+
+	toto : BOOL;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbSdoWrite(
+	sNetId 		:= IN_NetId,
+	nSlaveAddr 	:= IN_SlaveAddr,
+	nIndex 		:= IN_Index,
+	nSubIndex 	:= IN_SubIndex,
+	pSrcBuf 	:= ADR(IN_Value),
+	cbBufLen 	:= SIZEOF(IN_Value),
+	bExecute 	:= IN_ON
+);
+
+STATE_Busy := fbSdoWrite.bBusy;
+FD_Busy(clk := STATE_Busy);
+
+IF NOT fbSdoWrite.bBusy THEN
+(*IF FD_Busy.Q THEN*)
+	IN_ON := FALSE;
+	IF NOT STATE_Error THEN
+		(* write successful *)
+		STATE_Error := FALSE;
+		STATE_ErrId := 0;
+	ELSE
+		(* write failed *)
+		STATE_Error := fbSdoWrite.bError;
+		STATE_ErrId := fbSdoWrite.nErrId;
+	END_IF
+
+	fbSdoWrite(bExecute := FALSE);
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="WRITE_CoE_BOOL">
+      <LineId Id="33" Count="27" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

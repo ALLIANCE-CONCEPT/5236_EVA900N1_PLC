@@ -1,0 +1,196 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_ACTUATOR" Id="{14918e15-689e-4891-be8c-f990ca757f85}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_ACTUATOR
+
+(* Gestion d'un actionneur monostable ou bistable avec ou sans retour d'état *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE 6844 DP650 N35*)
+(* Version 2-0 - HG - Adaptation pour journal des évènements externe - 24/06/2011*)
+(*************************************************************************)
+
+
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:			BOOL;											(*paramétrage système ok*)
+(*paramètre standard*)
+	RESET:   					BOOL; 											(*Condition RAZ actionneur*)
+	MANUAL:  					BOOL; 											(*Mode manuel*)
+(*entrée externe*)
+	IN_OFF:						BOOL; (* ~ (OPC : 1 : available for OPC-clients) *)		(*E.TOR actionneur au repos*)
+	IN_ON:						BOOL; (* ~ (OPC : 1 : available for OPC-clients) *)		(*E.TOR actionneur actif*)
+(*défaut du bloc*)
+	DEF_On:  					PRCDEF; 									(*01 - Défaut d'ouverture de la vanne de transfert*)
+	DEF_Off:   					PRCDEF;	 									(*02 - Défaut de fermeture de la vanne de transfert*)
+	DEF_Sensor:  				PRCDEF; 									(*03 - Défaut d'incohérence des capteurs de la vanne de transfert*)
+	DEF_On_Imposs:				PRCDEF;										(*04 - Défaut d'activation non autorisé en mode automatique*)
+	DEF_Off_Imposs:				PRCDEF;										(*05 - Défaut de désactivation non autorisée en mode automatique*)
+	DEF_Off_auto:				PRCDEF;										(*06 - Défaut de désactivation automatique*)
+
+(*parametre de pilotage en entrée*)
+	CO_On:   					BOOL; 				(*Ordre mode automatique activation*)
+	CO_Off:  					BOOL;				(*Ordre mode automatique désactivation*)
+	EN_On_INT:   				BOOL:=TRUE;			(*Condition d'autorisation d'activation donnée par le bloc qui instancie le bloc actuator*)
+	EN_Off_INT:  				BOOL:=TRUE;			(*Condition d'autorisation de désactivation donnée par le bloc qui instacie le bloc actuator*)
+	EN_On_EXT:					BOOL:=TRUE;			(*condition d'autorisation d'activation externe*)
+	EN_Off_EXT:					BOOL:=TRUE;			(*condition d'autorisation de desactivation externe*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+(*parametre de configuration constructeur*)
+(*les parametres suivants dépendent de la configuration de la machine*)
+	CONF_Type_Actuator: 		USINT:=0;										(*définit le type d'actionneur
+																				*0 = monostable
+																				1 = bistable *)
+
+	CONF_EN_On:					USINT:=0;				(*définit la réaction du système en cas de perte des conditions d'autorisation d'activation EN_On
+														 0 = désactivation automatique  en cas de perte des conditions d'autorisation d'activation uniquement en manuel
+														 1 = désactivation automatique en cas de perte des conditions d'autorisation d'activation en auto et en manuel
+														 2 = Pas de déscativation automatique*)
+	CONF_DI_Off:   				BOOL:=FALSE;									(*option de presence d'un capteur desactivation*)
+	CONF_DI_On:  				BOOL:=FALSE;									(*option de presence d'un capteur activation ok*)
+	CONF_No_Safety_Auto:		BOOL:=FALSE;									(*option de desactivation des conditions d'autorisation en mode automatique*)
+	CONF_Tim_Valid_On:  		TIME; 											(*Temps validation actionneur on*)
+	CONF_Tim_Valid_Off:   		TIME; 											(*Temps validation actionneur off *)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_On:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*SORTIE TOR ACTIVATION*)
+	OUT_Off:				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*SORTIE TOR DESACTIVATION*)
+	STATE_On:	   			BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur activation ok*)
+	STATE_Off:  			BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur désactivation ok*)
+	STATE_Nok:				BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Indicateur défaut sur l'actionneur*)
+	AUTOR_On_IHM:			BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*etat activation autorisée depuis la supervision*)
+	AUTOR_Off_IHM:			BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*etat désactivation autorisée depuis la supervision*)
+	AUTOR_On_PLC:			BOOL;											(*etat activation autorisée depuis l'automate*)
+	AUTOR_Off_PLC:			BOOL;											(*etat désactivation autorisée depuis l'automate*)
+END_VAR
+
+
+VAR
+	TIMER_Valid_On:			TON;
+	TIMER_Valid_Off:		TON;
+
+	M_On:  						BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre mode manuel activation ou activation/desactivation si la vanne est monostable*)
+	M_Off:   					BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre mode manuel désactivation*)
+	RCP_M_On:   				BOOL;
+	RCP_M_Off:  				BOOL;
+	VAR_On:						BOOL;											(*variable intermédiaire avant affectation de la sortie OUT_On *)
+	VAR_Off:					BOOL;											(*Variable intermédiaire avant affectation de la sortie OUT_Off *)
+
+	VAR_CPT:					BLOCK_CPT_APP;
+END_VAR
+
+VAR_EXTERNAL
+	MANUAL_SAFETY_OFF:	BOOL;												(*desactive les sécurités en mode manuel*)
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Réception des ordres en mode manuel*)
+RCP_M_On 			:=	M_On;
+RCP_M_Off			:=	M_Off;
+(*Autorisation*)
+AUTOR_On_IHM		:= 	MANUAL AND ((EN_On_INT AND EN_On_EXT)
+						OR MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_On;
+AUTOR_Off_IHM		:= 	MANUAL AND ((EN_Off_INT AND EN_Off_EXT)  OR
+						MANUAL_SAFETY_OFF) AND NOT RESET AND NOT VAR_Off;
+AUTOR_On_PLC		:=	NOT MANUAL AND ((EN_On_INT AND EN_On_EXT)
+						OR CONF_No_Safety_Auto) AND NOT RESET;
+AUTOR_Off_PLC		:= 	NOT MANUAL AND ((EN_Off_INT AND EN_Off_EXT)
+						OR CONF_No_Safety_Auto) AND NOT RESET;
+
+(*defaut activation impossible en mode automatique*)
+DEF_On_Imposs.CONDITION:=	(CO_On AND NOT AUTOR_On_PLC) AND NOT RESET AND NOT MANUAL;
+DEF_On_Imposs.DELAY := T#0ms;
+DEF_On_Imposs();
+(*Defaut désactivation impossible en mode automatique*)
+DEF_Off_Imposs.CONDITION:=	(CO_Off AND NOT AUTOR_Off_PLC AND (CONF_TYPE_ACTUATOR=1)) OR
+							(NOT CO_On AND VAR_On  AND NOT AUTOR_Off_PLC AND (CONF_TYPE_ACTUATOR=0))
+							AND NOT RESET AND NOT MANUAL;
+DEF_Off_Imposs.DELAY := T#0ms;
+DEF_Off_Imposs();
+(*defaut desactivation automatique*)
+DEF_Off_Auto.CONDITION :=   (NOT EN_On_INT OR NOT EN_On_EXT) AND  VAR_On AND ((CONF_En_ON=1)
+							OR ((CONF_EN_On=0) AND MANUAL)) AND NOT RESET;
+DEF_Off_auto.DELAY:=T#0ms;
+DEF_Off_Auto();
+
+(*gestion des sorties*)
+IF 		(RCP_M_On AND AUTOR_On_IHM) OR
+		(CO_On AND AUTOR_On_PLC) THEN
+				VAR_On		:= 	TRUE;
+				VAR_Off		:= 	FALSE;
+ELSIF 	(RCP_M_Off AND AUTOR_Off_IHM AND (CONF_Type_Actuator=1)) OR
+		(RCP_M_On AND AUTOR_Off_IHM AND (CONF_Type_Actuator=0)) OR
+	    	(CO_Off AND AUTOR_Off_PLC AND (CONF_Type_Actuator=1)) OR
+		(NOT CO_On AND AUTOR_Off_PLC AND (CONF_Type_Actuator=0))
+		OR (RESET AND (CONF_Type_Actuator=0)) OR
+		DEF_Off_Auto.DEF THEN
+				VAR_On		:=	FALSE;
+				VAR_Off		:=	TRUE;
+ELSIF 	RESET AND (CONF_Type_Actuator=1)   THEN
+				VAR_On		:= 	FALSE;
+				VAR_Off		:=	FALSE;
+END_IF;
+
+
+
+OUT_On		:=	VAR_On;
+OUT_OFF		:=	VAR_Off AND (CONF_type_Actuator = 1);
+
+(*indicateur actionneur activé STATE_ON*)
+TIMER_Valid_On.IN	:=	((NOT IN_OFF AND CONF_DI_Off AND NOT CONF_DI_On) OR
+						(VAR_ON AND NOT CONF_DI_On AND NOT CONF_DI_Off) OR
+						(IN_ON AND CONF_DI_On) AND NOT DEF_SENSOR.DEF);
+TIMER_Valid_On(PT:=CONF_Tim_Valid_On);
+STATE_ON			:=	TIMER_Valid_On.Q;
+(*indicateur actionneur activé STATE_OFF*)
+TIMER_Valid_Off.IN	:=	((NOT IN_ON AND CONF_DI_On AND NOT CONF_DI_Off) OR
+						(VAR_OFF AND NOT CONF_DI_On AND NOT CONF_DI_Off) OR
+						(IN_OFF AND CONF_DI_Off) AND NOT DEF_SENSOR.DEF);
+TIMER_Valid_Off(PT:=CONF_Tim_Valid_Off);
+STATE_Off			:=	TIMER_Valid_Off.Q;
+
+(*indicateur STATE_NOK*)
+STATE_Nok			:=	DEF_ON.DEF OR DEF_Off.DEF OR DEF_Sensor.DEF OR DEF_On_Imposs.DEF OR DEF_Off_Imposs.DEF OR DEF_Off_auto.DEF;
+
+(*défaut d'activation*)
+DEF_On.Condition	:= 	VAR_On AND NOT STATE_On AND (CONF_DI_Off OR CONF_DI_On) AND NOT RESET;
+DEF_On();
+(*défaut désactivation*)
+DEF_Off.Condition	:= 	VAR_Off AND NOT STATE_Off AND (CONF_DI_Off OR CONF_DI_On) AND NOT RESET;
+DEF_Off();
+(*défaut capteur*)
+DEF_Sensor.Condition	:= 	IN_On AND IN_Off AND CONF_DI_Off AND CONF_DI_On AND NOT RESET;
+DEF_Sensor();
+
+(*gestion compteur*)
+VAR_CPT(I_On:= STATE_On);
+
+(* Reset des ordres *)
+IF M_On AND RCP_M_On THEN
+	M_On 	:= FALSE;
+END_IF;
+IF M_Off AND RCP_M_Off THEN
+	M_Off		 := FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_ACTUATOR">
+      <LineId Id="94" Count="11" />
+      <LineId Id="291" Count="14" />
+      <LineId Id="122" Count="18" />
+      <LineId Id="290" Count="0" />
+      <LineId Id="274" Count="0" />
+      <LineId Id="141" Count="39" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

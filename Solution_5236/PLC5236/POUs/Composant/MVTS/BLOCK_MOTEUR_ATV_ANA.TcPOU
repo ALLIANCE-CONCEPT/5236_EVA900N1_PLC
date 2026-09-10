@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_MOTEUR_ATV_ANA" Id="{a3f7c1d2-9e46-4b58-8c1a-7d2e5f0b6a34}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_MOTEUR_ATV_ANA
+
+(****************historique des versions*****************************)
+(* Version 0-0 - LDS - VERSION INIITIALE - basée sur BLOCK_MOTEUR_ATV - Affaire Original 5236*)
+
+VAR_INPUT
+	RESET			: BOOL;			(* Reinitialisation de la fonction *)
+	I_Valid_INPUT	: BOOL;			(* Entrees exploitables (conserve pour compat interface) *)
+	CO_On			: BOOL;			(* Marche moteur (depuis le grafcet) *)
+	PRM_Vitesse		: REAL;			(* Consigne vitesse (unite procede) *)
+	PRM_Rapport		: REAL;			(* Rapport cinematique - conserve pour compat (non utilise en analogique) *)
+
+	VPS11M		AT %I* : BOOL;	(* Retour TOR "moteur en route" (relais R1 ATV12 -> VPS11M) *)
+
+	DEF_off_auto	: PRCDEF;		(* Defaut d'arret automatique *)
+	DEF_Variateur	: PRCDEF;		(* Defaut variateur *)
+END_VAR
+
+VAR_OUTPUT
+	OUT_Marche		AT %Q* : BOOL;	(* -> LI1 (MPS11) commande marche rotation *)
+	OUT_Velocity	AT %Q* : INT;	(* -> AI1 (QMPS11) consigne analogique 0..27648 (0-10 V) *)
+
+	STATE_Ready		: BOOL;			(* Moteur pret *)
+	STATE_OFF		: BOOL;			(* Moteur a l'arret *)
+	STATE_EC		: BOOL;			(* Asservissement en cours (transition) *)
+	STATE_ON		: BOOL;			(* Moteur en marche (retour confirme) *)
+	STATE_NOK		: BOOL;			(* Moteur en defaut *)
+	STATE_VIT		: REAL;			(* Vitesse appliquee *)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_VMAX		: REAL;			(* Consigne vitesse max = pleine echelle 10 V *)
+	CONF_VMIN		: REAL;			(* Consigne vitesse min *)
+	CONF_Deb_Retour	: TIME := T#300MS;	(* Anti-rebond du retour "moteur en route" *)
+	CONF_Inv_Retour	: BOOL;			(* TRUE si le relais R1 est configure actif a 0 *)
+
+	(* Entite *)
+	IsComponent		: BOOL;
+	IdXML			: STRING;
+	TagXML			: UINT;
+	IdParent		: STRING;
+	MNEMO			: STRING;
+END_VAR
+
+VAR
+	VAR_On		: BOOL;		(* marche moteur effective *)
+	VAR_Marche	: BOOL;		(* retour normalise (polarite R1) *)
+	TON_Route	: TON;		(* validation retour "en route" *)
+	TON_Off		: TON;		(* validation "a l'arret" *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* ===== Parametre statique (identite dico, comme le bloc EtherCAT) ===== *)
+IdXML				:= '5';
+TagXML				:= 2;
+
+DEF_off_auto.IdXML	:= '3';
+DEF_off_auto.TagXML	:= 10;
+DEF_Variateur.IdXML	:= '5';
+DEF_Variateur.TagXML:= 4;
+
+(* ===== Retour normalise (gestion polarite du relais R1) ===== *)
+VAR_Marche := VPS11M XOR CONF_Inv_Retour;
+
+(* ===== Verification des consignes (idem bloc EtherCAT) ===== *)
+IF PRM_Vitesse > CONF_VMAX THEN
+	PRM_Vitesse := CONF_VMAX;
+END_IF
+IF PRM_Vitesse < CONF_VMIN THEN
+	PRM_Vitesse := CONF_VMIN;
+END_IF
+
+(* ===== Commande de marche -> LI1 ===== *)
+VAR_On     := CO_On AND NOT RESET;
+OUT_Marche := VAR_On;
+
+(* ===== Consigne vitesse -> sortie analogique 0..32767 (0-10 V), unipolaire ===== *)
+IF VAR_On AND (CONF_VMAX > 0.0) THEN
+	OUT_Velocity := REAL_TO_INT(LIMIT(0.0, PRM_Vitesse / CONF_VMAX, 1.0) * 32767.0); (* PRM_Vitesse * PRM_Rapport ? *)
+	STATE_VIT    := PRM_Vitesse;
+ELSE
+	OUT_Velocity := 0;
+	STATE_VIT    := 0.0;
+END_IF
+
+(* ===== Anti-rebond du retour moteur ===== *)
+TON_Route(IN := VAR_Marche,     PT := CONF_Deb_Retour);
+TON_Off(  IN := NOT VAR_Marche, PT := CONF_Deb_Retour);
+
+(* ===== Defaut variateur : marche commandee mais pas de retour, persistant CONF_Tempo_Def =====
+   (sur ce cablage, R1 = "moteur en route", il n'existe pas de relais defaut dedie ;
+    la temporisation est geree par le PRCDEF lui-meme via .DELAY) *)
+DEF_Variateur.CONDITION	:= OUT_Marche AND NOT TON_Route.Q;
+DEF_Variateur.DELAY		:= T#5S;
+DEF_Variateur();
+
+(* ===== Defaut d'arret automatique =====
+   Pas de chaine de securite propre a ce terminal (geree en amont par le grafcet/porte).
+   Neutralise ici ; le defaut significatif est DEF_Variateur. *)
+DEF_off_auto.CONDITION := DEF_Variateur.DEF AND VAR_On;
+DEF_off_auto.DELAY		:= T#0MS;
+DEF_off_auto();
+
+(* ===== Etats (memes semantiques que le bloc EtherCAT) ===== *)
+STATE_ON	:= OUT_Marche AND TON_Route.Q AND NOT DEF_Variateur.DEF;
+STATE_OFF	:= NOT OUT_Marche AND TON_Off.Q;
+STATE_EC	:= NOT STATE_ON AND NOT STATE_OFF;
+STATE_NOK	:= DEF_Variateur.DEF OR DEF_off_auto.DEF;
+STATE_Ready	:= I_Valid_INPUT AND NOT RESET AND NOT STATE_NOK;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,1706 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_POMP_1E_PCR_PPM_ASS_ETHERCAT_SINGER" Id="{7deff9cb-79b6-4ff2-b252-4e6601ca75f5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_POMP_1E_PCR_PPM_ASS_ETHERCAT_SINGER
+
+(* Historique des versions*)
+(* VERSION 1.0 - 05/2015 - GV - affaire 9070*)
+(* VERSION 2.0 - 10/2022 - GV - ajout gestion roots *)
+(* VERSION 3.0 - 11/2023 - HG - ajout balayage pompe primaire en alternance avec interjoint (specif SINGER pour bcp d'humidité)
+								ajout évènement résultat test de remontée de pression pour inscription dans le journal*)
+
+
+(* BLOCK GESTION POMPAGE CRYO ON BOARD ENCEINTE *)
+(*	Gestion pompage enceinte sans sas constitué de :
+	Pompe primaire pour prévidage, regen cryo et pompage interjoint
+	Pompe cryogénique on-board CTI pour le pompage secondaire
+	Vanne de pompage primaire enceinte
+	Vanne de remise à atmosphère enceinte
+	Vanne de pompage inter-joint (optionnelle)
+	Vanne secondaire asservie, pilote en ana
+	Vanne de balayage pompe primaire
+*)
+
+VAR_INPUT
+(*information générale*)
+	RESET:					BOOL;
+	MANUAL:					BOOL;
+	CTRL_PLC:				BOOL;
+	I_Prep_Ventil_Ok:		BOOL;		(*information externe indiquant que l'enceinte est prête à être ventilée par ex. circulation d'eau à l'arrêt
+										ou polycold arreté ou basculement en eau chaude ok ...*)
+	I_Fin_Ventil:			BOOL;		(*information externe de fin de ventilation de l'enceinte  *)
+	I_Stop_Mesure_OK:		BOOL;		(*information externe indiquant que les jauges ont été stoppées prélablement à la ventilation de l'enceinte*)
+	IN_Pressure_RP:			REAL;		(*interfaçage avec M11.state_pression du PRG correspondant*)
+	I_Ref_OK:				BOOL;		(*information externe indiquant que le refroidissement est ok pour démarrer les pompes*)
+	I_Cond_Bal_PP11_Ext:	BOOL;		(*information externe condition balayage pompe primaire - pas de chauffage/puissance/evap*)
+	
+(*Gestion régen partielle*)
+	IN_Temp_Etage1:			REAL;
+	PRM_Temp_Post_Purge:	REAL;
+	PRM_Tim_Post_Purge:		TIME;
+
+(*Paramètres et commandes du test de remontée de pression*)
+	PRM_Pr_test:			REAL;		(*Pression initiale de test de remontée*)
+	PRM_Tim_test:			TIME;		(*Durée d'attente en test*)
+	CO_Stop_Test_RP:		BOOL;		(*Demande arrêt test remontée de pression*)
+
+(*sécurité*)
+	IN_FE11T:				BOOL;		(*indicateur enceinte fermée - capteur 1*)
+	IN_FE12T:				BOOL;		(*indicateur enceinte fermée - capteur 2*)
+	IN_VT11F:				BOOL;		(*clapet SAS enceinte fermé*)
+
+(*seuil de vide*)
+	TH_Vide_Primaire:		BOOL;		(*Pression enceinte <= Seuil de fin de pompage primaire*)
+	TH_Grosse_Fuite:		BOOL;		(*Pression enceinte <= Seuil de detection de grosse fuite enceinte*)
+	TH_Atm:					BOOL;		(*pression enceinte >= Seuil pression atm. de fin de ventilation*)
+	TH_RP_Enc:				BOOL;		(*pression enceinte <= Pression max. dans l'enceinte*)
+	TH_Test_RP:				BOOL;		(*Pression <= Seuil de pression de test*)
+	TH_Ouv_VINT:			BOOL;		(*Pression enceinte <= seuil ouverture VINT*)
+
+(*composant de la fonction*)
+	VP11:					BLOCK_VVAT_3P;									(*vanne de pompage primaire enceinte *)
+	VH11:					BLOCK_ACTUATOR;									(*vanne de ventilation de l'enceinte*)
+	PP11:					BLOCK_PPM;										(*Pompe primaire enceinte*)
+	PR11:					BLOCK_PPM;										(*Pompe roots enceinte*)
+	PS11:					BLOCK_PCR_CTI_OB;								(*Pompe cryogénique on board  enceinte*)
+	VS11:					BLOCK_VVAT_650_NO;								(*Vanne secondaire asservie pompage enceinte*)
+	VINT:					BLOCK_ACTUATOR;									(*Vanne de pompage dans les interjoints*)
+	VN2PP11:				BLOCK_ACTUATOR;									(*Vanne de balayage pompe primaire*)
+
+(*défaut*)
+	DEF_PPrim:				PRCDEF;										(*défaut temps de pompage primaire dans l'enceinte*)
+	DEF_Vent:				PRCDEF;										(*défaut temps de ventilation enceinte*)
+	DEF_RP_enc:				PRCDEF;	 									(*défaut perte seuil de pompage primaire en pompage secondaire*)
+	DEF_TGF:				PRCDEF;										(*défaut détection trés grosse fuite*)
+	EV_Test_RP:				PRCDEF;										(*évènement affichage résultate test RP*)
+
+(*opération*)
+	OP_Marche_Pompes:			BLOCK_OPERATION;								(*opération marche pompe*)
+	OP_Arret_Pompes:			BLOCK_OPERATION;								(*opération arrêt pompe*)
+	OP_Isolement:				BLOCK_OPERATION;								(*opération stand-by*)
+	OP_Ventilation:				BLOCK_OPERATION;								(*opération ventilation*)
+	OP_Pompage_Sec:				BLOCK_OPERATION;								(*opération pompage secondaire*)
+	OP_Pompage_Prim:			BLOCK_OPERATION;								(*opération pompage primaire*)
+	OP_Pompage_Proc:			BLOCK_OPERATION;								(*opération pompage en procédé*)
+	OP_Purge:					BLOCK_OPERATION;								(*opération purge*)
+	OP_Regen:					BLOCK_OPERATION;								(*opération régénération pompe cryogénique*)
+	OP_Regen_Part:				BLOCK_OPERATION;								(*opération de régénération partielle pompe cryogénique*)
+	OP_Test_RP:					BLOCK_OPERATION;								(*opération test RP*)
+	G7_Bal_Int:					BLOCK_G7;										(*gestion balayage pompe primaire et pompage interjoint*)
+	
+END_VAR
+
+VAR_INPUT PERSISTENT
+(*paramètre*)
+	PRM_Tim_SurVentil_E:		TIME;	(*durée du temps de surventilation*)
+	PRM_Tim_Purge:				TIME;	(*durée du maintien pompage primaire en purge*)
+	PRM_Tim_Arret_PP11:			TIME;	(*durée avant arrêt de la pompe primaire*)
+	PRM_Tim_Int_BalInt:			TIME;	(*durée de pompage interjoint dans la phase d'alternance pompage interjoint/balayage pompe primaire*)
+	PRM_Tim_Bal_BalInt:			TIME;	(*durée de balayage pompe primaire dans la phase d'alternance pompage interjoint/balayage pompe primaire*)
+	PRM_Tim_FinBal:				TIME;	(*durée de balayage pompe primaire avant d'éteindre la pompe*)
+	PRM_Pr_Atm:					REAL;	(*Pression atmosphérique dans l'enceinte*)
+	PRM_Pr_PPrim:				REAL;	(*Pression de fin de pompage primaire dans l'enceinte*)
+	PRM_Pr_RP_PPrim:			REAL;	(*Pression max admissible dans l'enceinte en pompage secondaire dans l'enceinte*)
+	PRM_Pr_TGF:					REAL;	(*Pression de détection trés grosse fuite dans l'enceinte*)
+	PRM_N_Purge:				USINT;	(*Nombre de cycles de purge pompage/ventilation*)
+	CONF_Pompage_interjoint:	BOOL;	(*SPECIF 14035 non utilisé - Utilisation de la pompe primaire pour le pompage interjoint sur l'enceinte*)
+	CONF_VINT:					BOOL;	(*SPECIF 14035 non utilisé - Utilisation d'une vanne d'isolement sur le pompage interjoint*)
+	CONF_Volume_Enceinte:		REAL;	(*Volume pour RP*)
+
+	PRM_Tim_Prep_Ventil:		TIME;	(*temporisation de prép ventilation (eau chaude suffisemment longtemps) *)
+
+	(*Entité*)
+	IsAssembly:		BOOL;		(*entité : ensemble*)
+	IdXML:			STRING;		(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;		(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;		(*MNEMO de l'appelant*)
+	MNEMO:			STRING;		(*MNEMO de l'entité*)
+END_VAR
+
+
+VAR_OUTPUT
+	RQ_Prep_Ventil_Enc:		BOOL;											(*demande de préparation avant ventilation (réchauffement, arrêt eau ....*)
+	RQ_Stop_Mesure_Enc:		BOOL;											(*demande d'arrêt de la mesure avant ventilation - Les blocs jauges concernés utilise		
+																					cette information pour stoppée les jauges préalablement à la ventilation*)
+END_VAR
+
+VAR_IN_OUT
+END_VAR
+
+VAR
+	VAR_Reset_Sortie:					BOOL;
+	TIMER_SurVentilation_Enc:			TON;		(*Temporistion de surventilation enceinte*)
+	TIMER_Purge:						TON;		(*Temporisation de maintien pompage primaire en purge*)
+	TIMER_BalInt:						TON;		(*Temporisation gestion pompage interjoint et balayage pompe primaire*)
+	TIMER_Arret_Roots:					TON;		(*Temporisation arrêt roots après prévidage*)
+	TIMER_Arret_PP11:					TON;		(*Temporisation arrêt pompe primaire*)
+	VAR_mem_isolement:					BOOL;
+	VAR_Iter_Purge:						USINT;
+
+	(*Pour RP*)
+	VAR_Mem_Pression_Deb:		REAL;
+	VAR_Mem_Pression_Fin:		REAL;
+	VAR_Indicateur_Test:		REAL; 		(*résultat final*)
+	TIMER_attente_test:			TON;		(*Temporisation pour test de remontée en pression*)
+	FM_etape4:					R_TRIG;
+
+	(*Pour prep ventil*)
+	TIM_Prep_ventil:			TON;		(*timer de préparation ventil*)
+
+	(*Pour regen*)
+	FM_REGEN:					R_TRIG;		(* FM pompe cryogénique en régénération*)
+	FD_REGEN:					F_TRIG;		(* FD pompe cryogénique en régénération*)
+	TIMER_Post_Purge:			TON;		(*tempo max attente de retombée température après purge en regen partielle*)
+	TIMER_etape6_regen:			TON;
+	
+	(*pour gestion pompage interjoint et vanne balayage pompe primaire*)
+	VAR_BalInt:					BOOL;		(*conditions pour alternance interjoint/balayage : pompage secondaire sans puissance/chauffage/evap*)
+	VAR_FinBal:					BOOL;		(*conditions pour balayage pompe primaire temporisé : avant d'arrêter la pompe*)
+	VAR_Bal:					BOOL;		(*conditions pour balayage pompe primaire : pompe à l'arrêt*)
+	VAR_Int:					BOOL;		(*conditions pour pompage interjoint : pas de regen, pompe en marche, pas de prévidage ou vide <100mbar*)
+	VAR_BalInt_Ec:				BOOL;		
+	VAR_Int_Ec:					BOOL;
+	VAR_Int_Ok:					BOOL;
+	VAR_FinBal_Ec:				BOOL;
+	VAR_FinBal_Ok:				BOOL;
+	VAR_Bal_Ec:					BOOL;
+	VAR_No_Bal_Int_Ec:			BOOL;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+(*appel des opérations*)
+ACT_ARRET_POMPES();
+ACT_ISOLEMENT();
+ACT_MARCHE_POMPES();
+ACT_POMPAGE_PRIM();
+ACT_POMPAGE_PROC();
+ACT_POMPAGE_SEC();
+ACT_VENTILATION();
+ACT_PURGE();
+ACT_REGEN();
+ACT_REGEN_PART();
+ACT_TEST_RP();
+ACT_BAL_INT();
+
+(*action en sortie*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_ARRET_POMPES" Id="{5d7bc435-f2f3-4580-8783-a148f86f3912}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION ARRET POMPES*)
+(* arrêt des pompes*)
+
+(*initialisation de l'opération*)
+OP_ARRET_POMPES(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= (PP11.STATE_NOK AND PR11.STATE_NOK) AND (NOT OP_Pompage_Prim.Etape.0 OR NOT OP_Purge.Etape.0),
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 7,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_ARRET_POMPES.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Arret_Pompes.ETAPE = 0 THEN
+				OP_Arret_Pompes.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Marche_Pompes.ETAPE.1 THEN
+				OP_Arret_Pompes.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Arret_Pompes.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Arret_Pompes.ETAPE.0
+		AND OP_Arret_Pompes.MARCHE_OP THEN
+				OP_Arret_Pompes.ETAPE.1:=TRUE;
+				OP_Arret_Pompes.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Arret_Pompes.ETAPE.1
+		AND OP_Marche_Pompes.ETAPE.0  THEN
+				OP_Arret_Pompes.Etape.2:=TRUE;
+				OP_Arret_Pompes.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Arret_Pompes.Etape.2
+		AND (OP_Isolement.OK OR VAR_mem_isolement)
+		AND (VINT.STATE_Off OR NOT CONF_VINT)
+		 THEN
+				OP_Arret_Pompes.Etape.3:=TRUE;
+				OP_Arret_Pompes.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Arret_Pompes.Etape.3
+		AND	Timer_Arret_PP11.Q THEN 
+				OP_Arret_Pompes.Etape.4:=TRUE;
+				OP_Arret_Pompes.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Arret_Pompes.Etape.4
+		AND PR11.STATE_Off AND PS11.STATE_Ar THEN
+				OP_Arret_Pompes.Etape.5:=TRUE;
+				OP_Arret_Pompes.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_Arret_Pompes.Etape.5
+		AND VAR_FinBal_Ok THEN
+				OP_Arret_Pompes.Etape.6:=TRUE;
+				OP_Arret_Pompes.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF	OP_Arret_Pompes.Etape.6
+		AND PP11.STATE_Off THEN
+				OP_Arret_Pompes.Etape.7:=TRUE;
+				OP_Arret_Pompes.Etape.6:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Arret_Pompes.POST();
+
+(************************************************************************)
+(*Gestion de la mémoire de la demande d'isolement de l'enceinte*)
+(************************************************************************)
+IF 		OP_Ventilation.Etape.9 THEN
+	VAR_mem_isolement	:=	TRUE;
+ELSIF	NOT OP_Pompage_Prim.AR OR NOT OP_Pompage_Sec.AR OR NOT OP_Pompage_Proc.AR OR NOT OP_Purge.AR THEN
+	VAR_mem_isolement	:=	FALSE;
+END_IF
+(*IF OP_Arret_pompes.Etape.2 AND (NOT OP_Pompage_Prim.Etape.0  OR NOT OP_Pompage_Proc.Etape.0 OR NOT OP_Pompage_Sec.Etape.0) THEN
+	VAR_mem_isolement_enceinte := TRUE;
+END_IF;
+IF OP_Arret_pompes.Etape.0 OR OP_Arret_Pompes.Etape.3 THEN
+	VAR_mem_isolement_enceinte := FALSE;
+END_IF;*)]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_BAL_INT" Id="{e3a96abc-e7a3-41bb-a375-e400aefffea0}">
+      <Implementation>
+        <ST><![CDATA[//Alternance balayage/pompage interjoint lorsque la cryo est opérationnelle, la pompe primaire également, qu'il n'y a pas de prévidage et pas de puissance extérieure
+//Prioritaire sur VAR_Int
+VAR_BalInt	:=	NOT PS11.STATE_Regen 
+				AND PP11.STATE_On AND NOT OP_Arret_Pompes.Etape.5
+				AND VP11.STATE_Off 
+				AND I_Cond_Bal_PP11_Ext;
+//Pompage interjoint uniquement lorsque la cryo est opérationnelle, la pompe primaire également et pas de préviage ou pression inférieure à 100mbar
+VAR_Int		:=	NOT PS11.STATE_Regen
+				AND PP11.STATE_On AND OP_Marche_Pompes.OK 
+				AND (VP11.STATE_Off OR TH_Ouv_VINT);
+//Balayage sur un temps donné (PRM_Tim_FinBal) lors de la demande d'arrêt de la pompage primaire en mode auto
+VAR_FinBal	:=	OP_Arret_Pompes.Etape.5;
+//Balayage permanent lorsque la pompe primaire est éteinte*)
+VAR_Bal		:= 	PP11.STATE_Off;
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		G7_Bal_Int.etape = 0
+		THEN
+				G7_Bal_Int.etape.0 := TRUE;
+				
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.0:=TRUE;
+				
+(*repositionnement sur étape 2*)
+ELSIF	NOT G7_Bal_Int.etape.0 AND NOT G7_Bal_Int.etape.1
+		AND VAR_BalInt AND NOT VAR_Bal AND NOT VAR_FinBal
+		AND NOT VAR_Int_Ec
+		AND NOT VAR_BalInt_Ec
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.2:=TRUE;
+(*repositionnement sur étape 10*)
+ELSIF	NOT G7_Bal_Int.etape.0 AND NOT G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND VAR_Int AND NOT VAR_Bal AND NOT VAR_FinBal
+		AND NOT VAR_Int_Ec AND NOT VAR_Int_Ok
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.10:=TRUE;
+(*repositionnement sur étape 14*)
+ELSIF	NOT G7_Bal_Int.etape.0 AND NOT G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND NOT VAR_Bal AND VAR_FinBal
+		AND NOT VAR_FinBal_Ec AND NOT VAR_FinBal_Ok
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.14:=TRUE;
+(*repositionnement sur étape 20*)
+ELSIF	NOT G7_Bal_Int.etape.0 AND NOT G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND NOT VAR_Bal AND NOT VAR_FinBal
+		AND NOT VAR_No_Bal_Int_Ec
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.20:=TRUE;
+(*repositionnement sur étape 23*)
+ELSIF	NOT G7_Bal_Int.etape.0 AND NOT G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND VAR_Bal AND NOT VAR_FinBal
+		AND NOT VAR_Bal_Ec
+		THEN
+				G7_Bal_Int.etape := 0;			(*RAZ grafcet*)
+				G7_Bal_Int.etape.23:=TRUE;
+				
+(*étape 0-1*)
+ELSIF 	G7_Bal_Int.etape.0
+		AND NOT MANUAL AND NOT RESET
+		THEN
+				G7_Bal_Int.etape.1:=TRUE;
+				G7_Bal_Int.etape.0:=FALSE;
+				
+(*ALTERNANCE BALAYAGE / INTERJOINT*)
+(*étape 1-2*)
+ELSIF	G7_Bal_Int.etape.1
+		AND VAR_BalInt AND NOT VAR_FinBal
+		THEN
+				G7_Bal_Int.etape.2:=TRUE;
+				G7_Bal_Int.etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF	G7_Bal_Int.etape.2
+		AND VINT.STATE_Off
+		THEN
+				G7_Bal_Int.etape.3:=TRUE;
+				G7_Bal_Int.etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	G7_Bal_Int.etape.3
+		AND VN2PP11.STATE_On
+		THEN
+				G7_Bal_Int.etape.4:=TRUE;
+				G7_Bal_Int.etape.3:=FALSE;
+(*étape 3-4*)
+ELSIF	G7_Bal_Int.etape.3
+		AND VN2PP11.STATE_On
+		THEN
+				G7_Bal_Int.etape.4:=TRUE;
+				G7_Bal_Int.etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	G7_Bal_Int.etape.4
+		AND TIMER_BalInt.Q
+		THEN
+				G7_Bal_Int.etape.5:=TRUE;
+				G7_Bal_Int.etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF	G7_Bal_Int.etape.5
+		AND VN2PP11.STATE_Off
+		THEN
+				G7_Bal_Int.etape.6:=TRUE;
+				G7_Bal_Int.etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF	G7_Bal_Int.etape.6
+		AND VINT.STATE_On
+		THEN
+				G7_Bal_Int.etape.7:=TRUE;
+				G7_Bal_Int.etape.6:=FALSE;
+(*étape 7-2*)
+ELSIF	G7_Bal_Int.etape.7
+		AND TIMER_BalInt.Q
+		THEN
+				G7_Bal_Int.etape.2:=TRUE;
+				G7_Bal_Int.etape.7:=FALSE;
+				
+				
+(*INTERJOINT UNIQUEMENT*)
+(*étape 1-10*)
+ELSIF	G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND VAR_Int AND NOT VAR_Bal AND NOT VAR_FinBal
+		THEN
+				G7_Bal_Int.etape.10:=TRUE;
+				G7_Bal_Int.etape.1:=FALSE;
+(*étape 10-11*)
+ELSIF	G7_Bal_Int.etape.10
+		AND VN2PP11.STATE_Off
+		THEN
+				G7_Bal_Int.etape.11:=TRUE;
+				G7_Bal_Int.etape.10:=FALSE;
+(*étape 11-12*)
+ELSIF	G7_Bal_Int.etape.11
+		AND VINT.STATE_On
+		THEN
+				G7_Bal_Int.etape.12:=TRUE;
+				G7_Bal_Int.etape.11:=FALSE;
+							
+				
+(*BALAYAGE UNIQUEMENT - TEMPORISE*)
+(*étape 1-14*)
+ELSIF	G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND NOT VAR_Bal AND VAR_FinBal
+		THEN
+				G7_Bal_Int.etape.14:=TRUE;
+				G7_Bal_Int.etape.1:=FALSE;
+(*étape 14-15*)
+ELSIF	G7_Bal_Int.etape.14
+		AND VINT.STATE_Off
+		THEN
+				G7_Bal_Int.etape.15:=TRUE;
+				G7_Bal_Int.etape.14:=FALSE;
+(*étape 15-16*)
+ELSIF	G7_Bal_Int.etape.15
+		AND VN2PP11.STATE_On
+		THEN
+				G7_Bal_Int.etape.16:=TRUE;
+				G7_Bal_Int.etape.15:=FALSE;
+(*étape 16-17*)
+ELSIF	G7_Bal_Int.etape.16
+		AND TIMER_BalInt.Q
+		THEN
+				G7_Bal_Int.etape.17:=TRUE;
+				G7_Bal_Int.etape.16:=FALSE;
+(*étape 17-18*)
+ELSIF	G7_Bal_Int.etape.17
+		AND VN2PP11.STATE_Off
+		THEN
+				G7_Bal_Int.etape.18:=TRUE;
+				G7_Bal_Int.etape.17:=FALSE;
+								
+						
+(*PAS DE BALAYAGE NI INTERJOINT*)
+(*étape 1-20*)
+ELSIF	G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND NOT VAR_Bal AND NOT VAR_FinBal
+		THEN
+				G7_Bal_Int.etape.20:=TRUE;
+				G7_Bal_Int.etape.1:=FALSE;
+(*étape 20-21*)
+ELSIF	G7_Bal_Int.etape.20
+		AND VINT.STATE_Off AND VN2PP11.STATE_OFF
+		THEN
+				G7_Bal_Int.etape.21:=TRUE;
+				G7_Bal_Int.etape.20:=FALSE;
+				
+				
+(*BALAYAGE UNIQUEMENT - PERMANENT*)
+(*étape 1-23*)
+ELSIF	G7_Bal_Int.etape.1
+		AND NOT VAR_BalInt AND NOT VAR_Int AND VAR_Bal AND NOT VAR_FinBal
+		THEN
+				G7_Bal_Int.etape.23:=TRUE;
+				G7_Bal_Int.etape.1:=FALSE;
+(*étape 23-24*)
+ELSIF	G7_Bal_Int.etape.23
+		AND VINT.STATE_Off
+		THEN
+				G7_Bal_Int.etape.24:=TRUE;
+				G7_Bal_Int.etape.23:=FALSE;
+(*étape 24-25*)
+ELSIF	G7_Bal_Int.etape.24
+		AND VN2PP11.STATE_On
+		THEN
+				G7_Bal_Int.etape.25:=TRUE;
+				G7_Bal_Int.etape.24:=FALSE;
+END_IF;
+
+G7_Bal_Int.POST();
+
+VAR_BalInt_Ec		:=	G7_Bal_Int.Etape.2 OR G7_Bal_Int.Etape.3 OR G7_Bal_Int.Etape.4 OR G7_Bal_Int.Etape.5 OR G7_Bal_Int.Etape.6 OR G7_Bal_Int.Etape.7;
+VAR_Int_Ec			:=	G7_Bal_Int.Etape.10 OR G7_Bal_Int.Etape.11;
+VAR_Int_Ok			:=	G7_Bal_Int.Etape.12;
+VAR_FinBal_Ec		:=	G7_Bal_Int.Etape.14 OR G7_Bal_Int.Etape.15 OR G7_Bal_Int.Etape.16 OR G7_Bal_Int.Etape.17;
+VAR_FinBal_Ok		:=	G7_Bal_Int.Etape.18;
+VAR_No_Bal_Int_Ec	:=	G7_Bal_Int.Etape.20 OR G7_Bal_Int.Etape.21;
+VAR_Bal_Ec			:=	G7_Bal_Int.Etape.23 OR G7_Bal_Int.Etape.24 OR G7_Bal_Int.Etape.25;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_ISOLEMENT" Id="{126409b3-9eca-43d6-bd0e-c4f6594a6976}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION ISOLEMENT ENCEINTE*)
+(*isolement de l'enceinte*)
+
+(*initialisation de l'opération*)
+OP_Isolement(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= 	((DEF_TGF.DEF OR DEF_RP_enc.DEF) AND (NOT OP_Pompage_Prim.Etape.0 OR NOT OP_Pompage_Sec.Etape.0 OR NOT OP_Pompage_proc.Etape.0))
+					OR (PS11.STATE_Nok AND (NOT OP_Pompage_Sec.Etape.0 OR NOT OP_Pompage_proc.Etape.0))
+					OR (PP11.STATE_Nok AND NOT OP_Pompage_Prim.Etape.0)
+					OR (PR11.STATE_NOK AND NOT OP_Pompage_Prim.Etape.0),
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 4,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Isolement.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Isolement.Etape = 0
+		THEN
+				OP_Isolement.Etape.0	:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_pompage_sec.Etape.1 OR OP_Pompage_Proc.Etape.1 OR Op_Pompage_Prim.Etape.1
+		OR OP_ventilation.Etape.2 OR OP_Ventilation.Etape.9 OR OP_Purge.Etape.1 THEN
+				OP_Isolement.Etape := 0;
+				OP_Isolement.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Isolement.Etape.0
+		AND(
+		OP_Isolement.Marche_OP OR
+		OP_ventilation.Etape.1 OR
+		OP_Test_RP.Etape.3 OR
+		(OP_Arret_Pompes.Etape.2 AND NOT VAR_mem_isolement) OR
+		OP_Regen.Etape.2 OR OP_Regen_Part.Etape.2
+		)
+		THEN
+				OP_Isolement.Etape.1:=TRUE;
+				OP_Isolement.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Isolement.Etape.1
+		AND OP_Pompage_Proc.Etape.0
+		AND OP_Pompage_Prim.Etape.0
+		AND OP_Pompage_Sec.Etape.0
+		AND (OP_Ventilation.Etape.0 OR OP_Ventilation.Etape.1)
+		AND (OP_Purge.Etape.0 OR (OP_Purge.Etape.4 AND OP_Ventilation.Etape.1))
+		THEN
+				OP_Isolement.Etape.2:=TRUE;
+				OP_Isolement.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Isolement.Etape.2 AND
+		VP11.STATE_Off AND
+		VS11.STATE_Off AND
+		VH11.STATE_Off  THEN
+				OP_Isolement.Etape.3:=TRUE;
+				OP_Isolement.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Isolement.Etape.3
+		AND ((PP11.STATE_Off AND PR11.STATE_Off) OR PS11.STATE_Regen OR CONF_Pompage_interjoint) THEN
+				OP_isolement.Etape.4:=TRUE;
+				OP_isolement.Etape.3:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Isolement.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_MARCHE_POMPES" Id="{6d660505-fe4c-4b2a-96c8-a9afe6ad1cfb}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION MARCHE POMPES*)
+(* mise en marche des pompes*)
+
+(*initialisation de l'opération*)
+OP_MARCHE_POMPES(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= TRUE,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 5,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_MARCHE_POMPES.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_MARCHE_POMPES.ETAPE = 0
+		THEN
+				OP_MARCHE_POMPES.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_ARRET_POMPES.ETAPE.1
+		THEN
+				OP_MARCHE_POMPES.ETAPE := 0;			(*RAZ grafcet*)
+				OP_MARCHE_POMPES.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_MARCHE_POMPES.ETAPE.0
+		AND (OP_MARCHE_POMPES.MARCHE_OP OR OP_POMPAGE_SEC.ETAPE.2
+			OR (OP_Regen.Etape.5 AND TH_Atm))
+		THEN
+				OP_MARCHE_POMPES.ETAPE.1:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_MARCHE_POMPES.ETAPE.1
+		AND OP_ARRET_POMPES.ETAPE.0 AND PR11.STATE_Off AND I_Ref_Ok
+		THEN
+				OP_MARCHE_POMPES.ETAPE.2:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_MARCHE_POMPES.ETAPE.2
+		AND (PP11.STATE_On OR NOT CONF_Pompage_interjoint)
+		THEN
+				OP_MARCHE_POMPES.ETAPE.3:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_MARCHE_POMPES.ETAPE.3
+		THEN
+				OP_MARCHE_POMPES.ETAPE.4:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_MARCHE_POMPES.ETAPE.4
+		AND PS11.STATE_On AND PS11.STATE_Ok AND NOT PS11.STATE_Regen
+		THEN
+				OP_MARCHE_POMPES.ETAPE.5:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.4:=FALSE;
+(*étape 5-4*)
+ELSIF 	OP_MARCHE_POMPES.ETAPE.5
+		AND (PS11.STATE_Regen OR NOT PS11.STATE_Ok)		THEN
+				OP_MARCHE_POMPES.ETAPE.4:=TRUE;
+				OP_MARCHE_POMPES.ETAPE.5:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_MARCHE_POMPES.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_POMPAGE_PRIM" Id="{ca8186f1-6ca2-4cbe-85d7-d73c9453e7da}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION POMPAGE PRIMAIRE ENCEINTE*)
+(*pompage primaire dans l'enceinte*)
+
+(*initialisation de l'opération*)
+OP_POMPAGE_PRIM(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= OP_Purge.Etape.0 AND IN_FE11T AND IN_FE12T,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 5,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_POMPAGE_PRIM.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Pompage_Prim.Etape = 0
+		THEN
+				OP_Pompage_Prim.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Isolement.Etape.1 OR OP_Pompage_Sec.Etape.4
+		OR OP_Pompage_Proc.Etape.1
+		THEN
+				OP_Pompage_Prim.ETAPE := 0;
+				OP_Pompage_Prim.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Pompage_Prim.Etape.0
+		AND (OP_Pompage_Prim.Marche_OP OR OP_Pompage_Sec.Etape.3 OR OP_Purge.Etape.2)
+		THEN
+				OP_Pompage_Prim.Etape.1:=TRUE;
+				OP_Pompage_Prim.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Pompage_Prim.Etape.1
+		AND OP_Isolement.Etape.0
+		AND OP_Ventilation.Etape.0
+		AND OP_Pompage_Proc.Etape.0
+		AND (OP_Pompage_Sec.Etape.0 OR OP_Pompage_Sec.Etape.3)
+		AND (OP_Purge.Etape.0 OR OP_Purge.Etape.6 OR OP_Purge.Etape.2)
+		AND VS11.STATE_Off
+		AND VH11.STATE_Off
+		THEN
+				OP_Pompage_Prim.Etape.2:=TRUE;
+				OP_Pompage_Prim.Etape.1:=FALSE;
+
+(*étape 2-3*)
+ELSIF 	OP_Pompage_prim.Etape.2
+		THEN
+				OP_Pompage_Prim.Etape.3:=TRUE;
+				OP_Pompage_Prim.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Pompage_Prim.Etape.3
+		AND PP11.STATE_On AND PR11.STATE_On THEN
+				OP_Pompage_Prim.Etape.4:=TRUE;
+				OP_Pompage_Prim.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Pompage_Prim.Etape.4
+		AND VP11.STATE_On
+		THEN
+				OP_Pompage_Prim.Etape.5:=TRUE;
+				OP_Pompage_Prim.Etape.4:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Pompage_Prim.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_POMPAGE_PROC" Id="{c029f1f5-4f60-473b-8c91-f0e393c0f953}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION POMPAGE PROCEDE*)
+(*pompage procede dans l'enceinte*)
+
+(*initialisation de l'opération*)
+OP_Pompage_Proc(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= OP_POMPAGE_SEC.OK OR OP_Pompage_Proc.OK,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 3,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Pompage_Proc.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Pompage_Proc.Etape = 0
+		THEN
+				OP_Pompage_Proc.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Isolement.Etape.1 OR OP_Pompage_Prim.Etape.1 OR OP_Pompage_Sec.Etape.1
+		OR OP_Purge.Etape.1
+		THEN
+				OP_Pompage_Proc.Etape := 0;
+				OP_Pompage_Proc.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Pompage_Proc.Etape.0
+		AND OP_Pompage_Proc.Marche_OP
+		THEN
+				OP_Pompage_Proc.Etape.1:=TRUE;
+				OP_Pompage_Proc.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Pompage_Proc.Etape.1
+		AND OP_Pompage_Sec.Etape.0
+		THEN
+				OP_Pompage_Proc.Etape.2:=TRUE;
+				OP_Pompage_Proc.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Pompage_proc.Etape.2
+		AND VS11.STATE_Lam THEN
+				OP_Pompage_Proc.Etape.3:=TRUE;
+				OP_Pompage_Proc.Etape.2:=FALSE;
+(*étape 3-2*)
+ELSIF 	OP_Pompage_Proc.Etape.3
+		AND OP_Pompage_Proc.Marche_OP
+		THEN
+				OP_Pompage_Proc.Etape.2:=TRUE;
+				OP_Pompage_Proc.Etape.3:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Pompage_Proc.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_POMPAGE_SEC" Id="{7bfaf708-bbc7-4938-a258-0bd8498534bd}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION POMPAGE SECONDAIRE ENCEINTE*)
+(*pompage secondaire dans l'enceinte*)
+
+(*initialisation de l'opération*)
+OP_pompage_sec(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=IN_FE11T AND IN_FE12T AND NOT PS11.STATE_Regen,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 7,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Pompage_Sec.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Pompage_Sec.Etape = 0
+		THEN
+				OP_Pompage_Sec.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Isolement.Etape.1 OR OP_Pompage_Proc.Etape.1
+		OR (OP_Pompage_Prim.Etape.1 AND NOT OP_Pompage_Sec.Etape.3) OR OP_Purge.Etape.1
+		THEN
+				OP_Pompage_Sec.Etape := 0;
+				OP_Pompage_Sec.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Pompage_Sec.Etape.0 AND
+		(OP_Pompage_Sec.Marche_OP OR OP_Purge.Etape.6 OR
+			OP_Test_RP.Etape.2 OR OP_Test_RP.Etape.7
+		OR (OP_Regen.Etape.5 AND NOT TH_Atm AND OP_Pompage_Sec.ENABLE_INT))
+		THEN
+				OP_Pompage_Sec.Etape.1:=TRUE;
+				OP_Pompage_Sec.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Pompage_Sec.Etape.1
+		AND OP_Isolement.Etape.0
+		AND OP_Ventilation.Etape.0
+		AND OP_Pompage_Proc.Etape.0
+		AND (OP_Purge.Etape.0 OR OP_Purge.Etape.6)
+		THEN
+				OP_Pompage_Sec.Etape.2:=TRUE;
+				OP_Pompage_Sec.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Pompage_Sec.Etape.2
+		AND OP_MARCHE_POMPES.ok AND NOT TH_Vide_Primaire AND VH11.STATE_Off
+		THEN
+				OP_Pompage_Sec.Etape.3:=TRUE;
+				OP_Pompage_Sec.Etape.2:=FALSE;
+(*étape 2-4*)
+ELSIF 	OP_Pompage_Sec.Etape.2
+		AND OP_MARCHE_POMPES.ok AND TH_Vide_Primaire AND VH11.STATE_Off
+		THEN
+				OP_Pompage_Sec.Etape.4:=TRUE;
+				OP_Pompage_Sec.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Pompage_Sec.Etape.3
+		AND	OP_POMPAGE_PRIM.ok  AND TH_Vide_Primaire
+		THEN
+				OP_Pompage_Sec.Etape.4:=TRUE;
+				OP_Pompage_Sec.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Pompage_Sec.Etape.4
+		AND VP11.STATE_Off
+		AND  OP_POMPAGE_PRIM.AR   THEN
+				OP_Pompage_Sec.Etape.5:=TRUE;
+				OP_Pompage_Sec.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_Pompage_Sec.Etape.5
+		AND (PP11.STATE_Off AND PR11.STATE_Off OR CONF_Pompage_interjoint)
+		THEN
+				OP_Pompage_Sec.Etape.6:=TRUE;
+				OP_Pompage_Sec.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	OP_Pompage_Sec.Etape.6
+		AND VS11.STATE_On
+		THEN
+				OP_Pompage_Sec.Etape.7:=TRUE;
+				OP_Pompage_Sec.Etape.6:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Pompage_Sec.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_PURGE" Id="{aa6dc2d8-e781-4f0c-8b5c-e26a411e152b}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION PURGE*)
+(*purge enceinte : pompage primaire pendant un temps donné puis ventilation, répété X fois*)
+
+(*initialisation de l'opération*)
+OP_Purge(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= IN_FE11T AND IN_FE12T AND OP_Test_RP.AR,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 7,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Purge.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Purge.Etape = 0
+		THEN
+				OP_Purge.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Arret_Pompes.Etape.1
+		OR (OP_Isolement.Etape.1 AND NOT OP_Ventilation.Etape.1)
+		OR (OP_Pompage_Sec.Etape.1 AND NOT OP_Purge.Etape.6)
+		THEN
+				OP_Purge.Etape := 0;
+				OP_Purge.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Purge.Etape.0
+		AND OP_Purge.Marche_OP
+		THEN
+				OP_Purge.Etape.1:=TRUE;
+				OP_Purge.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Purge.Etape.1
+		AND OP_Pompage_Sec.Etape.0 AND OP_Pompage_Prim.Etape.0 AND OP_Pompage_Proc.Etape.0
+		AND OP_Ventilation.Etape.0 AND OP_Isolement.Etape.0
+		THEN
+				OP_Purge.Etape.2:=TRUE;
+				OP_Purge.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Purge.Etape.2
+		AND OP_Pompage_Prim.OK AND TH_Vide_Primaire
+		THEN
+				OP_Purge.Etape.3:=TRUE;
+				OP_Purge.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Purge.Etape.3
+		AND TIMER_Purge.Q
+		THEN
+				OP_Purge.Etape.4:=TRUE;
+				OP_Purge.Etape.3:=FALSE;
+(*étape 3-2*)
+ELSIF 	OP_Purge.Etape.3
+		AND NOT OP_Pompage_Prim.OK
+		THEN
+				OP_Purge.Etape.2:=TRUE;
+				OP_Purge.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Purge.Etape.4
+		AND TH_Atm
+		THEN
+				OP_Purge.Etape.5:=TRUE;
+				OP_Purge.Etape.4:=FALSE;
+(*étape 5-2*)
+ELSIF 	OP_Purge.Etape.5
+		AND (VAR_Iter_Purge < PRM_N_Purge)
+		THEN
+				OP_Purge.Etape.2:=TRUE;
+				OP_Purge.Etape.5:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_Purge.Etape.5
+		AND (VAR_Iter_Purge >= PRM_N_Purge)
+		THEN
+				OP_Purge.Etape.6:=TRUE;
+				OP_Purge.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	OP_Purge.Etape.6
+		AND OP_Pompage_Sec.EC
+		THEN
+				OP_Purge.Etape.7:=TRUE;
+				OP_Purge.Etape.6:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Purge.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_REGEN" Id="{dae94794-19cb-4226-bd78-7ed884c14e68}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION REGENERATION POMPE CRYOGENIQUE*)
+(*isolement pompage et lancement régénération*)
+
+(*initialisation de l'opération*)
+OP_Regen(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= OP_Test_RP.AR AND NOT OP_Marche_Pompes.AR,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Regen.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Regen.Etape = 0
+		THEN
+				OP_Regen.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Arret_Pompes.Etape.1
+		THEN
+				OP_Regen.Etape := 0;
+				OP_Regen.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Regen.Etape.0
+		AND (OP_Regen.Marche_OP OR (FM_REGEN.Q AND NOT MANUAL AND NOT OP_Regen_Part.EC))
+		THEN
+				OP_Regen.Etape.1:=TRUE;
+				OP_Regen.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Regen.Etape.1
+		THEN
+				OP_Regen.Etape.2:=TRUE;
+				OP_Regen.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Regen.Etape.2
+		AND (OP_Isolement.Etape.4 OR (OP_Pompage_Prim.Etape.0 AND OP_Pompage_Proc.Etape.0 OR OP_Pompage_Sec.Etape.0 OR OP_Purge.Etape.0))
+		THEN
+				OP_Regen.Etape.3:=TRUE;
+				OP_Regen.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Regen.Etape.3 AND PS11.STATE_Regen
+		THEN
+				OP_Regen.Etape.4:=TRUE;
+				OP_Regen.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Regen.Etape.4 AND NOT PS11.STATE_Regen
+		THEN
+				OP_Regen.Etape.5:=TRUE;
+				OP_Regen.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_Regen.Etape.5
+		AND (OP_Pompage_Sec.OK OR (OP_Marche_Pompes.OK AND (TH_Atm OR NOT OP_Pompage_Sec.ENABLE_INT)))
+		THEN
+				OP_Regen.Etape.6:=TRUE;
+				OP_Regen.Etape.5:=FALSE;
+(*étape 6-0*)
+ELSIF	OP_Regen.Etape.6
+		AND TIMER_etape6_regen.Q
+		THEN
+				OP_Regen.Etape.0:=TRUE;
+				OP_Regen.Etape.6:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Regen.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_REGEN_PART" Id="{73fb12dd-9dcc-4831-bdd6-ff25ab5ffefc}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION REGENERATION POMPE CRYOGENIQUE*)
+(*isolement pompage et lancement régénération*)
+
+(*initialisation de l'opération*)
+OP_Regen_Part(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= OP_Test_RP.AR AND NOT OP_Marche_Pompes.AR,
+	MANUAL:= MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Regen_Part.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Regen_Part.Etape = 0
+		THEN
+				OP_Regen_Part.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Arret_Pompes.Etape.1
+		OR OP_Pompage_Sec.Etape.1 OR OP_Pompage_Prim.Etape.1
+		THEN
+				OP_Regen_Part.Etape := 0;
+				OP_Regen_Part.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Regen_Part.Etape.0
+		AND OP_Regen_Part.Marche_OP
+		THEN
+				OP_Regen_Part.Etape.1:=TRUE;
+				OP_Regen_Part.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Regen_Part.Etape.1
+		THEN
+				OP_Regen_Part.Etape.2:=TRUE;
+				OP_Regen_Part.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Regen_Part.Etape.2
+		AND (OP_Isolement.OK
+		OR (OP_Pompage_Prim.Etape.0 AND OP_Pompage_Proc.Etape.0 OR OP_Pompage_Sec.Etape.0 OR OP_Purge.Etape.0))
+		THEN
+				OP_Regen_Part.Etape.3:=TRUE;
+				OP_Regen_Part.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Regen_Part.Etape.3 AND PS11.STATE_Regen
+		THEN
+				OP_Regen_Part.Etape.4:=TRUE;
+				OP_Regen_Part.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Regen_Part.Etape.4
+		AND IN_Temp_Etage1 > 300
+		THEN
+				OP_Regen_Part.Etape.5:=TRUE;
+				OP_Regen_Part.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_Regen_Part.Etape.5
+		AND (IN_Temp_Etage1 < PRM_Temp_Post_Purge
+			OR TIMER_Post_Purge.Q )
+		THEN
+				OP_Regen_Part.Etape.6:=TRUE;
+				OP_Regen_Part.Etape.5:=FALSE;
+(*étape 6-0*)
+ELSIF	OP_Regen_Part.Etape.6
+		AND TIMER_etape6_regen.Q
+		THEN
+				OP_Regen_Part.Etape.0:=TRUE;
+				OP_Regen_Part.Etape.6:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Regen_Part.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_TEST_RP" Id="{800d0378-71f4-4579-81a8-d5164dc4341d}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION TEST REMONTEE PRESSION*)
+
+OP_TEST_RP(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	MANUAL:=MANUAL ,
+	ENABLE_INT := OP_Pompage_Sec.OK AND OP_Purge.AR AND OP_Regen.AR AND OP_Regen_Part.AR,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 8,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_TEST_RP.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_TEST_RP.ETAPE = 0
+		THEN
+				OP_TEST_RP.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	RESET OR MANUAL OR (OP_Isolement.Etape.1 AND NOT OP_Test_RP.Etape.3)
+			OR (OP_Pompage_Sec.Etape.1 AND OP_Test_RP.Etape.3) OR CO_Stop_Test_RP
+			OR OP_Arret_Pompes.Etape.1 OR OP_Isolement.ON_AUTO_EXT OR OP_Isolement.ON_AUTO_INT
+		THEN
+				OP_TEST_RP.ETAPE := 0;
+				OP_TEST_RP.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_TEST_RP.ETAPE.0 AND OP_TEST_RP.MARCHE_OP
+		THEN
+				OP_TEST_RP.ETAPE.1:=TRUE;
+				OP_TEST_RP.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_TEST_RP.ETAPE.1
+		THEN
+				OP_TEST_RP.ETAPE.2:=TRUE;
+				OP_TEST_RP.ETAPE.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_TEST_RP.ETAPE.2
+		AND OP_Pompage_Sec.ok AND TH_Test_RP
+		THEN
+				OP_TEST_RP.ETAPE.3:=TRUE;
+				OP_TEST_RP.ETAPE.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_TEST_RP.ETAPE.3
+		AND OP_Isolement.OK
+		THEN
+				OP_TEST_RP.ETAPE.4:=TRUE;
+				OP_TEST_RP.ETAPE.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_TEST_RP.ETAPE.4
+		AND TIMER_attente_test.Q
+		THEN
+				OP_TEST_RP.ETAPE.5:=TRUE;
+				OP_TEST_RP.ETAPE.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_TEST_RP.ETAPE.5
+		THEN
+				OP_TEST_RP.ETAPE.6:=TRUE;
+				OP_TEST_RP.ETAPE.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	OP_TEST_RP.ETAPE.6
+		THEN
+				OP_TEST_RP.ETAPE.7:=TRUE;
+				OP_TEST_RP.ETAPE.6:=FALSE;
+(*étape 7-8*)
+ELSIF 	OP_TEST_RP.ETAPE.7
+		AND OP_Pompage_Sec.OK
+		THEN
+				OP_TEST_RP.ETAPE.8:=TRUE;
+				OP_TEST_RP.ETAPE.7:=FALSE;
+(*étape 8-1*)
+ELSIF 	OP_TEST_RP.ETAPE.8 AND OP_TEST_RP.MARCHE_OP
+		THEN
+				OP_TEST_RP.ETAPE.1:=TRUE;
+				OP_TEST_RP.ETAPE.8:=FALSE;
+END_IF
+(*cloture du traitement de l'opération*)
+OP_TEST_RP.POST();
+CO_Stop_Test_RP	:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_VENTILATION" Id="{dfcdc484-e845-47bf-8ed8-6d4bc8ddec2d}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION VENTILATION*)
+
+
+(*initialisation de l'opération*)
+OP_Ventilation(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=OP_Purge.Etape.0,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= FALSE ,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 8,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_Ventilation.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Ventilation.Etape = 0
+		THEN
+				OP_Ventilation.Etape.0:= TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR (OP_isolement.Etape.1 AND NOT  OP_ventilation.Etape.1)
+		OR OP_Pompage_sec.Etape.1 OR Op_Pompage_Prim.Etape.1
+		OR OP_Pompage_Proc.Etape.1 OR OP_Purge.Etape.1
+		THEN
+				OP_Ventilation.Etape := 0;
+				OP_Ventilation.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Ventilation.Etape.0
+		 AND (OP_Ventilation.Marche_OP OR OP_Purge.Etape.4)
+		THEN
+				OP_Ventilation.Etape.1:=TRUE;
+				OP_Ventilation.Etape.0:=FALSE;
+(*étape 1-9*)
+ELSIF	OP_Ventilation.Etape.1
+		AND OP_isolement.OK THEN
+				OP_Ventilation.Etape.9:=TRUE;
+				OP_Ventilation.Etape.1:=FALSE;
+(*étape 9-2*)
+ELSIF	OP_Ventilation.Etape.9
+		AND OP_isolement.Etape.0 THEN
+				OP_Ventilation.Etape.2:=TRUE;
+				OP_Ventilation.Etape.9:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Ventilation.Etape.2 AND  I_Prep_Ventil_Ok  THEN
+				OP_Ventilation.Etape.3:=TRUE;
+				OP_Ventilation.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Ventilation.Etape.3
+		AND  I_Stop_Mesure_OK   THEN
+				OP_Ventilation.Etape.4:=TRUE;
+				OP_Ventilation.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Ventilation.Etape.4
+		THEN
+				OP_Ventilation.Etape.5:=TRUE;
+				OP_Ventilation.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_Ventilation.Etape.5
+		AND (TH_atm OR I_Fin_Ventil OR NOT IN_FE11T OR NOT IN_FE12T )
+		THEN
+				OP_Ventilation.Etape.6:=TRUE;
+				OP_Ventilation.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	OP_Ventilation.Etape.6
+		AND (TIMER_SurVentilation_enc.Q OR I_Fin_Ventil OR NOT IN_FE11T OR NOT IN_FE12T)
+		THEN
+				OP_Ventilation.Etape.7:=TRUE;
+				OP_Ventilation.Etape.6:=FALSE;
+(*étape 7-8*)
+ELSIF 	OP_Ventilation.Etape.7
+		AND VH11.STATE_Off THEN
+				OP_Ventilation.Etape.8:=TRUE;
+				OP_Ventilation.Etape.7:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Ventilation.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{f95e1f7b-e850-42e6-a8a3-7d0226113436}">
+      <Implementation>
+        <ST><![CDATA[VAR_Reset_Sortie := 	NOT MANUAL AND OP_Arret_Pompes.Etape.0 AND OP_Isolement.Etape.0 AND OP_Marche_Pompes.Etape.0
+					AND OP_Pompage_Prim.Etape.0 AND OP_Pompage_Proc.Etape.0 AND OP_Pompage_Sec.Etape.0
+					AND OP_Ventilation.Etape.0 AND OP_Purge.Etape.0 AND OP_Regen.Etape.0 AND OP_Regen_Part.Etape.0;
+
+
+
+
+(*****************************************)
+(*       pompe primaire PP11             *)
+(*****************************************)
+IF (OP_MARCHE_POMPES.ETAPE.2 AND CONF_Pompage_interjoint)
+	OR OP_Pompage_Prim.Etape.3
+	OR PS11.STATE_Regen AND NOT RESET
+	THEN
+		PP11.CO_On 	:= 	TRUE;
+ELSIF RESET OR (VAR_Reset_Sortie AND NOT PS11.STATE_Regen)
+    OR (OP_Pompage_Sec.Etape.5 AND PR11.STATE_Off AND NOT CONF_Pompage_interjoint)
+	OR (OP_Isolement.Etape.3 AND PR11.STATE_Off AND NOT PS11.STATE_Regen  AND NOT CONF_Pompage_interjoint)
+	OR OP_Arret_Pompes.Etape.6 AND PR11.STATE_Off AND VP11.STATE_Off
+	THEN
+		PP11.CO_On	:= 	FALSE;
+END_IF;
+
+(*****************************************)
+(*       pompe primaire PR11             *)
+(*****************************************)
+TIMER_Arret_Roots.IN := (OP_Pompage_Sec.OK
+						OR (OP_Pompage_Prim.AR AND VP11.STATE_Off AND NOT PS11.STATE_Regen)) AND CONF_Pompage_interjoint;
+TIMER_Arret_Roots.PT := T#2M;
+TIMER_Arret_Roots();
+
+IF (OP_Pompage_Prim.Etape.3 AND PP11.STATE_On)
+	OR (PS11.STATE_Regen AND PP11.STATE_On AND NOT RESET) THEN
+		PR11.CO_On 	:= 	TRUE;
+ELSIF RESET OR VAR_Reset_Sortie
+    OR TIMER_Arret_Roots.Q
+	OR OP_Arret_Pompes.Etape.3 
+	OR (OP_Isolement.Etape.3 AND NOT PS11.STATE_Regen AND NOT CONF_Pompage_interjoint)
+	OR (OP_Pompage_Sec.Etape.5 AND NOT CONF_Pompage_interjoint)
+	THEN
+		PR11.CO_On	:= 	FALSE;
+END_IF;
+
+(*****************************************)
+(* 		pompe cryo PS11		   *)
+(*****************************************)
+IF  OP_Marche_Pompes.Etape.4  THEN
+	PS11.CO_On 	:= 	TRUE;
+ELSIF RESET  (*OR VAR_Reset_Sortie TODOLN*)  OR OP_Arret_Pompes.Etape.3 THEN
+	PS11.CO_On	:= 	FALSE;
+	PS11.CO_Regen := FALSE;
+END_IF;
+IF OP_Regen.Etape.3 OR OP_Regen_Part.Etape.3 THEN
+	PS11.CO_Regen	:=	TRUE;
+ELSIF OP_Regen.Etape.4 OR OP_Regen_Part.Etape.4 THEN
+	PS11.CO_Regen	:=	FALSE;
+ELSIF MANUAL THEN
+	PS11.CO_On		:=	PS11.VAR_On;
+END_IF;
+
+(*****************************************)
+(* 		vanne VP11    		   *)
+(*****************************************)
+IF OP_Pompage_Prim.Etape.4   THEN
+		VP11.CO_On 		:= 	TRUE;
+ELSIF RESET OR VAR_Reset_Sortie OR OP_Pompage_Sec.Etape.4  OR OP_Isolement.Etape.2 THEN
+		VP11.CO_On		:= 	FALSE;
+END_IF;
+
+
+(******************************************)
+(*		Vanne  VH11		              *)
+(******************************************)
+IF   OP_VENTILATION.Etape.5 OR OP_Ventilation.Etape.6 THEN
+			VH11.CO_On 	:= 	TRUE;
+ELSIF RESET OR  VAR_Reset_Sortie OR OP_Pompage_Prim.Etape.1 OR
+	   OP_Pompage_Sec.Etape.2 OR   OP_Isolement.Etape.2 OR OP_Ventilation.Etape.7
+	   THEN
+			VH11.CO_On	:= 	FALSE;
+END_IF;
+
+(******************************************)
+(*                  Vanne  VS11                       *)
+(******************************************)
+IF OP_Pompage_Sec.Etape.6   THEN
+		VS11.CO_On 	:= 	TRUE;
+		VS11.CO_Lam:=	FALSE;
+ELSIF OP_Pompage_Proc.Etape.2  THEN
+		VS11.CO_On 	:= 	FALSE;
+		VS11.CO_Lam:=	TRUE;
+ELSIF VAR_Reset_Sortie OR RESET
+	   OR OP_Pompage_Prim.Etape.1   OR OP_Isolement.Etape.2 THEN
+		VS11.CO_On	:= 	FALSE;
+		VS11.CO_Lam:=	FALSE;
+END_IF;
+
+
+(******************************************)
+(*                 Vanne  VINT                    *)
+(******************************************)
+VINT.CO_On 	:= 	G7_Bal_Int.Etape.6 OR G7_Bal_Int.Etape.7 OR G7_Bal_Int.Etape.11 OR G7_Bal_Int.Etape.12;
+
+
+(******************************************)
+(*                 Vanne  VN2PP11                *)
+(******************************************)
+VN2PP11.CO_On 	:= 	G7_Bal_Int.Etape.3 OR G7_Bal_Int.Etape.4 OR G7_Bal_Int.Etape.15 OR G7_Bal_Int.Etape.16 OR G7_Bal_Int.Etape.24;
+
+
+
+(***********************************************)
+(*                Demande diverse              *)
+(***********************************************)
+
+(*demande de préparation avant ventilation*)
+RQ_Prep_Ventil_Enc 	:= OP_VENTILATION.Etape.2;
+
+(*Demande d'arrêt de la mesure avant ventilation enceinte*)
+RQ_Stop_Mesure_Enc := Op_Ventilation.Etape.3 OR Op_Ventilation.Etape.4 OR Op_Ventilation.Etape.5 ;
+
+(*Tempo de surventilation enceinte*)
+TIMER_SurVentilation_Enc	(
+					PT:=PRM_Tim_SurVentil_E,
+					IN:=OP_VENTILATION.Etape.6 AND TH_Atm
+					);
+
+(*Temporisation d'arrêt pompe primaire*)
+TIMER_Arret_PP11(
+					PT:=PRM_Tim_Arret_PP11,
+					IN:=OP_Arret_Pompes.Etape.3,
+				);
+
+(*Tempo de purge*)
+TIMER_Purge (
+					PT:=PRM_Tim_Purge,
+					IN:=OP_Purge.Etape.3
+					);
+
+(*Compteur d'itération purge*)
+IF		OP_Purge.Etape.0 THEN
+	VAR_Iter_Purge	:=	0;
+ELSIF	OP_Purge.Etape.5 THEN
+	VAR_Iter_Purge	:=	VAR_Iter_Purge + 1;
+END_IF
+
+(*timer de prep ventil*)
+TIM_Prep_ventil.PT := PRM_Tim_Prep_Ventil;
+TIM_Prep_ventil.IN := OP_Ventilation.Etape.2;
+TIM_Prep_ventil();
+
+
+(*Tempo de retard à l'ouverture de la vanne interjoint*)
+IF G7_Bal_Int.etape.4 THEN
+	TIMER_BalInt.PT	:=	PRM_Tim_Bal_BalInt;
+ELSIF G7_Bal_Int.Etape.7 THEN
+	TIMER_BalInt.PT	:=	PRM_Tim_Int_BalInt;
+ELSIF G7_Bal_Int.Etape.16 THEN
+	TIMER_BalInt.PT	:=	PRM_Tim_FinBal;
+END_IF
+TIMER_BalInt(IN:=G7_Bal_Int.etape.4 OR G7_Bal_Int.etape.7 OR G7_Bal_Int.etape.16);
+
+
+(*timer de post purge en regen partielle*)
+TIMER_Post_Purge.PT			:=	PRM_Tim_Post_Purge;
+TIMER_Post_Purge.IN			:=	OP_Regen_Part.Etape.5;
+TIMER_Post_Purge();
+
+TIMER_etape6_regen.PT		:=	T#500ms;
+TIMER_etape6_regen.IN		:=	OP_Regen.Etape.6 OR OP_Regen_Part.Etape.6;
+TIMER_etape6_regen();
+
+(***************** test de remontée de pression*************************)
+TIMER_attente_test		(
+					PT:=PRM_Tim_test,
+					IN:=OP_Test_RP.Etape.4
+					);
+(*Mémorisation des pressions lors du test et calcul de l'indicateur*)
+IF FM_etape4.Q THEN
+	VAR_Mem_Pression_deb := IN_Pressure_RP;
+END_IF;
+IF OP_Test_RP.Etape.5 THEN
+	VAR_Mem_Pression_fin := IN_Pressure_RP;
+END_IF;
+(*Indicateur final faisant intervenir le volume ATTENTION : FORMULE MEMO SANS DOUTE FAUSSE*)
+IF OP_Test_RP.Etape.6 THEN
+	VAR_indicateur_test := (VAR_Mem_Pression_fin - VAR_Mem_Pression_deb) * CONF_volume_enceinte / TIME_TO_REAL(PRM_Tim_Test) * 1000;
+END_IF;
+
+EV_Test_RP.CONDITION	:=	OP_Test_RP.Etape.7;
+EV_Test_RP.VAL1			:=	CONCAT(REAL_TO_STRING(VAR_indicateur_test),' mbar.L/s');
+EV_Test_RP();
+
+
+(*****************************************************)
+(* APPEL DES FONCTIONS COMPOSANTS*)
+(*****************************************************)
+
+(*Vanne de pompage primaire enceinte*)
+VP11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:=  PP11.STATE_On AND PR11.STATE_On AND VH11.STATE_Off AND VS11.STATE_Off AND IN_FE11T AND IN_FE12T AND NOT PS11.STATE_Regen,
+	EN_Off_INT:= TRUE
+	);
+
+(*Vanne pompage secondaire enceinte*)
+VS11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:= (PS11.STATE_Ok
+				AND VP11.STATE_Off AND VH11.STATE_Off)
+				AND TH_RP_Enc,
+	EN_Off_INT:= TRUE
+	);
+
+(*Vanne ventilation enceinte*)
+VH11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:= VP11.STATE_Off  AND  VS11.STATE_Off,
+	EN_Off_INT:= TRUE
+	);
+
+(*Vanne interjoint*)
+VINT(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:= PP11.STATE_On AND NOT PS11.STATE_Regen AND VN2PP11.STATE_Off,
+	EN_Off_INT:= TRUE
+	);
+	
+(*Vanne balayage pompe primaire*)
+VN2PP11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:= NOT PS11.STATE_Regen AND VINT.STATE_Off AND VP11.STATE_Off,
+	EN_Off_INT:= TRUE
+	);
+
+(*Pompe primaire PP11*)
+PP11(
+	RESET:= 	RESET,
+	MANUAL:= 	MANUAL AND NOT PS11.STATE_Regen,
+	EN_On_INT:= TRUE,
+	EN_Off_INT:= (PR11.STATE_Off AND VP11.STATE_Off AND NOT PS11.STATE_Regen) OR VAR_Reset_sortie
+	);
+	
+(*Pompe roots PR11*)
+PR11(
+	RESET:= 	RESET,
+	MANUAL:= 	MANUAL,
+	EN_On_INT:= PP11.STATE_On,
+	EN_Off_INT:= (VP11.STATE_Off AND NOT PS11.STATE_Regen) OR VAR_Reset_sortie
+	);
+
+(*Pompe cryo PS11*)
+PS11(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	EN_On_INT:= TRUE ,
+	EN_Off_INT:= VS11.STATE_Off OR VAR_Reset_Sortie,
+	EN_Regen_INT:= VS11.STATE_Off
+	);
+
+
+(*******************************************)
+(* GESTION DES DEFAUTS 	     *)
+(*******************************************)
+
+
+(*Défaut d'obtention du seuil de basculement en pompage secondaire*)
+DEF_PPRIM			(
+					Condition:=	(OP_Pompage_Prim.Etape.5 AND OP_Pompage_Sec.Etape.3) AND (DEF_PPRIM.DELAY<>T#0ms)
+
+					);
+DEF_TGF				(
+					Condition:= 	(OP_Pompage_Prim.Etape.5 OR OP_pompage_prim.Etape.4) AND OP_Pompage_sec.Etape.3
+								AND	(DEF_TGF.DELAY<>T#0ms) AND NOT TH_Grosse_Fuite
+					);
+
+(*Défaut de remontée de pression dans l'enceinte pendant le pompage secondaire*)
+(* validation ok - SP *)
+DEF_RP_enc			(
+					Condition:=	NOT VS11.STATE_Off AND NOT TH_RP_Enc AND NOT RESET
+					);
+
+(*Défaut de ventilation*)
+DEF_Vent			(
+					Condition:=	(OP_ventilation.Etape.4 OR Op_ventilation.Etape.5 OR op_ventilation.Etape.6) AND (DEF_Vent.DELAY <> T#0ms)
+					);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{68046b90-b1eb-41c5-83db-2fd80f853fa3}">
+      <Implementation>
+        <ST><![CDATA[(*vérification pour empécher la division par 0*)
+IF TIME_TO_REAL(PRM_Tim_test) = 0 THEN
+	PRM_Tim_test := T#1s;
+END_IF
+FM_etape4(clk := OP_Test_RP.Etape.4);
+
+IdXML							:=	'2';
+TagXML							:=	0;
+
+OP_Marche_Pompes.IdXML			:= 	'1';
+OP_Marche_Pompes.TagXML			:=	1;
+
+OP_Arret_Pompes.IdXML			:= 	'1';
+OP_Arret_Pompes.TagXML			:= 	2;
+
+OP_Isolement.IdXML				:= 	'1';
+OP_Isolement.TagXML				:= 	3;
+
+OP_Ventilation.IdXML			:= 	'1';
+OP_Ventilation.TagXML			:= 	4;
+
+OP_Pompage_Prim.IdXML			:=	'1';
+OP_Pompage_Prim.TagXML			:=	6;
+
+OP_Pompage_Sec.IdXML			:=	'1';
+OP_Pompage_Sec.TagXML			:=	5;
+
+OP_Pompage_Proc.IdXML			:=	'1';
+OP_Pompage_Proc.TagXML			:=	7;
+
+OP_Purge.IdXML					:=	'1';
+OP_Purge.TagXML					:=	8;
+
+OP_Regen.IdXML					:=	'1';
+OP_Regen.TagXML					:=	9;
+
+OP_Test_RP.IdXML				:=	'1';
+OP_Test_RP.TagXML				:=	10;
+
+
+DEF_PPrim.IdXML					:= '1';
+DEF_PPrim.TagXML				:= 1;
+DEF_Vent.IdXML					:= '1';
+DEF_Vent.TagXML					:= 2;
+DEF_RP_enc.IdXML				:= '1';
+DEF_RP_enc.TagXML				:= 3;
+DEF_TGF.IdXML					:= '1';
+DEF_TGF.TagXML					:= 4;
+	
+EV_Test_RP.IdXML				:=	'1';
+EV_Test_RP.TagXML				:=	14;
+EV_Test_RP.Groupe				:=	3;
+
+PP11.IdXML					:=	'1';
+PP11.TagXML					:=	7;
+
+PR11.IdXML					:=	'1';
+PR11.TagXML					:=	10;
+
+PS11.IdXML					:=	'1';
+PS11.TagXML					:=	9;
+
+VP11.IdXML					:=	'1';
+VP11.TagXML					:=	2;
+VP11.DEF_On.IdXML			:=	'3';
+VP11.DEF_On.TagXML			:=	2;
+VP11.DEF_Off.IdXML			:=	'3';
+VP11.DEF_Off.TagXML			:=	4;
+VP11.DEF_Sensor.IdXML		:=	'3';
+VP11.DEF_Sensor.TagXML		:=	13;
+VP11.DEF_On_Imposs.IdXML	:=	'3';
+VP11.DEF_On_Imposs.TagXML	:=	6;
+VP11.DEF_Off_Imposs.IdXML	:=	'3';
+VP11.DEF_Off_Imposs.TagXML	:=	9;
+VP11.DEF_Off_auto.IdXML		:=	'3';
+VP11.DEF_Off_auto.TagXML	:=	11;
+
+VH11.IdXML					:=	'1';
+VH11.TagXML					:=	4;
+VH11.DEF_On.IdXML			:=	'3';
+VH11.DEF_On.TagXML			:=	2;
+VH11.DEF_Off.IdXML			:=	'3';
+VH11.DEF_Off.TagXML			:=	4;
+VH11.DEF_Sensor.IdXML		:=	'3';
+VH11.DEF_Sensor.TagXML		:=	13;
+VH11.DEF_On_Imposs.IdXML	:=	'3';
+VH11.DEF_On_Imposs.TagXML	:=	6;
+VH11.DEF_Off_Imposs.IdXML	:=	'3';
+VH11.DEF_Off_Imposs.TagXML	:=	9;
+VH11.DEF_Off_auto.IdXML		:=	'3';
+VH11.DEF_Off_auto.TagXML	:=	11;
+
+VS11.IdXML					:=	'1';
+VS11.TagXML					:=	3;
+
+VINT.IdXML					:=	'1';
+VINT.TagXML					:=	1;
+VINT.DEF_On.IdXML			:=	'3';
+VINT.DEF_On.TagXML			:=	2;
+VINT.DEF_Off.IdXML			:=	'3';
+VINT.DEF_Off.TagXML			:=	4;
+VINT.DEF_Sensor.IdXML		:=	'3';
+VINT.DEF_Sensor.TagXML		:=	13;
+VINT.DEF_On_Imposs.IdXML	:=	'3';
+VINT.DEF_On_Imposs.TagXML	:=	6;
+VINT.DEF_Off_Imposs.IdXML	:=	'3';
+VINT.DEF_Off_Imposs.TagXML	:=	9;
+VINT.DEF_Off_auto.IdXML		:=	'3';
+VINT.DEF_Off_auto.TagXML	:=	11;
+
+
+VN2PP11.IdXML					:=	'1';
+VN2PP11.TagXML					:=	1;
+VN2PP11.DEF_On.IdXML			:=	'3';
+VN2PP11.DEF_On.TagXML			:=	2;
+VN2PP11.DEF_Off.IdXML			:=	'3';
+VN2PP11.DEF_Off.TagXML			:=	4;
+VN2PP11.DEF_Sensor.IdXML		:=	'3';
+VN2PP11.DEF_Sensor.TagXML		:=	13;
+VN2PP11.DEF_On_Imposs.IdXML		:=	'3';
+VN2PP11.DEF_On_Imposs.TagXML	:=	6;
+VN2PP11.DEF_Off_Imposs.IdXML	:=	'3';
+VN2PP11.DEF_Off_Imposs.TagXML	:=	9;
+VN2PP11.DEF_Off_auto.IdXML		:=	'3';
+VN2PP11.DEF_Off_auto.TagXML		:=	11;
+
+(* Gestion FM et FD régénération*)
+FM_REGEN(CLK:=PS11.STATE_Regen);
+FD_REGEN(CLK:=PS11.STATE_Regen);
+]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

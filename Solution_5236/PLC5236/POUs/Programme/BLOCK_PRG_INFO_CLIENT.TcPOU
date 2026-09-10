@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_PRG_INFO_CLIENT" Id="{30cff9b5-c273-4529-9cda-d381375e1ccf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_INFO_CLIENT
+
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	(*sorties MOXA*)
+	OUT_MOXA_O1	AT%Q*:			BOOL;
+	OUT_MOXA_O2	AT%Q*:			BOOL;
+	OUT_MOXA_O3	AT%Q*:			BOOL;
+	OUT_MOXA_O4	AT%Q*:			BOOL;
+	OUT_MOXA_O5	AT%Q*:			BOOL;
+	OUT_MOXA_O6	AT%Q*:			BOOL;
+	OUT_MOXA_O7	AT%Q*:			BOOL;
+	OUT_MOXA_O8	AT%Q*:			BOOL;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+(*COMMUNICATION CLIENT BOITIER MOXA*)
+
+(*1 - Production : process en cours*)
+OUT_MOXA_O1	:=	MACHINE.STATE_Prod;
+(*2 - Réglage : Mode manuel*)
+OUT_MOXA_O2	:=	MACHINE.STATE_Manu;
+(*3 - Attente de chargement : Mode auto en attente de process*)
+OUT_MOXA_O3	:=	MACHINE.STATE_Wait_Prod;
+(*4 - Panne : Défaut présent*)
+OUT_MOXA_O4	:=	MACHINE.I_def_stop OR MACHINE.I_def_inter;
+(*5 - Power ON*)
+OUT_MOXA_O5	:=	MACHINE.STATE_On;
+(*6 - Power OFF*)
+OUT_MOXA_O6	:=	MACHINE.STATE_Off;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PRG_INFO_CLIENT">
+      <LineId Id="17" Count="14" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

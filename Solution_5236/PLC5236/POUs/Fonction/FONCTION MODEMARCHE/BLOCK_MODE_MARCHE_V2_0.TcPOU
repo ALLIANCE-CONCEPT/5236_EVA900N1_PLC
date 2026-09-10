@@ -1,0 +1,636 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_MODE_MARCHE_V2_0" Id="{86e51239-57bf-41c3-a68d-f54901ce0d72}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_MODE_MARCHE_V2_0
+
+(* VERSION 1.0 - 04/2010 - SP*)
+(* VERSION 1.1 - 10/2010 - SP - ajout des informations machine*)
+(* VERSION 1.2 - 07/2011 - HG - ajout gestion évènements, modification contrôle fonctions, demande arrêt cluster*)
+(* VERSION 2.0 - 02/2012 - SP - ajout gestion événements, retrait demande arrêt cluster, prise en compte du mode manuel non sécurisé, ajout
+						de la gestion de STATE_COLOR pour animation couleur dans IHM beckhoff en fonction du mode de marche
+						7326 - BA8*)
+(* VERSION 3.0 - 01/2016 - GV - ajout gestion du chargement des paramètres système au démarrage*)
+(* VERSION 4.0 - 05/2022 - GV - ajout du mode standby*)
+(* VERSION 5.0 - 11/2023 - HG - Ajout DEF_Presence_TrAC et DEF_Presence_ACSoft avec variables associées
+								ajout tempo + STATE_Pause_TrAC avant lancement procédé week-end 
+								pour dissociation du procédé et procédé week-end dans trac*)
+
+(* BLOCK GESTION DU MODE DE MARCHE*)
+
+VAR_INPUT
+	IN_PT1: 				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(* Entrée TOR présence tension*)
+	IN_MM1:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(* Entrée TOR machine en marche*)
+	IN_MA1T:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(* Entrée TOR pressostat air*)
+	IN_MA2T:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)		(* Entrée TOR pressostat N2*)
+	EN_Auto:				BOOL:=TRUE;										(*Condition d'autorisation de passage en  mode automatique*)
+	EN_Manu:				BOOL:=TRUE;										(*Condition d'autorisation de passage en mode manuel*)
+	EN_Prod:				BOOL:=TRUE;										(*Condition d'autorisation de passage en mode production*)
+	EN_Standby:				BOOL:=TRUE;										(*Condition d'autorisation de passage en mode standby*)
+	EN_Inter_Prod:			BOOL:=TRUE;										(*Condition d'autorisation d'interruption de la production*)
+	EN_Reprise_Prod:		BOOL:=TRUE;										(*Condition d'autorisation de reprise de la production*)
+
+	I_Init_OK:				BOOL:=TRUE;										(*information initialisation de la machine ok*)
+	I_Param_OK:				BOOL:=TRUE;										(*information de chargement des paramètres système ok*)
+	I_Prep_Prod_OK:			BOOL:=TRUE;										(*information préparation production ok*)
+	I_PROCEDE_ok:			BOOL:=TRUE;										(*indique que le procédé est terminé normallement*)
+	I_ARRET_PROCEDE_OK:		BOOL:=TRUE;										(*indique que l'arrêt procédé est ok*)
+	I_INTER_PROD_OK:		BOOL:=TRUE;										(*indique que la séquence d'interruption procédé a été exécutée*)
+	I_def_stop:				BOOL;											(*Condition d'arrêt sur défaut*)
+	I_Standby_Ok:			BOOL:=TRUE;										(*Information mise en standby ok*)
+	I_WakeUp_OK:			BOOL:=TRUE;										(*Information réveille appareils ok*)
+	I_PROCEDE_WD_Ok:		BOOL:=TRUE;										(*Procédé week end terminé correctement*)
+	I_PROCEDE_WD_Ar:		BOOL:=TRUE;										(*Procédé week end terminé*)
+	I_def_inter:			BOOL;											(*Condition d'interruption sur défaut*)
+	I_moteur_inter_ok:		BOOL;											(*Moteur de procédé en mode interruption*)
+
+	DEF_Air:					PRCDEF;								(*défaut d'air comprimé*)
+	DEF_N2:						PRCDEF;								(*défaut d'azote*)
+	EV_Stop_def:				PRCDEF;								(*Evenement arrêt procédé sur défaut*)
+	EV_Stop_user:				PRCDEF;								(*Evenement arrêt procédé immédiat sur demande utilisateur*)
+	EV_Start_proc:				PRCDEF;								(*Evenement lancement procédé*)
+	EV_Stop_Ok:					PRCDEF;								(*Evenement arret normal du procédé*)
+	EV_initialisation:			PRCDEF;								(*initialisation de la machine*)
+	EV_machine_off:				PRCDEF;								(*arrêt machine*)
+	EV_machine_on:				PRCDEF;								(*marche machine*)
+	EV_safety_manual_mode:		PRCDEF;								(*passage en mode manuel*)
+	EV_auto_mode:				PRCDEF;								(*passage en mode automatique*)
+	EV_non_safety_manu_mode:	PRCDEF;								(*désactivation des sécurités en mode manuel*)
+	EV_inter_user:				PRCDEF;								(*interruption du procédé*)
+	EV_inter_def:				PRCDEF;								(*interruption du procédé sur défaut*)
+	EV_reprise:					PRCDEF;								(*Reprise du procédé sur défaut*)
+	
+	DEF_Presence_TrAC:			PRCDEF;
+	DEF_Presence_ACSoft:		PRCDEF;
+
+	COUNTER_Machine_on:			BLOCK_CPT_TEMPS;						(*compteur temps machine en marche*)
+	COUNTER_manual_mode:		BLOCK_CPT_TEMPS;						(*compteur temps machine en mode manuel*)
+	COUNTER_auto_mode:			BLOCK_CPT_TEMPS;						(*compteur temps machine en mode automatique*)
+	COUNTER_production:			BLOCK_CPT_TEMPS;						(*compteur temps machine en production*)
+
+	Etape:						UDINT;			(*étape du grafcet*)
+	
+	(*Variable procédé weekend*)
+	PRM_EXEC_PROC_WEEKEND:		BOOL;	(*Exécution du procédé week end en fin de production*)
+	
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Name:				STRING;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*nom de la machine*)
+	CONF_SerialNumber:		STRING(20);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*N° de série*)
+	CONF_Customer:			STRING;		(* ~ (OPC : 1 : available for OPC-clients) *)		(*nom du client*)
+	CONF_Version:			STRING(10);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*dernière version du logiciel - personnalisation*)
+	CONF_VerDate:			STRING(20);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*date de la dernière version*)
+	CONF_Author:			STRING(20);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*auteur*)
+	CONF_Model:				STRING(20);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*modele de programme et version *)
+	CONF_Affaire:			STRING(10);	(* ~ (OPC : 1 : available for OPC-clients) *)		(*N° d'affaire*)
+
+	CONF_No_MA1T:			BOOL;												(*Option pas de pressostat air*)
+	CONF_No_MA2T:			BOOL;												(*Option pas de pressostat N2*)
+	
+	CONF_TrAC:				BOOL;
+	CONF_ACSoft:			BOOL;
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : assembly*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+	
+	(*Eco mode*)
+	CONF_Tps_Inactivite:		TIME;
+	CONF_Standby_Auto:			BOOL;			(*indique si le passage en mode standby est automatique après conf_tps_inactivité*)
+	CONF_Wafer_Weekend:			INT;			(*numéro de slot utilisé pour process week end (typiquement, +1 par rapport à slot max de la K7)*)
+	
+	PRM_PROCESS_WEEKEND: 		STRING;	(* ~ (OPC : 1 : available for OPC-clients) *)				(*Chemin et nom du fichier procédé executé*)
+	PRM_PROCESS_NAME_WEEKEND: 	STRING;
+	PRM_BATCH_WEEKEND:			STRING;	(* ~ (OPC : 1 : available for OPC-clients) *)				(*Identifiant du lot*)
+	PRM_RECORD_WEEKEND:			BOOL;	(*Option d'enregistrement du programme de procédé*)
+	PRM_LAUNCHER_WEEKEND:		BOOL;	(*Variable pour indiquer au launcher que l'on souhaite sélectionner le procédé weekend*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Auto:			BOOL;		(*indicateur de mode automatique*)
+	STATE_Manu:			BOOL;		(*indicateur de mode manuel*)
+	STATE_Prod:			BOOL;		(*indicateur de mode production*)
+	STATE_Wait_Prod:	BOOL;		(*attente lancement production*)
+	STATE_Off:			BOOL;		(*indicateur de machine à l'arrêt*)
+	STATE_On:			BOOL;		(*indicateur de machine en marche*)
+	STATE_Standby:		BOOL;		(*machine en mode standby*)
+	STATE_Inter_Prod:	BOOL;		(*indicateur d'interruption en cours*)
+	STATE_interrupted:	BOOL;		(*indicateur de procédé interrompu*)
+	STATE_Pause_TrAC:	BOOL;		(*indicateur d'état intermédiaire entre procédé terminé et procédé week-end pas encore lancé*)
+	STATUS:				UDINT;		(*code d'état*)
+	AUTOR_Auto_Ihm:		BOOL;		(*autorisation de passage en mode automatique depuis l'IHM*)
+	AUTOR_Manu_Ihm:		BOOL;		(* autorisation de passage en mode manuel depuis l'IHM*)
+	AUTOR_Start_Prod_Ihm:	BOOL;		(* autorisation de marche production depuis l'IHM*)
+	AUTOR_Stop_Prod_Ihm:	BOOL;		(* autorisation d'arrêt production depuis l'IHM*)
+	AUTOR_Standby_Ihm:		BOOL;		(* autorisation de passage en mode standby depuis l'IHM*)
+	AUTOR_Repris_Prod_ihm:	BOOL;		(* autorisation de reprise de la production*)
+	AUTOR_Inter_Prod_ihm:	BOOL;		(* autorisation d'interruption de la production*)
+
+	STATE_Color:			DWORD;	(*code couleur en fonction du mode de marche*)
+
+	RQ_Ctrl_Plc:			BOOL;		(*demande de contrôle PLC*)
+	RQ_Ctrl_Ihm:			BOOL;		(*demande de contrôle IHM*)
+	RQ_Init:				BOOL;		(*demande d'exécution de la séquence d'initialisation*)
+	RQ_Write_Param:			BOOL;		(*demande d'écriture des paramètres système*)
+	RQ_Prep_Prod:			BOOL;		(*demande d'exécution de la séquence de preparation de la production*)
+	RQ_Start_Prod:			BOOL;		(*demande d'exécution de la séquence marche production*)
+	RQ_Stop_Prod:			BOOL;		(*demande d'exécution de la séquence d'arrêt production - tous les procédés en cours*)
+	RQ_Inter_Prod:			BOOL;		(*Demande d'interruption des procédés*)
+	RQ_Standby:				BOOL;		(*demande d'éxécution de la séquence de mise en standby*)
+	RQ_Start_Proc_WeekEnd:	BOOL;
+END_VAR
+VAR
+	M_Auto:					BOOL;		(* ordre IHM de passage en mode auto*)
+	M_Manu:					BOOL;		(* ordre IHM de passage en mode auto*)
+	M_Start_Prod:			BOOL;		(* ordre IHM de lancement de la production*)
+	M_Stop_Prod:			BOOL;		(* ordre IHM d'arrêt immédiat de la production*)
+	M_inter_Prod:			BOOL;		(* ordre IHM d'interruption de procédé*)
+	M_Reprise_Prod:			BOOL;		(* ordre IHM de reprise de procédé*)
+	M_Standby:				BOOL;		(* ordre IHM de passage en mode standby*)
+	M_End_Standby:			BOOL;		(* ordre IHM de fin de mode standby (passage en auto, si on a le EN_AUTO)*)
+	RCP_Auto:				BOOL;
+	RCP_Manu:				BOOL;
+	RCP_Start_Prod:			BOOL;
+	RCP_Stop_Prod:			BOOL;
+	RCP_Inter_Prod:			BOOL;
+	RCP_Reprise_Prod:		BOOL;
+	RCP_Standby:			BOOL;
+	RCP_End_Standby:		BOOL;
+	FM_etape6:				R_TRIG;
+	FM_etape5:				R_TRIG;
+	FD_etape6:				F_TRIG;
+	Cancel_Process_Weekend: BOOL;
+	TIMER_Pause_TrAC:		TON;
+END_VAR
+VAR_IN_OUT
+	PING_TRAC:				BOOL;
+	PING_ACSoft:			BOOL;
+END_VAR
+
+VAR_EXTERNAL
+	MANUAL_SAFETY_OFF: BOOL;
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[DEF_Air.IdXML					:=	'0';
+DEF_Air.TagXML					:=	1;
+
+DEF_N2.IdXML					:=	'0';
+DEF_N2.TagXML					:=	2;
+
+EV_Stop_def.IdXML				:=	'0';
+EV_Stop_def.TagXML				:=	9;
+EV_Stop_def.Groupe				:=	3;
+
+EV_Stop_user.IdXML				:=	'0';
+EV_Stop_user.TagXML				:=	10;
+EV_Stop_user.Groupe				:=	3;
+
+EV_Start_proc.IdXML				:=	'0';
+EV_Start_proc.TagXML			:=	11;
+EV_Start_proc.Groupe			:=	3;
+
+EV_Stop_Ok.IdXML				:=	'0';
+EV_Stop_Ok.TagXML				:=	12;
+EV_Stop_Ok.Groupe				:=	3;
+
+EV_initialisation.idXML			:=	'0';
+EV_initialisation.TagXML 		:=	20;
+EV_initialisation.Groupe 		:= 	3;
+
+EV_machine_off.IdXML			:=	'0';
+EV_machine_off.TagXML 			:=	17;
+EV_machine_off.Groupe 			:=	3;
+
+EV_machine_on.IdXML				:=	'0';
+EV_machine_on.TagXML			:=	16;
+EV_machine_on.Groupe			:=	3;
+
+EV_safety_manual_mode.IdXML		:=	'0';
+EV_safety_manual_mode.TagXML	:=	18;
+EV_safety_manual_mode.Groupe	:=	3;
+
+EV_non_safety_manu_mode.IdXml 	:=	'0';
+EV_non_safety_manu_mode.TagXML 	:=	21;
+EV_non_safety_manu_mode.Groupe 	:=	3;
+
+EV_auto_mode.IdXML				:=	'0';
+EV_auto_mode.TagXML 			:=	19;
+EV_auto_mode.Groupe 			:=	3;
+
+EV_inter_def.IdXML				:=	'0';
+EV_inter_def.TagXML 			:=	24;
+EV_inter_def.Groupe 			:=	3;
+
+EV_inter_user.IdXML				:=	'0';
+EV_inter_user.TagXML 			:=	25;
+EV_inter_user.Groupe 			:=	3;
+
+EV_reprise.IdXML				:=	'0';
+EV_reprise.TagXML 				:=	26;
+EV_reprise.Groupe 				:=	3;
+
+DEF_Presence_TrAC.IdXML			:=	'0';
+DEF_Presence_TrAC.TagXML		:=	50;
+DEF_Presence_ACSoft.IdXML		:=	'0';
+DEF_Presence_ACSoft.TagXML		:=	51;
+
+COUNTER_machine_on.TagXML 		:=	2;
+COUNTER_manual_mode.TagXML		:=	3;
+COUNTER_auto_mode.TagXML 		:=	4;
+COUNTER_production.TagXML		:=	5;
+
+(*reception des ordres*)
+RCP_Auto						:=	M_Auto;
+RCP_Manu						:=	M_Manu;
+RCP_Start_Prod					:=	M_Start_Prod;
+RCP_Stop_Prod					:=	M_Stop_Prod;
+RCP_Inter_Prod					:=	M_Inter_Prod;
+RCP_Reprise_Prod				:=	M_reprise_Prod;
+RCP_Standby						:=	M_Standby;
+RCP_End_Standby					:=	M_End_Standby;
+
+IF RCP_Stop_Prod THEN
+	Cancel_Process_Weekend := TRUE;
+END_IF
+
+(*Evenement arrêt procédé sur défaut *)
+EV_Stop_DEF.CONDITION	:= ((Etape.8 OR Etape.7 OR etape.12 OR etape.13 OR etape.24) AND I_Def_Stop);
+EV_Stop_DEF();
+(*arret production sur demande utilisateur*)
+EV_Stop_User.CONDITION	:=	(Etape.8 OR Etape.7 OR etape.12 OR etape.13 OR etape.24) AND RCP_Stop_Prod;
+EV_Stop_User();
+(*arret normal procédé*)
+EV_Stop_Ok.CONDITION	:=  ((Etape.8 OR Etape.24) AND I_PROCEDE_ok);
+EV_Stop_Ok();
+(*evenement mise en mode production*)
+EV_Start_proc.CONDITION	:=  (Etape.6 AND EN_Prod AND RCP_Start_Prod);
+EV_Start_proc();
+(*evenement initialisation*)
+EV_initialisation.CONDITION := etape.5;
+EV_initialisation();
+(*evenement arrêt machine*)
+EV_machine_off.CONDITION  := NOT IN_MM1;
+EV_machine_off();
+(*evenement marche machine*)
+EV_machine_on.CONDITION := IN_MM1;
+EV_machine_on();
+(*evenement passage en mode manuel sécurisé*)
+EV_safety_manual_mode.CONDITION := etape.10 AND NOT MANUAL_SAFETY_OFF ;
+EV_safety_manual_mode();
+(*evenement passage en mode auto*)
+EV_auto_mode.CONDITION := etape.6 OR etape.7 OR etape.8 OR etape.11 OR etape.12 OR etape.13 OR etape.14;
+EV_auto_mode();
+(*evenement désactivation des sécurités en mode manuel*)
+EV_non_safety_manu_mode.CONDITION  := etape.10 AND MANUAL_SAFETY_OFF;
+EV_non_safety_manu_mode();
+(*Evenement d'interruption sur demande utilisateur*)
+EV_inter_user.CONDITION := etape.8 AND RCP_Inter_Prod AND EN_Inter_Prod ;
+EV_inter_user();
+(*Evenement d'interruption sur reprise*)
+EV_inter_def.CONDITION := Etape.8 AND I_def_inter;
+EV_inter_def();
+(*Evenement de reprise aprés interruption*)
+EV_reprise.CONDITION := Etape.13 AND RCP_Reprise_Prod AND EN_Reprise_Prod;
+EV_reprise();
+
+IF NOT Etape.10 THEN
+	MANUAL_SAFETY_OFF := FALSE;
+END_IF
+
+(*Gestion des compteurs*)
+COUNTER_machine_on(I_On := IN_MM1);
+COUNTER_manual_mode(I_On := Etape.10);
+COUNTER_auto_mode(I_on:= etape.6);
+COUNTER_production(I_on:=etape.7 OR etape.8 OR etape.9);
+
+(*scrutation du graphe*)
+GRAPHE();
+
+(*gestion temporisation*)
+TIMER_Pause_TrAC.IN	:=	etape.22;
+TIMER_Pause_TrAC.PT	:=	T#5S;
+TIMER_Pause_TrAC();
+
+(*gestion des états du graphe*)
+ IF etape > 0 THEN
+	STATUS  :=   LREAL_TO_UINT(LN(UDINT_TO_REAL(etape)) / LN(2));
+ELSE
+	STATUS := 0;
+END_IF
+
+STATE_Auto			:= 	Etape.6 OR Etape.7 OR Etape.8 OR etape.11 OR etape.12 OR etape.13 OR etape.14;
+STATE_Manu			:=	Etape.10;
+STATE_Prod			:=	Etape.7 OR Etape.8 OR Etape.11 OR Etape.12 OR Etape.13 OR etape.14 OR Etape.22 OR Etape.23 OR Etape.24 OR Etape.25 OR Etape.26;
+STATE_Standby		:=	Etape.21;
+STATE_Wait_Prod 	:=	Etape.6;
+STATE_inter_Prod	:=	Etape.13 OR Etape.12;
+STATE_interrupted	:=	Etape.13;
+STATE_Pause_TrAC	:=	Etape.22;
+
+(*action en sortie*)
+RQ_Init					:=	Etape.5;
+RQ_Write_Param			:=	Etape.15;
+RQ_Start_Prod			:=	Etape.8;
+RQ_Prep_Prod			:=	Etape.7;
+RQ_inter_Prod			:= 	Etape.12;
+RQ_Stop_Prod			:= 	Etape.11 OR Etape.25;
+RQ_Standby				:=	Etape.20;
+RQ_Start_Proc_WeekEnd	:=	Etape.24;
+STATE_Off				:=	Etape.0 OR Etape.1 OR Etape.2 OR Etape.3;
+STATE_On				:=	NOT STATE_Off;
+
+(*demande de controle PLC ou IHM*)
+RQ_Ctrl_Ihm	:=	Etape.6 OR Etape.10 OR Etape.13;
+RQ_Ctrl_Plc	:=	Etape.5 OR Etape.7 OR Etape.8 OR Etape.11 OR Etape.12 OR Etape.20 OR Etape.21
+				OR Etape.22  OR Etape.23 OR Etape.24 OR Etape.25 OR Etape.26 OR NOT IN_MM1;
+
+(*autorisation*)
+AUTOR_Auto_Ihm				:=		(Etape.4 OR Etape.10 OR Etape.21) AND EN_Auto;
+AUTOR_Manu_Ihm				:=  	(NOT Etape.0 AND NOT Etape.1 AND NOT Etape.2 AND NOT Etape.3 AND NOT Etape.10) AND EN_Manu;
+AUTOR_Start_Prod_Ihm		:=		Etape.6 AND EN_Prod AND NOT I_Def_Stop;
+AUTOR_Stop_Prod_Ihm			:=		Etape.7 OR Etape.8 OR etape.12 OR etape.13 OR Etape.22 OR Etape.23 OR Etape.24;
+AUTOR_Inter_Prod_ihm 		:=		Etape.8 AND EN_Inter_Prod ;
+AUTOR_Repris_Prod_Ihm		:=		Etape.13 AND EN_Reprise_Prod  AND NOT I_DEF_INTER;
+AUTOR_Standby_Ihm			:=		Etape.6 AND EN_Standby;
+
+(*défaut air*)
+DEF_air.CONDITION	:= 	NOT IN_MA1T AND NOT CONF_No_MA1T;
+DEF_air.delay		:=	T#5s;
+DEF_air();
+(*défaut azote*)
+DEF_N2.CONDITION	:=	NOT IN_MA2T AND NOT CONF_No_MA2T;
+DEF_N2.DELAY		:=	T#5s;
+DEF_N2();
+(*défaut présence trac*)
+DEF_Presence_TrAC.CONDITION	:=	NOT PING_TRAC AND CONF_TrAC;
+DEF_Presence_TrAC.DELAY		:=	T#20S;
+DEF_Presence_TrAC();
+(*défaut présence trac*)
+DEF_Presence_ACSoft.CONDITION	:=	NOT PING_ACSoft AND CONF_ACSoft;
+DEF_Presence_ACSoft.DELAY		:=	T#60S;
+DEF_Presence_ACSoft();
+
+
+(*reset des ordres de maintenances*)
+IF RCP_Auto AND M_Auto THEN
+	M_Auto	:=	FALSE;
+END_IF;
+IF RCP_Manu AND M_Manu THEN
+	M_Manu	:=	FALSE;
+END_IF;
+IF RCP_Start_Prod AND M_Start_Prod THEN
+	M_Start_Prod	:=	FALSE;
+END_IF;
+IF RCP_Stop_Prod AND M_Stop_Prod THEN
+	M_Stop_Prod	:=	FALSE;
+END_IF;
+IF RCP_Inter_Prod  AND M_inter_Prod THEN
+	M_Inter_Prod	:=	FALSE;
+END_IF;
+IF RCP_Reprise_Prod AND M_Reprise_Prod THEN
+	M_Reprise_Prod	:=	FALSE;
+END_IF;
+IF RCP_Standby AND M_Standby THEN
+	M_Standby := FALSE;
+END_IF
+IF RCP_End_Standby AND M_End_Standby THEN
+	M_End_Standby := FALSE;
+END_IF
+
+
+(*Gestion des codes couleurs en fonction du mode de marche*)
+IF Etape.0 OR etape.1 OR etape.2 OR etape.3 OR etape.4 THEN
+	STATE_Color := 16#00FFFFFF; (*blanc*)
+ELSIF Etape.5 THEN
+	STATE_Color := 16#0FFFFC0; (*bleu*)
+ELSIF Etape.7 OR Etape.8 OR Etape.11 THEN
+	STATE_Color := 16#0080FF80;	(*vert*)
+ELSIF Etape.6 THEN
+	STATE_Color := 16#00E0E0E0;	(*gris*)
+ELSIF Etape.10 AND NOT MANUAL_SAFETY_OFF THEN
+	STATE_Color :=16#080C0FF; (*orange*)
+ELSIF Etape.10 AND MANUAL_SAFETY_OFF THEN
+	STATE_Color :=16#000000FF; (*rouge*)
+END_IF
+
+(*toggle ping*)
+PING_TRAC	:=	FALSE;
+PING_ACSoft	:=	FALSE;]]></ST>
+    </Implementation>
+    <Action Name="GRAPHE" Id="{c73b41ff-b194-498a-bcc4-1b51ebef32f1}">
+      <Implementation>
+        <ST><![CDATA[(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		Etape = 0 THEN
+				Etape.0 := TRUE;
+(*repositionnement sur étape 2*)
+ELSIF	NOT  IN_PT1 AND NOT Etape.0 AND NOT Etape.1 AND NOT Etape.2 THEN
+				Etape:= 0;			(*RAZ grafcet*)
+				Etape.2:=TRUE;
+(*repositionnement sur étape 3*)
+ELSIF	NOT  IN_MM1 AND NOT Etape.0 AND NOT Etape.1 AND NOT Etape.2 AND NOT Etape.3 THEN
+				Etape:= 0;			(*RAZ grafcet*)
+				Etape.3:=TRUE;
+(*repositionnement sur étape 10 mode manuel*)
+ELSIF	RCP_Manu AND EN_Manu  AND NOT Etape.0 AND NOT Etape.1 AND NOT Etape.2 AND NOT Etape.3 AND NOT Etape.10 THEN
+				Etape:= 0;			(*RAZ grafcet*)
+				Etape.10:=TRUE;
+(*étape 0-1*)
+ELSIF 	Etape.0 THEN
+				Etape.1:=TRUE;
+				Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	Etape.1 THEN
+				Etape.2:=TRUE;
+				Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	Etape.2
+		AND IN_PT1 THEN
+				Etape.3:=TRUE;
+				Etape.2:=FALSE;
+(*étape 3-15*)
+ELSIF	Etape.3
+		AND IN_MM1 THEN
+				Etape.15:=TRUE;
+				Etape.3:=FALSE;
+(*étape 15-4*)
+ELSIF	Etape.15
+		AND I_Param_OK THEN
+				Etape.4:=TRUE;
+				Etape.15:=FALSE;
+(*étape 4-5*)
+ELSIF 	Etape.4
+		AND RCP_Auto
+		AND EN_Auto THEN
+				Etape.5:=TRUE;
+				Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	Etape.5 AND I_Init_OK THEN
+				Etape.6:=TRUE;
+				Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	Etape.6
+		AND RCP_Start_Prod
+		AND EN_Prod THEN
+				Etape.7:=TRUE;
+				Etape.6:=FALSE;
+(*étape 7-8*)
+ELSIF 	Etape.7
+		AND I_Prep_Prod_OK THEN
+				Etape.8:=TRUE;
+				Etape.7:=FALSE;
+(*étape 7-11*)
+ELSIF 	Etape.7 AND
+		(RCP_stop_prod OR
+		I_def_stop) THEN
+				Etape.11:=TRUE;
+				Etape.7:=FALSE;
+(*étape 8-11*)
+ELSIF	Etape.8 AND
+		(RCP_Stop_Prod
+		OR I_def_stop
+		OR I_PROCEDE_ok) THEN
+				Etape.11:=TRUE;
+				Etape.8	:=FALSE;
+(*étape 8-12*)
+ELSIF	Etape.8 AND
+		(RCP_Inter_prod
+		OR I_def_inter) THEN
+				Etape.12:=TRUE;
+				Etape.8	:=FALSE;
+(*étape 11-6*)
+ELSIF	Etape.11 AND
+		I_ARRET_PROCEDE_OK AND (NOT PRM_EXEC_PROC_WEEKEND OR Cancel_Process_Weekend) THEN
+				Etape.6	:=TRUE;
+				Etape.11:=FALSE;
+				Cancel_Process_Weekend := FALSE;
+(*étape 10-5*)
+ELSIF	Etape.10 AND
+		RCP_Auto AND
+		EN_Auto THEN
+				Etape.5	:=TRUE;
+				Etape.10:=FALSE;
+(*etape 12-13*)
+ELSIF 	Etape.12 AND
+		I_INTER_PROD_OK AND
+		I_MOTEUR_INTER_ok THEN
+				Etape.13 := TRUE;
+				Etape.12 := FALSE;
+(*etape 12-14*)
+ELSIF 	Etape.12
+		 AND (RCP_Stop_Prod
+		OR I_def_stop
+		OR I_PROCEDE_ok)  THEN
+				Etape.14 := TRUE;
+				Etape.12 := FALSE;
+(*Etape 14-11*)
+ELSIF 	Etape.14 THEN
+				etape.11:=TRUE;
+				etape.14:=FALSE;
+(*etape 13-8 reprise du procédé*)
+ELSIF	Etape.13 AND
+		RCP_Reprise_Prod AND
+		EN_Reprise_Prod THEN
+				Etape.8:= TRUE;
+				Etape.13:= FALSE;
+(*etape 13-11 arrêt du procédé alors que le procédé est interrompu*)
+ELSIF	Etape.13 AND (RCP_Stop_Prod
+		OR I_def_stop
+		OR I_PROCEDE_ok)   THEN
+				Etape.11:= TRUE;
+				Etape.13:= FALSE;
+				
+(*étape 6-20 ==> standby*)
+ELSIF	Etape.6 AND (RCP_Standby OR MAIN.TIMER_Inactivite.Q) AND EN_Standby THEN
+				Etape.20:=TRUE;
+				Etape.6:=FALSE;
+
+(*étape 20-21 ==> standby*)
+ELSIF	Etape.20 AND I_Standby_Ok THEN
+				Etape.21:=TRUE;
+				Etape.20:=FALSE;
+
+(*étape 21-27 ==> fin standby*)
+ELSIF 	Etape.21  AND (RCP_Auto OR RCP_End_Standby) AND EN_Auto THEN
+				Etape.27:=TRUE;
+				Etape.21:=FALSE;
+				
+(*étape 27-5 ==> attente réveille appareil avant init*)
+ELSIF	Etape.27 AND I_WakeUp_Ok THEN 
+				Etape.5:=TRUE;
+				Etape.27:=FALSE;
+
+(*étape 11-22 ==> execution du process week end*)
+ELSIF	Etape.11 AND I_ARRET_PROCEDE_OK
+				AND PRM_EXEC_PROC_WEEKEND AND NOT Cancel_Process_Weekend THEN
+				Etape.22:=TRUE;
+				Etape.11:=FALSE;
+				Cancel_Process_Weekend:= FALSE;
+
+ELSIF	Etape.22 AND TIMER_Pause_TrAC.Q THEN
+				Etape.23:=TRUE;
+				Etape.22:=FALSE;
+
+ELSIF	Etape.23 THEN
+				Etape.24:=TRUE;
+				Etape.23:=FALSE;
+
+(*étape 24-25 procédé week end ok*)
+ELSIF	Etape.24 AND I_PROCEDE_WD_Ok THEN
+				Etape.25:=TRUE;
+				Etape.24:=FALSE;
+
+(*étape 24-26 procédé week end défaut*)
+ELSIF	Etape.24 AND (RCP_Stop_Prod OR I_def_stop) THEN
+				Etape.26:=TRUE;
+				Etape.24:=FALSE;
+
+(*étape 26-25 procédé week end défaut suite*)
+ELSIF	Etape.26 AND I_PROCEDE_WD_AR THEN
+				Etape.25:=TRUE;
+				Etape.26:=FALSE;
+
+(*étape 25-6 fin production week end*)
+ELSIF	Etape.25
+			AND I_ARRET_PROCEDE_OK
+				THEN
+				PRM_EXEC_PROC_WEEKEND:=FALSE;
+				Etape.6:=TRUE;
+				Etape.25:=FALSE;
+END_IF;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_MODE_MARCHE_V2_0">
+      <LineId Id="3" Count="56" />
+      <LineId Id="404" Count="0" />
+      <LineId Id="403" Count="0" />
+      <LineId Id="405" Count="2" />
+      <LineId Id="60" Count="71" />
+      <LineId Id="387" Count="0" />
+      <LineId Id="386" Count="0" />
+      <LineId Id="388" Count="2" />
+      <LineId Id="132" Count="14" />
+      <LineId Id="391" Count="0" />
+      <LineId Id="147" Count="34" />
+      <LineId Id="408" Count="0" />
+      <LineId Id="410" Count="1" />
+      <LineId Id="414" Count="3" />
+      <LineId Id="412" Count="1" />
+      <LineId Id="182" Count="40" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="419" Count="0" />
+      <LineId Id="418" Count="0" />
+      <LineId Id="420" Count="1" />
+    </LineIds>
+    <LineIds Name="BLOCK_MODE_MARCHE_V2_0.GRAPHE">
+      <LineId Id="2" Count="177" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

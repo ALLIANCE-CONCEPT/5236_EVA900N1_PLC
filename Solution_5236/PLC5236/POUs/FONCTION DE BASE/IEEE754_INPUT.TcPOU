@@ -1,0 +1,110 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="IEEE754_INPUT" Id="{2d6c298c-c8da-42e0-a198-915d06402934}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK IEEE754_INPUT
+
+(*fonction de conversion de trame de type IEEE754 (4 octets) en réel simple précision*)
+
+VAR_INPUT
+ 	INPUT:				ARRAY[0..3] OF USINT;					(*trame d'entrée*)
+END_VAR
+
+VAR_OUTPUT
+	Value:				REAL;								(*value convertie*)
+END_VAR
+
+VAR
+	VAR_calcul_entree:	DINT;
+	VAR_signe:			INT;
+	VAR_calcul_exposant:INT;
+	VAR_exposant:		INT;
+	VAR_mantisse:		REAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*calcul de la pression*)
+VAR_calcul_entree.0 := INPUT[0].0;
+VAR_calcul_entree.1 := INPUT[0].1;
+VAR_calcul_entree.2 := INPUT[0].2;
+VAR_calcul_entree.3 := INPUT[0].3;
+VAR_calcul_entree.4 := INPUT[0].4;
+VAR_calcul_entree.5 := INPUT[0].5;
+VAR_calcul_entree.6 := INPUT[0].6;
+VAR_calcul_entree.7 := INPUT[0].7;
+
+VAR_calcul_entree.8 := INPUT[1].0;
+VAR_calcul_entree.9 := INPUT[1].1;
+VAR_calcul_entree.10 := INPUT[1].2;
+VAR_calcul_entree.11 := INPUT[1].3;
+VAR_calcul_entree.12 := INPUT[1].4;
+VAR_calcul_entree.13 := INPUT[1].5;
+VAR_calcul_entree.14 := INPUT[1].6;
+VAR_calcul_entree.15 := INPUT[1].7;
+
+VAR_calcul_entree.16 := INPUT[2].0;
+VAR_calcul_entree.17 := INPUT[2].1;
+VAR_calcul_entree.18 := INPUT[2].2;
+VAR_calcul_entree.19 := INPUT[2].3;
+VAR_calcul_entree.20 := INPUT[2].4;
+VAR_calcul_entree.21 := INPUT[2].5;
+VAR_calcul_entree.22 := INPUT[2].6;
+VAR_calcul_entree.23 := INPUT[2].7;
+
+VAR_calcul_entree.24 := INPUT[3].0;
+VAR_calcul_entree.25 := INPUT[3].1;
+VAR_calcul_entree.26 := INPUT[3].2;
+VAR_calcul_entree.27 := INPUT[3].3;
+VAR_calcul_entree.28 := INPUT[3].4;
+VAR_calcul_entree.29 := INPUT[3].5;
+VAR_calcul_entree.30 := INPUT[3].6;
+VAR_calcul_entree.31 := INPUT[3].7;
+
+IF INPUT[0]<>0OR INPUT[1]<>0OR INPUT[2]<>0 THEN
+
+VAR_signe := BOOL_TO_INT(VAR_calcul_entree.31);
+
+VAR_calcul_exposant.7 := VAR_calcul_entree.30;
+VAR_calcul_exposant.6 := VAR_calcul_entree.29;
+VAR_calcul_exposant.5 := VAR_calcul_entree.28;
+VAR_calcul_exposant.4 := VAR_calcul_entree.27;
+VAR_calcul_exposant.3 := VAR_calcul_entree.26;
+VAR_calcul_exposant.2 := VAR_calcul_entree.25;
+VAR_calcul_exposant.1 := VAR_calcul_entree.24;
+VAR_calcul_exposant.0 := VAR_calcul_entree.23;
+
+VAR_exposant := VAR_calcul_exposant - 127;
+
+VAR_mantisse :=	1* EXPT(2,0)
+				+ BOOL_TO_INT(VAR_calcul_entree.22) * EXPT(2,-1)
+				+ BOOL_TO_INT(VAR_calcul_entree.21) * EXPT(2,-2)
+				+ BOOL_TO_INT(VAR_calcul_entree.20) * EXPT(2,-3)
+				+ BOOL_TO_INT(VAR_calcul_entree.19) * EXPT(2,-4)
+				+ BOOL_TO_INT(VAR_calcul_entree.18) * EXPT(2,-5)
+				+ BOOL_TO_INT(VAR_calcul_entree.17) * EXPT(2,-6)
+				+ BOOL_TO_INT(VAR_calcul_entree.16) * EXPT(2,-7)
+				+ BOOL_TO_INT(VAR_calcul_entree.15) * EXPT(2,-8)
+				+ BOOL_TO_INT(VAR_calcul_entree.14) * EXPT(2,-9)
+				+ BOOL_TO_INT(VAR_calcul_entree.13) * EXPT(2,-10)
+				+ BOOL_TO_INT(VAR_calcul_entree.12) * EXPT(2,-11)
+				+ BOOL_TO_INT(VAR_calcul_entree.11) * EXPT(2,-12)
+				+ BOOL_TO_INT(VAR_calcul_entree.10) * EXPT(2,-13)
+				+ BOOL_TO_INT(VAR_calcul_entree.9) * EXPT(2,-14)
+				+ BOOL_TO_INT(VAR_calcul_entree.8) * EXPT(2,-15)
+				+ BOOL_TO_INT(VAR_calcul_entree.7) * EXPT(2,-16)
+				+ BOOL_TO_INT(VAR_calcul_entree.6) * EXPT(2,-17)
+				+ BOOL_TO_INT(VAR_calcul_entree.5) * EXPT(2,-18)
+				+ BOOL_TO_INT(VAR_calcul_entree.4) * EXPT(2,-19)
+				+ BOOL_TO_INT(VAR_calcul_entree.3) * EXPT(2,-20)
+				+ BOOL_TO_INT(VAR_calcul_entree.2) * EXPT(2,-21)
+				+ BOOL_TO_INT(VAR_calcul_entree.1) * EXPT(2,-22)
+				+ BOOL_TO_INT(VAR_calcul_entree.0) * EXPT(2,-23);
+
+Value := EXPT(-1,Var_signe) * VAR_mantisse * EXPT(2,VAR_exposant);
+ELSE
+	Value:= 0;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="IEEE754_INPUT">
+      <LineId Id="19" Count="80" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

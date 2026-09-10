@@ -1,0 +1,204 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <TextList Name="TextList_Config_Pompage" Id="{c45795f6-a14a-4775-b20d-91a219b3b3c7}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Conf pomp chambre"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage chambre</v>
+                <v>Chamber pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Conf pomp sas"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage sas</v>
+                <v>Loadlock pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"TGF"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de détection de grosse fuite</v>
+                <v>Gross leak detection threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"TGF delay"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de détection grosse fuite</v>
+                <v>Gross leak detection time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"ATM"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de pression atmosphérique</v>
+                <v>Atmospheric pressure threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Surventil"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de surventilation</v>
+                <v>Vent overtime</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"PPrim"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de basculement en pompage secondaire</v>
+                <v>High vacuum pumping start threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"RP PPrim"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de détection de remontée de pression</v>
+                <v>Pressure rise detection threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"pprim delay"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de surveillance pompage primaire</v>
+                <v>Rough pumping monitoring time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"vent delay"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de surveillance ventilation</v>
+                <v>Venting monitoring time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"prm_pr_canon_ok"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil d'autorisation allumage canon à électrons</v>
+                <v>E-gun starting authorization threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"prm_pr_canon_ion_ok"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil d'autorisation allumage canon à ions</v>
+                <v>Ion gun starting authorization threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"PRM_tps_att_chaud"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de thermalisation</v>
+                <v>Thermalisation time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"Conf_Temp_Min"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température min. groupe chaud</v>
+                <v>Chiller minimum temperature</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"Conf_Temp_Max"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température max. groupe chaud</v>
+                <v>Chiller maximum temperature</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"vanne asservie"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Vanne asservie</v>
+                <v>Servovalve</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"Estimation du temps de pompage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Estimation du temps de pompage</v>
+                <v>Estimated pumping time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"Pump sweep time on pump balast / intersteel pump alternation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps balayage pompe sur alternance avec pompage interjoint</v>
+                <v>Pump sweep time on pump balast / intersteel pump alternation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"Intersteel pumping time on pump balast / intersteel pump alternation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps pompage interjoint sur alternance avec balayage pompe</v>
+                <v>Intersteel pumping time on pump balast / intersteel pump alternation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"Pump balast time before pump stop"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps balayage pompe avant arrêt pompe</v>
+                <v>Pump balast time before pump stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"Primary pump balast"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Balayage pompe primaire</v>
+                <v>Primary pump balast</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{c6a465d1-4b05-4a52-96d4-431f4eee89c7}</v>
+          <v n="GuidReInit">{8dd24be6-da19-46ab-b446-fd25971692a5}</v>
+          <v n="GuidExitX">{2958631c-3baa-4508-aac7-1b8103b57431}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

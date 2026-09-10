@@ -1,0 +1,400 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_WREFCH1" Id="{7fca83de-6351-43f3-828e-4fd9e3679e9a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_WREFCH1
+
+(* Fonction standard AC de gestion de bacsulement eau chaude eau froide *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE*)
+(*Version 2-0 - HG - Adaptation pour journal des évènements externe - 27/06/2011*)
+(*ATTENTION !!! VERSION SPECIAL 9070 - GV - Ajout gestion niveau haut eau chaude pour éviter le débordement du réservoir eau chaude*)
+
+(*************************************************************************)
+VAR_INPUT
+	I_PARAM_SYSTEM_OK:		BOOL;			(*paramétrage système ok*)
+
+	RESET:					BOOL;
+	MANUAL:					BOOL;			(* ~ (OPC : 1 : available for OPC-clients) *)
+	CTRL_PLC:				BOOL;
+
+	OP_CHAUD:				BLOCK_OPERATION;										(*Opération de mise en eau chaude*)
+	OP_FROID:				BLOCK_OPERATION;										(*Operation de mise ne eau froide*)
+
+	VEF_IN:					BLOCK_ACTUATOR2;										(*vanne eau froid amont*)
+	VEF_OUT:				BLOCK_ACTUATOR2;										(*vanne eau froid aval*)
+	VEC_IN:					BLOCK_ACTUATOR2;										(*Vanne eau chaude amont*)
+	VEC_OUT:				BLOCK_ACTUATOR2;										(*Vanne eau froide aval*)
+
+	IN_NIV:					BOOL;													(*Capteur niveau haut eau chaude*)
+	DEF_Egal_Eau:			PRCDEF;												(*Défaut d'égalisation du niveau d'eau chaude vers eau froide*)
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Tim_Step:			TIME;						(*Temps entre chaque ouverture / fermeture de vanne*)
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : assembly*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:		STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_Froid:			BOOL;						(* ~ (OPC : 1 : available for OPC-clients) *)
+	STATE_Chaud:			BOOL;						(* ~ (OPC : 1 : available for OPC-clients) *)
+END_VAR
+
+VAR
+	TIMER1:					TON;
+	TIMER2:					TON;
+	TIMER3:					TON;
+	VAR_VEC_Out:			BOOL;
+	VAR_VEC_In:				BOOL;
+	VAR_VEF_Out:			BOOL;
+	VAR_VEF_In:				BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+ACT_CHAUD();
+ACT_FROID();
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_CHAUD" Id="{cd327b78-4225-4c9a-a533-ae2f0d54a05c}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION MISE EN EAU CHAUDE*)
+
+
+(*initialisation de l'opération*)
+OP_CHAUD(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:=  FALSE,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 11,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_CHAUD.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Chaud.ETAPE = 0 THEN
+				OP_Chaud.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Froid.Etape.1 THEN
+				OP_Chaud.Etape := 0;			(*RAZ grafcet*)
+				OP_Chaud.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Chaud.ETAPE.0
+		AND OP_Chaud.MARCHE_OP THEN
+				OP_Chaud.Etape.1:=TRUE;
+				OP_Chaud.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Chaud.ETAPE.1
+		AND OP_FROID.Etape.0
+		THEN
+				OP_Chaud.Etape.2:=TRUE;
+				OP_Chaud.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Chaud.Etape.2
+		AND timer1.Q THEN
+				OP_Chaud.Etape.3:=TRUE;
+				OP_Chaud.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_Chaud.Etape.3
+		AND timer2.Q	THEN
+				OP_Chaud.Etape.4:=TRUE;
+				OP_Chaud.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Chaud.Etape.4
+		AND Timer1.Q THEN
+				OP_Chaud.Etape.5:=TRUE;
+				OP_Chaud.Etape.4:=FALSE;
+(*étape 5-11*)
+ELSIF 	OP_Chaud.ETAPE.5
+		AND TIMER2.Q AND NOT IN_NIV THEN
+				OP_Chaud.Etape.11:=TRUE;
+				OP_Chaud.Etape.5:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_Chaud.Etape.5
+		AND IN_NIV THEN
+				OP_Chaud.Etape.6:=TRUE;
+				OP_Chaud.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF	OP_Chaud.Etape.6
+		AND VEC_OUT.STATE_Off
+		THEN
+				OP_Chaud.Etape.7:=TRUE;
+				OP_Chaud.Etape.6:=FALSE;
+(*étape 7-8*)
+ELSIF	OP_Chaud.Etape.7
+		AND VEF_OUT.STATE_On THEN
+				OP_Chaud.Etape.8:=TRUE;
+				OP_Chaud.Etape.7:=FALSE;
+(*étape 8-9*)
+ELSIF	OP_Chaud.Etape.8
+		AND Timer3.Q OR DEF_Egal_Eau.DEF
+		THEN
+				OP_Chaud.Etape.9:=TRUE;
+				OP_Chaud.Etape.8:=FALSE;
+(*étape 9-10*)
+ELSIF	OP_Chaud.Etape.9
+		AND VEF_OUT.STATE_Off
+		THEN
+				OP_Chaud.Etape.10:=TRUE;
+				OP_Chaud.Etape.9:=FALSE;
+(*étape 10-11*)
+ELSIF	OP_Chaud.Etape.10
+		AND VEC_OUT.STATE_On
+		THEN
+				OP_Chaud.Etape.11:=TRUE;
+				OP_Chaud.Etape.10:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_CHAUD.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_FROID" Id="{c03bea5f-6827-440e-b93c-57d10df81314}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION MISE EN EAU FROIDE*)
+
+
+(*initialisation de l'opération*)
+OP_FROID(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:=  FALSE,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:=0);
+
+(*appel de l'action de préparation de l'opération*)
+OP_FROID.PRL();
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_FROID.ETAPE = 0 THEN
+				OP_FROID.Etape.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Chaud.Etape.1 THEN
+				OP_FROID.Etape := 0;			(*RAZ grafcet*)
+				OP_FROID.Etape.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_FROID.ETAPE.0
+		AND OP_FROID.MARCHE_OP THEN
+				OP_FROID.Etape.1:=TRUE;
+				OP_FROID.Etape.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_FROID.ETAPE.1
+		AND OP_Chaud.Etape.0
+		THEN
+				OP_FROID.Etape.2:=TRUE;
+				OP_FROID.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_FROID.Etape.2
+		AND timer1.Q THEN
+				OP_FROID.Etape.3:=TRUE;
+				OP_FROID.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_FROID.Etape.3
+		AND timer2.Q	THEN
+				OP_FROID.Etape.4:=TRUE;
+				OP_FROID.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_FROID.Etape.4
+		AND Timer1.Q THEN
+				OP_FROID.Etape.5:=TRUE;
+				OP_FROID.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_FROID.ETAPE.5
+		AND TIMER2.Q THEN
+				OP_FROID.Etape.6:=TRUE;
+				OP_FROID.Etape.5:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_FROID.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{42601a25-720c-4a25-8957-e45c9f1d6d49}">
+      <Implementation>
+        <ST><![CDATA[(*Défaut d'égalisation des niveaux d'eau*)
+DEF_Egal_Eau.CONDITION		:= OP_CHAUD.Etape.8;
+DEF_Egal_Eau.DELAY			:= T#15s;
+DEF_Egal_Eau();
+
+(*Timer*)
+Timer1.PT	:=	CONF_Tim_Step;
+Timer2.PT	:=	CONF_Tim_Step;
+Timer3.PT	:=	T#10s;			 (*Temps additionel Transfert eau chaude vers eau froide*)
+Timer1.in :=	OP_CHAUD.Etape.2 OR OP_Chaud.Etape.4 OR OP_froid.Etape.2 OR OP_froid.Etape.4;
+Timer2.in :=	OP_CHAUD.Etape.3 OR OP_Chaud.Etape.5 OR OP_froid.Etape.3 OR OP_froid.Etape.5;
+Timer3.in :=	OP_CHAUD.Etape.8 AND NOT IN_NIV;
+Timer1();
+Timer2();
+Timer3();
+
+
+(*pilotage de vannes*)
+IF OP_Chaud.Etape.4 OR OP_Chaud.Etape.10 THEN
+	VAR_VEC_Out	:=	TRUE;
+ELSIF (OP_Chaud.Etape.0 AND OP_froid.Etape.0) OR OP_froid.etape.3 OR OP_Chaud.Etape.6 THEN
+	VAR_VEC_Out	:=	FALSE;
+END_IF;
+IF OP_Chaud.Etape.5 THEN
+	VAR_VEC_In		:=	TRUE;
+ELSIF (OP_Chaud.Etape.0 AND OP_froid.Etape.0) OR OP_froid.etape.2 THEN
+	VAR_VEC_In		:=	FALSE;
+END_IF;
+IF OP_Froid.Etape.4 OR OP_Chaud.Etape.7 THEN
+	VAR_VEF_Out	:=	TRUE;
+ELSIF (OP_Chaud.Etape.0 AND OP_froid.Etape.0) OR OP_chaud.etape.3 OR OP_Chaud.Etape.9 THEN
+	VAR_VEF_Out	:=	FALSE;
+END_IF;
+IF OP_Froid.Etape.5 THEN
+	VAR_VEF_In		:=	TRUE;
+ELSIF (OP_Chaud.Etape.0 AND OP_Froid.Etape.0) OR OP_Chaud.etape.2 THEN
+	VAR_VEF_In		:=	FALSE;
+END_IF;
+
+(*etat*)
+STATE_Froid := (NOT MANUAL AND OP_FROID.OK) OR (MANUAL AND VEF_IN.STATE_On AND VEF_OUT.STATE_On);
+STATE_Chaud := (NOT MANUAL AND OP_CHAUD.OK) OR (MANUAL AND VEC_IN.STATE_On AND VEC_OUT.STATE_On);
+
+(*Vannes*)
+VEC_IN(
+	I_PARAM_SYSTEM_OK:= I_PARAM_SYSTEM_OK,
+	RESET:=RESET ,
+	MANUAL:=MANUAL ,
+	CO_On:=VAR_VEC_In,
+	EN_On_INT:=(VEF_OUT.STATE_Off AND VEF_IN.STATE_Off) OR (VEC_IN.STATE_On AND VEC_OUT.STATE_Off),
+	EN_Off_INT:= TRUE,
+	CONF_EN_On:= 0,
+	CONF_No_Safety_Auto:=0,
+	CONF_Tim_Valid_On:=T#200ms,
+	CONF_Tim_Valid_Off:= T#200ms);
+
+VEC_OUT(
+	I_PARAM_SYSTEM_OK:= I_PARAM_SYSTEM_OK,
+	RESET:=RESET ,
+	MANUAL:=MANUAL ,
+	CO_On:=VAR_VEC_Out,
+	EN_On_INT:=VEF_OUT.STATE_Off AND VEF_IN.STATE_Off,
+	EN_Off_INT:= TRUE,
+	CONF_EN_On:= 0,
+	CONF_No_Safety_Auto:=0,
+	CONF_Tim_Valid_On:=T#200ms,
+	CONF_Tim_Valid_Off:= T#200ms);
+
+VEF_IN(
+	I_PARAM_SYSTEM_OK:= I_PARAM_SYSTEM_OK,
+	RESET:=RESET ,
+	MANUAL:=MANUAL ,
+	CO_On:= VAR_VEF_In,
+	EN_On_INT:=VEC_OUT.STATE_Off AND VEC_IN.STATE_Off,
+	EN_Off_INT:= TRUE,
+	CONF_EN_On:= 0,
+	CONF_No_Safety_Auto:=0,
+	CONF_Tim_Valid_On:=T#200ms,
+	CONF_Tim_Valid_Off:= T#200ms);
+
+VEF_OUT(
+	I_PARAM_SYSTEM_OK:= I_PARAM_SYSTEM_OK,
+	RESET:=RESET ,
+	MANUAL:=MANUAL ,
+	CO_On:= VAR_VEF_Out,
+	EN_On_INT:=(VEC_OUT.STATE_Off AND VEC_IN.STATE_Off) OR (VEC_IN.STATE_On AND VEC_OUT.STATE_Off),
+	EN_Off_INT:= TRUE,
+	CONF_EN_On:= 0,
+	CONF_No_Safety_Auto:=0,
+	CONF_Tim_Valid_On:=T#200ms,
+	CONF_Tim_Valid_Off:= T#200ms);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{2ac42cd8-864a-4589-92a6-232cb8c42bd8}">
+      <Implementation>
+        <ST><![CDATA[IdXML			:=	'6';
+TagXML			:=	2;
+
+OP_CHAUD.IdParent	:=	MNEMO;
+OP_CHAUD.MNEMO		:=	CONCAT(MNEMO,'_CHAUD');
+OP_CHAUD.IdXML		:=	'5';
+OP_CHAUD.TagXML		:=	1;
+
+OP_FROID.IdParent	:=	MNEMO;
+OP_FROID.MNEMO		:=	CONCAT(MNEMO,'_FROID');
+OP_FROID.IdXML		:=	'5';
+OP_FROID.TagXML		:=	2;
+
+VEF_IN.IdXML					:=	'1';
+VEF_IN.TagXML					:=	1;
+VEF_IN.IdParent					:=	MNEMO;
+VEF_IN.DEF_On_Imposs.IdXML		:=	'3';
+VEF_IN.DEF_On_Imposs.TagXML		:=	6;
+VEF_IN.DEF_Off_Imposs.IdXML		:=	'3';
+VEF_IN.DEF_Off_Imposs.TagXML	:=	9;
+VEF_IN.DEF_Off_auto.IdXML		:=	'3';
+VEF_IN.DEF_Off_auto.TagXML		:=	11;
+
+VEF_OUT.IdXML					:=	'1';
+VEF_OUT.TagXML					:=	1;
+VEF_OUT.IdParent				:=	MNEMO;
+VEF_OUT.DEF_On_Imposs.IdXML		:=	'3';
+VEF_OUT.DEF_On_Imposs.TagXML	:=	6;
+VEF_OUT.DEF_Off_Imposs.IdXML	:=	'3';
+VEF_OUT.DEF_Off_Imposs.TagXML	:=	9;
+VEF_OUT.DEF_Off_auto.IdXML		:=	'3';
+VEF_OUT.DEF_Off_auto.TagXML		:=	11;
+
+VEC_IN.IdXML					:=	'1';
+VEC_IN.TagXML					:=	1;
+VEC_IN.IdParent					:=	MNEMO;
+VEC_IN.DEF_On_Imposs.IdXML		:=	'3';
+VEC_IN.DEF_On_Imposs.TagXML		:=	6;
+VEC_IN.DEF_Off_Imposs.IdXML		:=	'3';
+VEC_IN.DEF_Off_Imposs.TagXML	:=	9;
+VEC_IN.DEF_Off_auto.IdXML		:=	'3';
+VEC_IN.DEF_Off_auto.TagXML		:=	11;
+
+VEC_OUT.IdXML					:=	'1';
+VEC_OUT.TagXML					:=	1;
+VEC_OUT.IdParent				:=	MNEMO;
+VEC_OUT.DEF_On_Imposs.IdXML		:=	'3';
+VEC_OUT.DEF_On_Imposs.TagXML	:=	6;
+VEC_OUT.DEF_Off_Imposs.IdXML	:=	'3';
+VEC_OUT.DEF_Off_Imposs.TagXML	:=	9;
+VEC_OUT.DEF_Off_auto.IdXML		:=	'3';
+VEC_OUT.DEF_Off_auto.TagXML		:=	11;
+
+DEF_Egal_Eau.IdXML				:= '8';
+DEF_Egal_Eau.TagXML				:= 4;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_WREFCH1">
+      <LineId Id="56" Count="3" />
+    </LineIds>
+    <LineIds Name="BLOCK_WREFCH1.ACT_CHAUD">
+      <LineId Id="0" Count="94" />
+    </LineIds>
+    <LineIds Name="BLOCK_WREFCH1.ACT_FROID">
+      <LineId Id="0" Count="60" />
+    </LineIds>
+    <LineIds Name="BLOCK_WREFCH1.POST">
+      <LineId Id="0" Count="90" />
+    </LineIds>
+    <LineIds Name="BLOCK_WREFCH1.PRL">
+      <LineId Id="0" Count="54" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

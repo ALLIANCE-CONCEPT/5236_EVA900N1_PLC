@@ -1,0 +1,315 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_XTC_CLIENT_EXCHANGE" Id="{9e7f484a-d30f-4d84-bf06-8787f7f87953}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_XTC_CLIENT_EXCHANGE
+(* Fonction de lecture / écriture sur port TcpIP*)
+(* version 0 - SP - 24/02/2015*)
+
+
+VAR_INPUT
+	hSocket				: T_HSOCKET;	(*socket*)
+	TxBuffer				: ARRAY[0..MAX_TXBUFFER_SIZE] OF BYTE;
+	bExecute			: BOOL;			(*bit de déclenchelent de l'émission/réception - sur front montant*)
+	nbExpectedChar		: UDINT;			(*nombre de caractère attendu en réception*)
+	nbTransmittedChar	: UDINT;			(*nombre de caractère transmis à l'émission*)
+	PRM_RECEIVE_POLLING_TIME		 		: TIME := T#1s;	(*temporisation de polling de réception*)
+	PRM_RECEIVE_TIMEOUT						: TIME := T#10s;	(*temporisation de timeout de communication*)
+
+END_VAR
+VAR_OUTPUT
+	bBusy 				: BOOL;			(*processus d'emission/réception occupé*)
+	bError				: BOOL;			(*processus d'emission/réception en erreur*)
+	nErrId				: UDINT;			(*n° d'erreur*)
+	nstepInError			: UDINT;			(*n° d'étape sur laquelle s'est produite l'erreur*)
+	ErrDescription		: T_MaxString;	(*chaine de caractère d'intitulé de l'erreur*)
+	rxBuffer				: ARRAY[0..MAX_RXBUFFER_SIZE] OF BYTE; (*réponse du serveur en mode buffer*)
+	STATE_Com_Err_Counter:	UDINT;
+	STATE_nbReceptedChar:	UDINT;			(*nombre effectif de caractère recu - peut différer du nombre de caractère attendu dans le cas d'une trame
+										d'erreur*)
+
+END_VAR
+VAR
+	fbSocketSend		: FB_SocketSend := ( sSrvNetID := '', tTimeout := DEFAULT_ADS_TIMEOUT );
+	fbSocketReceive		: FB_SocketReceive := ( sSrvNetID := '', tTimeout := DEFAULT_ADS_TIMEOUT );
+	fbReceiveTON		: TON;		(*tempo pour polling de réception*)
+	fbDisconnectTON		: TON;		(*tempo de time out*)
+	RisingEdge			: R_TRIG;
+	eStep				: E_DataExchaSteps;
+	cbReceived, startPos, endPos, idx	: UDINT;
+	cbFrame				: UDINT;
+	Temp_rxBuffer		: ARRAY[0..MAX_RXBUFFER_SIZE] OF BYTE;
+	I					: INT; 		(*Compteur d'itération*)
+	LOG_COM			: ARRAY[0..MAX_BUFFER_DIALOG] OF STRUCT_LOG_TCPIP_CLIENT;	(*buffer de chaine en émission*)
+	VAR_COUNT_RETRY:	INT;		(*Compteur de tentative de retransmission du paramètre*)
+END_VAR
+VAR_TEMP
+	Temp_byte:			BYTE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[RisingEdge( CLK := bExecute );	(*gestion du front montant de la demande d'exécution*)
+CASE eStep OF
+
+	DATAEXCHA_STATE_IDLE:	(*etape 0 - fonction d'émisson réception à l'arrêt*)
+		IF RisingEdge.Q THEN		(*demande d'emission/réception sur FM du bit bexecute*)
+		VAR_COUNT_RETRY := 0;
+			(*RAZ du buffer de réception et du buffer de réception temporaire*)
+			FOR i:=0 TO UDINT_TO_INT(MAX_RXBUFFER_SIZE) DO
+				Temp_RxBuffer[i] := 0;
+				RxBuffer[i] :=0;
+			END_FOR
+			bBusy := TRUE;							(*processus d'émission / réception occupé*)
+			bError := FALSE;							(* RAZ drapeau d'erreur*)
+			nErrid := 0;								(*RAZ du type d'érreur*)
+			fbReceiveTON( IN := FALSE, PT := T#0s ); 	(* Réglage du buffer de réception à 0 pour lire asap *)
+			fbDisconnectTON( IN := FALSE, PT := T#0s );	(* désactivation du timer de timeout *)
+			eStep := DATAEXCHA_STATE_SEND_START;
+		END_IF
+
+	DATAEXCHA_STATE_SEND_START:		(*Etape 1 -  Envoi de la trame au serveur*)
+		fbSocketSend( bExecute := FALSE );
+		CbReceived := 0;
+		(*on envoie le buffer d'émission*)
+		fbSocketSend(
+					hSocket	:= hSocket,
+					pSrc	:= ADR(TxBuffer),
+					cblen 	:= NbTransmittedChar, (* longueur de chaine sans le délimiteur *)
+					bExecute:= TRUE,
+					);
+		fbsocketSend.cblen := NbTransmittedChar; (*longueur de chaine à envoyer*)
+
+		SHIFT_BUFFER_DIALOG(); (*décalage du buffer de mémoire des dernières trames d'émission*)
+
+		(*mémorisation du buffer d'émission dans le journal des échanges *)
+		 MEMCPY( ADR(LOG_COM[0].TX),ADR(TxBuffer),FbSocketSend.Cblen);
+
+		eStep := DATAEXCHA_STATE_SEND_WAIT;
+
+	DATAEXCHA_STATE_SEND_WAIT:			(* Etape 2 - attente de la fin de l'envoi de la trame*)
+		fbSocketSend( bExecute := FALSE );
+		IF NOT fbSocketSend.bBusy THEN	(*si fin de l'emission*)
+			IF NOT fbSocketSend.bError THEN	(*pas d'erreur*)
+				eStep := DATAEXCHA_STATE_RECEIVE_START;
+			ELSE	(*detection d'une erreur d'émission*)
+				(*LogError( 'FB_SocketSend (local client)', fbSocketSend.nErrId );*)
+				nErrId := fbSocketSend.nErrId;
+				nstepInError := 2;
+				ErrDescription := CONCAT('FB_ClientDataExcha - SENDING ERROR: ', UDINT_TO_STRING(nErrId));
+				LOG_COM[0].ERR := ErrDescription;
+				eStep := DATAEXCHA_STATE_ERROR;
+			END_IF
+		END_IF
+
+	DATAEXCHA_STATE_RECEIVE_START: 	(*Etape 3 - gestion de la réception*)
+		fbDisconnectTON(  );	(*lancement de la tempo de timeout : desactivée au premier appel*)
+		fbReceiveTON( IN := TRUE );	(*temporisation de polling de reception - lancé avec délai 0ms au premier appel*)
+		IF fbReceiveTON.Q THEN
+			fbReceiveTON( IN := FALSE );
+			fbSocketReceive( bExecute := FALSE );
+			fbSocketReceive(  hSocket:= hSocket,
+							pDest:= ADR( Temp_rxBuffer ) + cbReceived,	(*ajouté au buffer de réception à partir du dernier index CbReceived*)
+							cbLen:= SIZEOF( Temp_rxBuffer ) - cbReceived,   (*longueur max = longeur du buffer - dernier index CbReceived*)
+							bExecute:= TRUE );
+			eStep := DATAEXCHA_STATE_RECEIVE_WAIT;
+		END_IF
+
+	DATAEXCHA_STATE_RECEIVE_WAIT:			(*étape 4 - attente de la fin de réception*)
+		fbSocketReceive( bExecute := FALSE );
+		IF NOT fbSocketReceive.bBusy THEN		(*si pas fonction de réception en cours*)
+			IF NOT fbSocketReceive.bError THEN	(*si pas d'erreur*)
+				(*et si des bytes ont été reçu*)
+				IF (fbSocketReceive.nRecBytes > 0) THEN(* si on a reçu des informations *)
+					startPos 		:= cbReceived;(* calcul de l'index de début de la nouvelle trame lue dans le buffer *)
+					endPos  		:= cbReceived + fbSocketReceive.nRecBytes  - 1;(* calcul de l'index de fin de la nouvelle trame lue dans le buffer *)
+					cbReceived 	:= cbReceived + fbSocketReceive.nRecBytes;(* recalcule le nombre total de caractères reçus depuis la requête en émission*)
+					cbFrame		:= 0;(* remise à 0 de la  *)
+
+					IF  (cbReceived < MAX_RXBUFFER_SIZE) (* contrôle de débordement *)  THEN
+
+						fbReceiveTON( PT := T#0s ); (* bytes reçus =>on fixe la pariode de pooling a 0ms *)
+						fbDisconnectTON( IN := FALSE );(* bytes recus => on ihnibe la tempo de timeout *)
+
+						(*analyse des 2 premiers octets de la trame*)
+						IF (cbReceived >=3)  THEN
+							(*reception d'un message d'erreur de l'XTC*)
+							IF ((temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) = 6) AND (Temp_RxBuffer[2] = 16#80) THEN
+								nbExpectedChar:= 6;	(*on corrige le nombre de caractère attendu*)
+								STATE_nbReceptedChar:=6;
+							END_IF
+							(*Reception d'un message au format erroné - mauvais caractère CCB*)
+							IF NOT (Temp_RxBuffer[2] = 16#00) AND NOT (Temp_RxBuffer[2] = 16#80) THEN
+								STATE_nbReceptedChar:=(temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) + 3;
+								nErrId := ERROR_MESSAGE_CCB;	(*CCB incohérent*)
+								nstepInError := 4;
+								ErrDescription := 'FB_ClientDataExcha - Bad CCB';
+								LOG_COM[0].ERR := ErrDescription;
+								MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+								eStep := DATAEXCHA_STATE_ERROR;
+							(*la longeur effective de la trame donnée par le premier octet  n'est pas cohérente avec la longueur attendue*)
+							(*alors erreur*)
+							ELSIF NOT ((temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256) + 3) = NbExpectedChar) THEN
+								STATE_nbReceptedChar:=(temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) + 3;
+								nErrId := ERROR_MESSAGE_LENGTH;	(*longueur trame incoérente*)
+								nstepInError := 4;
+								ErrDescription := 'FB_ClientDataExcha - Bad message length';
+								LOG_COM[0].ERR := ErrDescription;
+								MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+								eStep := DATAEXCHA_STATE_ERROR;
+							ELSIF  (CbReceived >= nbExpectedChar) THEN	(*si le nombre de caractère reçu >= au nombre de caractère attendu*)
+								(*Verification que la chaine recue comporte bien un caractère d'acquittement si le CCB = 0*)
+								STATE_nbReceptedChar:=nbExpectedChar;
+								IF NOT (Temp_RxBuffer[4] = 16#06) AND (Temp_RxBuffer[2] = 16#00) THEN
+									STATE_nbReceptedChar:=(temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) + 3;
+									nErrId := ERROR_MISSING_ACK;	(*longueur trame incohérente*)
+									nstepInError := 4;
+									ErrDescription := 'FB_ClientDataExcha - Missing ACK';
+									LOG_COM[0].ERR := ErrDescription;
+									MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+									eStep := DATAEXCHA_STATE_ERROR;
+								ELSE
+									(*Calcul du CRC theorique*)
+									Temp_Byte := 0;
+										FOR I:=2 TO UDINT_TO_INT(nbExpectedChar-2) DO
+											Temp_byte := Temp_Byte + Temp_RxBuffer[I];
+										END_FOR
+									(*si le CRC theorique n'est pas égal au CRC effectif alors erreur*)
+									IF NOT (Temp_byte = temp_RxBuffer[NbExpectedChar-1])THEN
+										STATE_nbReceptedChar:=(temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) + 3;
+										nErrId := ERROR_MESSAGE_LENGTH;	(*longueur trame incoérente*)
+										nstepInError := 4;
+										ErrDescription := 'FB_ClientDataExcha - Bad CRC';
+										LOG_COM[0].ERR := ErrDescription;
+										MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+										eStep := DATAEXCHA_STATE_ERROR;
+										(*Tout est ok - on copy le buffer de réception temporaire dans le buffer de reception définitif*)
+									ELSE
+										MEMCPY(  ADR( RxBuffer ), ADR( Temp_rxBuffer ), NbExpectedChar); (*on récupère la chaine dans le buffer*)
+										bBusy := FALSE;						(*Raz de l'indicateur de fonction d'émission/réception en cours*)
+										VAR_COUNT_RETRY := 0; 				(*Raz du compteur de tentative de communication*)
+										NErrId := 0;
+										ErrDescription := 'NO ERROR ';
+										nstepInError := 0;
+										STATE_nbReceptedChar:=(temp_RxBuffer[0] + (Temp_RxBuffer[1] * 256)) + 3;
+										eStep := DATAEXCHA_STATE_IDLE;
+										LOG_COM[0].ERR := 'OK';
+								 		MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),NbExpectedChar);
+									END_IF
+								END_IF
+							ELSE
+								eStep := DATAEXCHA_STATE_RECEIVE_START; (* on répète l'étape de reception *)
+							END_IF
+						END_IF
+					ELSE (* si il n'y a plus d'espace dispo dans le buffer *)
+						nErrId := ERROR_RECEIVE_BUFFER_OVERFLOW;	(* buffer overflow !*)
+						nstepInError := 4;
+						ErrDescription := 'FB_ClientDataExcha - BUFFER OVERFLOW';
+						LOG_COM[0].ERR := ErrDescription;
+						MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+						eStep := DATAEXCHA_STATE_ERROR;
+					END_IF
+
+				ELSE(* sinon aucun bytes recus *)
+					fbReceiveTON( PT := T#50ms); (* PRM_RECEIVE_POLLING_TIME );(* aucun  => on augmente la période de poolling *) *) (*TODO*)
+					fbDisconnectTON( IN := TRUE, PT := PRM_RECEIVE_TIMEOUT );(* pas de reception => on active la tempo de timeout*)
+					IF fbDisconnectTON.Q THEN (* si la tempo de timeout est écoulée*)
+						fbDisconnectTON( IN := FALSE ); (*on désavtive la tempo de timeout*)
+						(*LogError( 'FB_SocketReceive (local client)',  PLCPRJ_ERROR_RECEIVE_TIMEOUT );*)
+						nStepInError := 4;
+						ErrDescription := 'FB_ClientDataExcha - TIMEOUT ERROR';
+						LOG_COM[0].ERR := ErrDescription;
+						MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+						nErrID := ERROR_RECEIVE_TIMEOUT;
+						eStep := DATAEXCHA_STATE_ERROR;
+					ELSE(* si la tempo de timeout n'est pas écoulée *)
+						eStep := DATAEXCHA_STATE_RECEIVE_START; (* on répète l'étape de reception *)
+					END_IF
+				END_IF
+			ELSE(* si la fonction de reception renvoie une erreur*)
+				nErrId := fbSocketReceive.nErrId;
+				nStepInError := 4;
+				ErrDescription := CONCAT('FB_ClientDataExcha - RECEIVE ERROR: ', UDINT_TO_STRING(nErrId));
+				LOG_COM[0].ERR := ErrDescription;
+				MEMCPY( ADR(LOG_COM[0].RX),ADR(Temp_RxBuffer),MAX_RXBUFFER_SIZE+1);	(*enregistrement dans le journal d'échange*)
+				eStep := DATAEXCHA_STATE_ERROR;
+			END_IF
+		END_IF
+
+	DATAEXCHA_STATE_ERROR:(* étape 5 - erreur *)
+		VAR_COUNT_RETRY := VAR_COUNT_RETRY+1; (*incrémentation du compteur de tentative*)
+		cbReceived := 0;	(*RAZ du nombre de donnée reçue*)
+		IF VAR_COUNT_RETRY > 3 THEN	(*on accepte les 3 tentatives*)
+			STATE_Com_Err_counter := STATE_Com_err_counter + 1;
+			bError := TRUE;	(*mise à 1 du drapeau d'erreur*)
+			bBusy := FALSE;	(*on reset le drapeau de fonction occupée*)
+			eStep := DATAEXCHA_STATE_IDLE;	(*on retourne à l'étape 0*)
+		ELSE (*sinon, on retente l'envoi aprés avoir purger le buffer de réception*)
+			(*RAZ du buffer de réception et du buffer de réception temporaire*)
+			FOR i:=0 TO UDINT_TO_INT(MAX_RXBUFFER_SIZE) DO
+				Temp_RxBuffer[i] := 0;
+				RxBuffer[i] :=0;
+			END_FOR
+			fbReceiveTON( IN := FALSE, PT := T#0s ); 	(* Réglage du buffer de réception à 0 pour lire asap *)
+			fbDisconnectTON( IN := FALSE, PT := T#0s );	(* désactivation du timer de timeout *)
+			eStep :=DATAEXCHA_STATE_RECEIVE_BEFORE_RETRY_START;
+		END_IF
+
+
+	DATAEXCHA_STATE_RECEIVE_BEFORE_RETRY_START:	(*etape 6 - vidage du buffer de recéption*)
+		fbDisconnectTON(  );	(*lancement de la tempo de timeout : - désactivée sur cette étape*)
+		fbReceiveTON( IN := TRUE,PT:=T#500ms );	(*temporisaton de 500 ms pour permettre à l'XTC de remplir le buffer de réception avant de relancer
+												une requete*)
+		IF fbReceiveTON.Q THEN
+			fbReceiveTON( IN := FALSE );
+			fbSocketReceive( bExecute := FALSE );
+			fbSocketReceive(  hSocket:= hSocket,
+						pDest:= ,	(*ajouté au buffer de réception à partir du dernier index CbReceived*)
+						cbLen:= SIZEOF( Temp_rxBuffer ),   (*longueur max = longeur du buffer - dernier index CbReceived*)
+						bExecute:= TRUE );
+			eStep := DATAEXCHA_STATE_RECEIVE_BEFORE_RETRY_WAIT;
+		END_IF
+	DATAEXCHA_STATE_RECEIVE_BEFORE_RETRY_WAIT:	(*etape 7 - attente réponse*)
+			fbSocketReceive( bExecute := FALSE );
+			IF NOT fbSocketReceive.bBusy THEN		(*si pas fonction de réception en cours*)
+				IF NOT  fbSocketReceive.bError THEN	(*si pas d'erreur*)
+					fbReceiveTON( IN := FALSE, PT := T#0s ); 		(* Réglage du buffer de réception à 0 pour lire asap à la prochaine tentative *)
+					fbDisconnectTON( IN := FALSE, PT := T#0s );		(* désactivation du timer de timeout *)
+					eStep := DATAEXCHA_STATE_SEND_START;	(*on retente un envoi de requete*)
+				ELSE(* si la fonction de reception renvoie une erreur*)
+					nErrId := fbSocketReceive.nErrId;
+					nStepInError := 7;
+					eStep := DATAEXCHA_STATE_ERROR;			(*on retourne à la fonction de retentative*)
+					ErrDescription := CONCAT('FB_ClientDataExcha - RECEIVE ERROR BEFORE RETRY: ', UDINT_TO_STRING(nErrId));
+					SHIFT_BUFFER_DIALOG();
+					LOG_COM[0].ERR := ErrDescription;
+
+			END_IF
+		END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="SHIFT_BUFFER_DIALOG" Id="{8478088f-1100-4da6-99df-8a1c456d35c6}">
+      <Implementation>
+        <ST><![CDATA[(*Action de décalage du buffer de mémorisation des trames emises et recues dans le journal*)
+
+(*on décale les lignes du buffer de com dans le journal des trames d'émission et réception*)
+FOR I:= UDINT_TO_INT(MAX_BUFFER_DIALOG-1) TO 0 BY -1 DO
+	LOG_COM[I+1].RX := LOG_COM[I].RX;
+	LOG_COM[I+1].TX := LOG_COM[I].TX;
+	LOG_COM[I+1].ERR := LOG_COM[I].ERR;
+END_FOR
+(*RAZ log en réception - ligne 0*)
+FOR I:=0 TO UDINT_TO_INT(MAX_RXBUFFER_SIZE) BY 1 DO
+	LOG_COM[0].RX[I] := 0;
+END_FOR
+(*RAZ log en émission - ligne 0*)
+FOR I:=0 TO UDINT_TO_INT(MAX_TXBUFFER_SIZE) BY 1 DO
+	LOG_COM[0].TX[I] := 0;
+END_FOR]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_XTC_CLIENT_EXCHANGE">
+      <LineId Id="44" Count="237" />
+    </LineIds>
+    <LineIds Name="BLOCK_XTC_CLIENT_EXCHANGE.SHIFT_BUFFER_DIALOG">
+      <LineId Id="0" Count="15" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

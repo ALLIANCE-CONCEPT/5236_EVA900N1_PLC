@@ -1,0 +1,342 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Config_Gaz" Id="{d999b0cd-6657-417a-89eb-35c59fa7a078}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"gaz	"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz</v>
+                <v>Gas</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"definition gaz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Définition des gaz</v>
+                <v>Gas definition</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"supervi gaz	"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Surveillance</v>
+                <v>Monitoring</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"debit sccm"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Tous les débits en sccm</v>
+                <v>All flows in sccm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"seuil sccm"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Tous les seuils en sccm</v>
+                <v>All thresholds in sccm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"nom gaz nom"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nom du gaz
+nominal</v>
+                <v>Nominal
+gas name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Coef"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Coeff. de
+conversion</v>
+                <v>Conversion
+coeff.</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"debit max"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Débit max.
+débitmètre</v>
+                <v>Massflow
+max. flow</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"nom gaz util"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nom du gaz
+utilisé</v>
+                <v>Used gas
+name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"debi max gaz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Débit max.
+gaz</v>
+                <v>Gas
+max. flow</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"gaz1"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 1</v>
+                <v>Gas 1</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"gaz 2"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 2</v>
+                <v>Gas 2</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"gaz 3"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 3</v>
+                <v>Gas 3</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"gaz 4"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 4</v>
+                <v>Gas 4</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"gaz 5"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 5</v>
+                <v>Gas 5</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"gaz 6"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 6</v>
+                <v>Gas 6</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"gaz7"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 7</v>
+                <v>Gas 7</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"gaz8"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 8</v>
+                <v>Gas 8</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"gaz9"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gaz 9</v>
+                <v>Gas 9</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"seuil alarme"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil
+d'alarme</v>
+                <v>Alarm
+threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"tps alarm"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps avant
+alarme</v>
+                <v>Alarm
+delay</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"seuil défaut"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil
+de défaut</v>
+                <v>Fault
+threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">"tps défaut"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps avant
+défaut</v>
+                <v>Fault
+delay</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Purge canon"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Purge canons à ions</v>
+                <v>Ions beam purge</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">"Purge d'amo"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Purge d'amorcage</v>
+                <v>Start purge</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">"Purge stop"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Purge d'arrêt</v>
+                <v>Purge stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">"Durée"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Durée</v>
+                <v>Duration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"27"</v>
+              <v n="TextDefault">"Purge RAH"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Purge atmosphère</v>
+                <v>Atmospheric purge</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"28"</v>
+              <v n="TextDefault">"Rapide"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Rapide</v>
+                <v>Fast</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"29"</v>
+              <v n="TextDefault">"Ala surv press"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Surveillance pression - Temps avant alarme</v>
+                <v>Pressure supervision - Delay before alarm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"30"</v>
+              <v n="TextDefault">"def surv press"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Surveillance pression - Temps avant défaut</v>
+                <v>Pressure supervision - Delay before default</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"31"</v>
+              <v n="TextDefault">"Gain"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gain</v>
+                <v>Amplification factor</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"32"</v>
+              <v n="TextDefault">"Ti"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'action intégrale</v>
+                <v>Integral action time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"33"</v>
+              <v n="TextDefault">"Td"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'action dérivée</v>
+                <v>Derivative action time </v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"34"</v>
+              <v n="TextDefault">"Ta"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'amortissment</v>
+                <v>Damping time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"35"</v>
+              <v n="TextDefault">"Regul Gaz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Régulation de gaz</v>
+                <v>Gas regulation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{56d55d80-f25b-4552-9b6c-2b8949e090e7}</v>
+          <v n="GuidReInit">{5b6fc2cb-bd48-4102-8495-2570a967e8ec}</v>
+          <v n="GuidExitX">{9d164ae2-b0bf-4fa2-b21b-591d0ff7759c}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

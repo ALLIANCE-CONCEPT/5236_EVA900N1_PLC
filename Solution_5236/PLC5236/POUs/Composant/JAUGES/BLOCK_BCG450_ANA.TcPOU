@@ -1,0 +1,254 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_BCG450_ANA" Id="{f50230f2-cbc4-4061-be5d-a6e3b846b8fd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_BCG450_ANA
+
+
+(* Gestion d'une jauge triple BCG4500 INFICON*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE - VALIDEE SUR 6844 DP650 N35*)
+(* Version 2-0 - HG - 06/2011 - Adaptation pour journal des évènements externe*)
+(*Version 3-0 - AB - 07/2011 - Passage à 15 seuils*)
+
+(*************************************************************************)
+
+VAR_INPUT
+(*paramètre standard*)
+	RESET:   					BOOL; 				(*Condition RAZ actionneur*)
+	MANUAL:  					BOOL; 				(*Mode manuel*)
+
+	IN_Pression: 				ANALOG_INPUT; 		(* Entrée analogique de la jauge *)
+
+	CO_Stop:					BOOL;				(* Condition de forcage d'arrêt d'alimentation de la jauge *)
+	CO_inhibe_Seuil:			BOOL;				(*information externe d'inhibition des seuils*)
+
+
+	I_Stop_Rah:					BOOL;				(* information externe de demande d'arrêt de la mesure avant remise à la PAtm *)
+	I_VHxx:						BOOL;				(* état des vannes de ventilation VH11 ou VH12 pour redémarrage temporisé de la mesure*)
+
+	PRM_Tim_Stop:				TIME:=T#10S;		(*Temps de validation de l'arrêt de la jauge*)
+	PRM_Tim_Restart:			TIME:=T#10S;		(*Temps pour remise en marche de la jauge
+													aprés reception de la condition I_Restart_Mesure*)
+	PRM_Seuil: 				ARRAY[0..15] OF REAL;	(* Valeur des seuils*)
+	PRM_Delais:				ARRAY[0..15] OF TIME;	(*Delais de validation du seuil en multiple de 100ms *)
+	PRM_Type_seuil: 		ARRAY[0..15] OF BOOL; 	(* Type du seuil n°1 (False=seuil vide, True=seuil pression) *)
+
+
+(*entrées d'autorisation*)
+	EN_Dgz_EXT:				BOOL;			(*condition d'autorisation d'activation de la sortie de dégazage de la jauge externe*)
+	EN_Off_EXT:				BOOL;			(*condition d'autorisation d'arrêt de la jauge externe*)
+
+(*Défaut*)
+	DEF_jauge:				PRCDEF;	(* indicateur de défaut de fonctionnement de la jauge  *)
+
+END_VAR
+
+VAR_OUTPUT
+(*Variable d'état*)
+	STATE_Seuil:		 	ARRAY[0..15] OF BOOL; 	(*Tableau des seuils*)
+	STATE_Pression:			REAL; 		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Valeur de la pression (dans l'unité sélectionnée) *)
+	STATE_Ok:				BOOL;		(* Jauge à l'état OK*)
+	STATE_Nok:				BOOL;		(* Jauge en défaut*)
+	STATE_Err:				USINT;		(*Code d'erreur
+																				0 = Pas d'erreur
+																				1 = EEPROM Error Ou défaut jauge capacitive 
+																				2 = Défaut jauge à cathode chaude
+																				3 = Défaut jauge pirani *)
+(*Sortie TOR*)
+	OUT_M1:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Sortie TOR de marche de la jauge *)
+	OUT_DGZ:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Sortie TOR dégazage de la jauge *)
+
+	O_Pret_Pour_Rah:		BOOL;											(*information d'arrêt avant rah de la mesure effectué - délivrée aprés arret
+																			et une tempo égale à PRM_Tim_Stop ou si la pression est supérieure à 2e-2 mbar*)
+
+(*Variable d'information d'autorisation*)
+	AUTOR_Off_IHM:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation d'arrêt de la jauge depuis l'IHM en mode manuel*)
+	AUTOR_On_IHM:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation de marche de la jauge depuis l'IHM en mode manuel*)
+	AUTOR_Dgz_IHM:			BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Autorisation de dégazage depuis l'IHM en mode manuel*)
+END_VAR
+
+VAR
+	M_M1:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre de marche / arret de la jauge en mode manuel*)
+	M_DGZ:					BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Ordre de dégazage de la jauge en mode manuel*)
+	RCP_M_M1:				BOOL;
+	RCP_M_DGZ:				BOOL;
+	VAR_Stop:				BOOL;											(*Variable intermediaire de gestion de la marche arrêt de la jauge en mode manuel*)
+	VAR_Degas_Ok:			BOOL;											(*variable permettant de mémoriser que le dégazage a été effectué et remise à 0*)
+	VAR_Stop_Mesure:		BOOL;											(*Bit indiquant que la mesure est stoppée temporairement sur demande externe*)
+	VAR_Dem_Dgz:			BOOL;											(*Bit de demande de dégazage en mode manuel*)
+	VAR_Mem_Stop_Mesure:	BOOL;
+	FM_Stop_Mesure:			R_TRIG;
+	FD_Restart_Jauge:		F_TRIG;
+
+	i:						USINT;
+
+	TIMER_Stop_Jauge:		TON;
+	TIMER_Restart_Jauge:	TP;
+	TIMER_Degas:			TON;
+	TIMER_Seuil:			ARRAY[0..15] OF TON;
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	CONF_Unit: 			USINT; 					(* Unité : 0=mb,1=mTorr,2=Pa *)
+	CONF_degas_auto:	BOOL;					(* Option de degazage apres remise à atmosphere *)
+	CONF_Tim_Degas:		TIME;					(* Durée d'activation de la sortie de dégazage*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'2';
+TagXML					:=	2;
+
+DEF_jauge.IdXml			:=	'16';
+DEF_jauge.TagXml		:=	7;
+
+(*Reception des ordres de maintenance*)
+RCP_M_M1		:= 	M_M1;
+RCP_M_DGZ		:=	M_DGZ;
+
+(*Conversion du signal d'entrée en Volt*)
+IN_Pression	(
+			CONF_Bipolar	:= 	FALSE,
+			CONF_Range		:=	1,
+			CONF_Max 		:= 	10.0,
+			CONF_Min		:= 	0.0
+			);
+
+
+(* Test de validité du signal de jauge si signal > 0.6V et si la jauge est en marche *)
+STATE_OK := (IN_Pression.Value > 0.6)  AND OUT_M1;
+STATE_NOK:=DEF_jauge.DEF;
+
+
+(*calcul pression*)
+IF STATE_OK THEN
+	(*Conversion du signal analogique vers une valeur réelle
+	dbl = exp[(((tension-7.75)/0.75)+CoefC)*Ln10]
+	CoefC fonction de l'unitée de conversion*)
+	IF (CONF_Unit = 0) THEN (*mbar*)
+	 	STATE_Pression:=EXPT(10,(((IN_Pression.Value -7.75)/0.75)+0));
+	END_IF;
+	IF (CONF_Unit = 1) THEN (*mTorr*)
+	 	STATE_Pression:=EXPT(10,(((IN_Pression.Value -7.75)/0.75)-0.125));
+	END_IF;
+	IF (CONF_Unit = 2) THEN (*pascal*)
+	 	STATE_Pression:=EXPT(10,(((IN_Pression.Value -7.75)/0.75)+2));
+	END_IF;
+ELSE
+	STATE_Pression := 0.0;
+END_IF;
+
+(* GESTION DES SEUILS *)
+FOR i:=1 TO 15 DO
+		TIMER_Seuil[i].PT		:=	PRM_Delais[i];
+		TIMER_Seuil[i].IN		:=	(((STATE_Pression >= PRM_Seuil[i]) AND PRM_Type_seuil[i]) OR		(*Seuil en pression*)
+								((STATE_Pression <= PRM_Seuil[i]) AND NOT PRM_Type_seuil[i]))		(*Seuil de vide*)
+								AND NOT RESET AND NOT CO_inhibe_Seuil AND STATE_Ok;
+		TIMER_Seuil[i]();
+		STATE_Seuil[i]			:= 	TIMER_Seuil[i].Q;
+END_FOR;
+
+(*traitement de la demande d'arrêt de la mesure avant rah*)
+VAR_stop_Mesure:= (IN_Pression.Value <= 6.48 ) AND I_Stop_Rah;
+
+(*Temporisation d'arrêt de la jauge si demande d'arrêt avant remise à Atm. et pression <= 2e-2mb*)
+TIMER_Stop_Jauge(PT:=PRM_Tim_Stop,IN:= NOT OUT_M1 );
+
+(*signal jauge prete pour Rah - stoppée ou supérieure à I_Stop_Rah*)
+O_Pret_Pour_Rah 		:= 	TIMER_Stop_Jauge.Q OR (IN_Pression.Value > 6.48 );
+
+(*Temporisation de redémarrage de la jauge des ouverture vanne VH11 et VH12 *)
+TIMER_Restart_Jauge(	PT := PRM_Tim_Restart,
+						IN := I_VHxx
+					);
+
+(*Variable d'autorisation marche jauge*)
+FM_Stop_Mesure(clk:=VAR_Stop_Mesure);
+FD_Restart_Jauge(clk:=TIMER_Restart_Jauge.Q);
+IF		FM_Stop_Mesure.Q THEN
+	VAR_Mem_Stop_Mesure	:=	TRUE;
+ELSIF	FD_Restart_Jauge.Q OR NOT VAR_Stop_Mesure THEN
+	VAR_Mem_Stop_Mesure	:=	FALSE;
+END_IF
+
+(*autorisation en mode manuel depuis l'iHM*)
+AUTOR_Off_IHM		:=	MANUAL AND NOT RESET AND OUT_M1 AND EN_Off_EXT;
+AUTOR_On_IHM		:=	MANUAL AND NOT RESET AND NOT OUT_M1;
+(* dégazage autorisé en mode manuel si le dégazage est autorisé et la pression inférieure à 6e-6 mbar et si la sortie n'est pas déjà active
+et si mode manuel*)
+AUTOR_Dgz_IHM		:=	MANUAL AND NOT RESET AND NOT OUT_DGZ AND ( IN_Pression.Value  < 3.92) AND EN_Dgz_EXT AND State_OK;
+
+(*Gestion marche alimentation*)
+IF (RCP_M_M1 AND OUT_M1 AND AUTOR_Off_Ihm) OR RESET THEN
+	VAR_Stop	:= TRUE;
+ELSIF (RCP_M_M1 AND NOT OUT_M1 AND MANUAL) OR NOT MANUAL OR RESET THEN
+	VAR_Stop	:= FALSE;
+END_IF;
+OUT_M1 := ((NOT CO_Stop AND NOT MANUAL) AND NOT VAR_Mem_Stop_Mesure) OR (NOT VAR_Stop AND MANUAL);
+
+(*reception de la demande de dégazage en mode manuel*)
+IF 	(RCP_M_DGZ AND AUTOR_Dgz_Ihm) OR
+ 	((IN_Pression.Value <3.92)  AND STATE_ok AND NOT MANUAL AND NOT RESET AND NOT VAR_degas_ok AND EN_Dgz_EXT AND CONF_degas_auto) THEN
+		VAR_Dem_Dgz	:= TRUE;
+ELSIF RESET  OR NOT OUT_M1 OR NOT STATE_Ok OR TIMER_DEGAS.Q OR NOT OUT_Dgz THEN
+		VAR_Dem_Dgz	:= FALSE;
+END_IF;
+
+
+(*déclenchement de la temporisation de degazage*)
+TIMER_Degas	(
+				IN:=	VAR_Dem_DGz,
+				PT:=CONF_Tim_Degas
+				);
+
+OUT_Dgz	:=  VAR_dem_Dgz AND EN_Dgz_EXT ;
+
+(*Mémoire du dégazage*)
+IF (IN_Pression.Value > 9.25) THEN
+	VAR_Degas_OK 	:= 	FALSE;
+END_IF;
+IF timer_degas.Q THEN
+	VAR_Degas_OK	:=	TRUE;
+END_IF;
+
+
+(* Gestion des défauts de la fonction *)
+DEF_jauge.DELAY := T#5S;
+DEF_jauge.CONDITION := NOT STATE_OK  AND NOT Reset AND OUT_M1;
+DEF_jauge();
+
+IF DEF_Jauge.DEF THEN
+	IF 			(IN_Pression.Value > 0.05) AND (IN_Pression.Value < 0.15) THEN
+						STATE_Err	:= 1;
+	ELSIF		(IN_Pression.Value > 0.15) AND (IN_Pression.Value < 0.25) THEN
+						STATE_Err	:= 2;
+	ELSIF		(IN_Pression.Value > 0.25) AND (IN_Pression.Value < 0.35) THEN
+						STATE_Err	:= 3;
+	END_IF
+ELSE
+	STATE_Err	:=	0;
+END_IF;
+
+(*RAZ des ordres de maintenance*)
+IF RCP_M_M1 AND M_M1 THEN
+	M_M1:=FALSE;
+END_IF;
+IF RCP_M_Dgz AND M_Dgz THEN
+	M_Dgz:=FALSE;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_BCG450_ANA">
+      <LineId Id="102" Count="16" />
+      <LineId Id="121" Count="97" />
+      <LineId Id="223" Count="24" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,635 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="BLOCK_PRG_POMPAGE" Id="{2b5f1b28-f2d1-45b3-b962-5d61b32ee1c1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_POMPAGE
+
+(***********************************************************************************)
+(* 		Programme pompage
+		Pompage enceinte : cryo on-board + PPM 
+		Vanne secondaire 2 positions
+		Vanne primaire double avec une seule commande    
+
+
+14035 - Pas de jauge Process M12 et sa vanne d'isolement VJ11	 *)
+(***********************************************************************************)
+
+
+VAR_INPUT
+	POMPAGE:				BLOCK_POMP_1E_PCR_PPM_ASS_ETHERCAT_SINGER;
+	//VJ11:					BLOCK_ACTUATOR;
+	M11:					BLOCK_BCG450_ETHERCAT;
+	//M12:					BLOCK_CDG_ETHERCAT;
+	COM_CRYOS:				BLOCK_RS232_ONBOARD_V4;
+
+	IN_FE11T	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Enceinte fermée - platine supérieure*)
+	IN_FE12T	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Enceinte fermée - platine supérieure*)
+
+	IN_ST11		AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pompe cryo en froid*)
+	IN_ST12		AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pompe cryo en régénération*)
+
+	IN_PP11M	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pompe primaire en marche*)
+	IN_PR11M	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pompe roots enceinte en marche*)
+	IN_PS11M	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Compresseur cryo en marche*)
+
+	IN_VP11O	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Vanne pompage primaire rapide enceinte fermée*)
+	IN_VP11F	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Vanne pompage primaire lente enceinte fermée*)
+	
+	IN_VS11F	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Vanne pompage secondaire enceinte fermée*)
+	IN_VS11O	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Vanne secondaire enceinte ouverte*)
+	IN_VS11Q	AT%I*:		INT;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Retour position vanne secondaire enceinte*)
+	
+//	IN_VJ11F	AT%I*:		BOOL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Vanne isolement jauge fermée*)
+
+	IN_M11Q		AT%I*:		REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pression enceinte *)
+//	IN_M12Q		AT%I*:		REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Pression procédé*)
+	
+	EV_DOOR: 				PRCDEF;	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Evenement temps d'ouverture de la porte enceinte*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+
+(* Entité*)
+	IsAssembly:				BOOL;			(*entité de type assemblage*)
+	TagXml:					UINT;
+	IdXml: 					STRING;
+	IdParent: 				STRING;			(*MNEMO du pére*)
+	MNEMO:					STRING;			(*MNEMO de cette entité *)
+
+	CONF_WATER_ENC:			UINT:=0;		(*mot indiquant quelle ligne d'eau concerne le pompage enceinte .0 = ligne 1; .1 = ligne 2 ....*)
+	CONF_N_Water_Line_PP11:	USINT;		(*index de la ligne d'eau affectée à la pompe PP11 - 0 = pas de ligne d'eau*)
+	CONF_N_Water_Line_PR11:	USINT;		(*index de la ligne d'eau affectée à la pompe PP11 - 0 = pas de ligne d'eau*)
+	CONF_N_Water_Line_PS11:	USINT;		(*index de la ligne d'eau affectée à la pompe PS11 - 0 = pas de ligne d'eau*)
+	
+	CONF_Tps_Pompage_Theorique: TIME;	(*Temps de pompage théorique pour calcul estimation temps procédé*)
+
+	CONF_NO_FE12T:			BOOL;		(* option pas de capteur de fermeture enceinte FE11T*)
+	CONF_NO_FE11T:			BOOL;		(* option pas de capteur de fermeture enceinte FE12T*)
+
+	PRM_Min_Pumping_Time:	TIME;		(*I_STANDARD --- Temps de pompage min.*)
+	PRM_Max_Pumping_Time:	TIME;		(*I_STANDARD ---- Temps de pompage max.*)
+	PRM_Pr_Pumping_OK:		REAL;		(*I_STANDARD ---- Seuil de pression pour obtention étape de pompage OK*)
+
+	PRM_Pr_Canon_OK:		REAL;		(*Seuil de pression pour autorisation allumage canon*)
+
+END_VAR
+
+VAR_OUTPUT
+	OUT_PP11		AT%Q*:		BOOL;	(*Marche pompe primaire PP11*)
+	OUT_PR11		AT%Q*:		BOOL;	(*Marche pompe roots*)
+	OUT_PS11		AT %Q*:		BOOL;	(*Marche cryo enceinte*)
+
+	OUT_VP111		AT%Q*:		BOOL;	(*Vanne primaire sortie 1*)
+	OUT_VP112		AT%Q*:		BOOL;	(*Vanne primaire sortie 2*)
+
+	OUT_OVS11		AT%Q*:		BOOL;	(*Ouverture vanne laminage*)
+	OUT_FVS11		AT%Q*:		BOOL;	(*Fermeture vanne laminage*)
+	OUT_LVS11		AT%Q*:		BOOL;	(*Laminage vanne laminage*)
+	OUT_QVS11		AT%Q*:		INT;	(*Consigne position/pression vanne laminage*)
+	
+//	OUT_VJ11		AT%Q*:		BOOL;	(*Vanne d'isolement jauge capacitive*)
+
+	OUT_VH11		AT%Q*:		BOOL;	(*Vanne de ventilation rapide enceinte*)
+
+	OUT_VINT		AT%Q*:		BOOL;	(*Vanne de pompage interjoint*)
+
+	OUT_DGZM11	AT%Q*:			BOOL;	(*Vanne de dégazage enceinte*)
+	OUT_M11		AT%Q*:			BOOL;	(*Marche jauge secondaire enceinte*)
+	
+	OUT_VN2PP11	AT%Q*:		BOOL;	(*Vanne balayage pompe primaire pour évacuer l'humidité*)
+
+	O_REF_ENC:				BOOL;	(*I_STANDARD --- Demande de refroidissement des élément lié à l'enceinte*)
+	O_STEP_PUMPING_OK:		BOOL;	(*I_STANDARD --- information d'étape pompage secondaire ok*)
+
+	VAC:					BOOL;	(*I_STANDARD --- Sécurité vide pour gaz / générateur / chauffage*)
+	DOOR:					BOOL;	(*I_STANDARD --- Sécurité vide pour gaz / générateur / chauffage*)
+
+	RQ_REF:					ARRAY[0..15] OF BOOL;	(*I_STANDARD -- demande de marche des lignes d'eau 1 à 8*)
+	RQ_PREP_VENTIL:			BOOL;					(*I_STANDARD -- demande de réchauffement avant ventilation de l'enceinte*)
+
+	STATE_Def_IProc:		BOOL;					(*I_STANDARD -indique la présence d'un défaut entrainant l'arrêt du procédé*)
+
+END_VAR
+
+VAR
+	I:						USINT;		(*Variable d'iteration*)
+	VAR_Mem_PS11_On:		BOOL;		(*mémorisation de l'état de PS11 en mode manuel*)
+	VAR_debug_bool2:		BOOL;
+	VAR_debug_bool3:		BOOL;
+	TIMER_Reset_Memo_PSx1:	TON;		(*tempo lancée au passage en auto, on ne scrute plus la mémo des pompes, mais le prm_marche_groupe_x préalablement renseigné*)
+	FM_EXEC_REGEN:			R_TRIG;
+	
+	TimeOpen    	: TIME;			(*Temps à l'ouverture de la porte*)
+    TimeClose    	: TIME;			(*Temps à la fermeture de la porte*)
+    TimeDifference	: TIME;			(*Temps d'ouverture de la chambre*)
+	FM_DOOR			: R_TRIG;
+	FD_DOOR			: F_TRIG;
+	
+	Tempo_on_Cryo: TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[VAC			:=	M11.STATE_Seuil[3];
+DOOR		:= 	(IN_FE11T OR CONF_NO_FE11T) AND (IN_FE12T OR CONF_NO_FE12T);
+
+(*Calcule temps d'ouverture porte*)
+FM_DOOR(CLK:= DOOR);
+FD_DOOR(CLK:= DOOR);
+
+IF FD_DOOR.Q THEN 
+	TimeOpen:= TIME();
+END_IF
+
+IF FM_DOOR.Q THEN
+	TimeClose:= TIME();
+	TimeDifference:= TimeClose - TimeOpen;
+END_IF
+
+(*Evenement temps d'ouverture de la porte enceinte*)
+EV_DOOR.IdXML 	:= '0';
+EV_DOOR.TagXML 	:= 44;
+EV_DOOR.Groupe 	:= 3;
+
+EV_DOOR.VAL1 := DELETE(TIME_TO_STRING(TimeDifference), 2, 1);
+EV_DOOR.CONDITION := FM_DOOR.Q;
+EV_DOOR();
+
+(*	Affectation des entrées 	 *)
+POMPAGE.PP11.IN_On				:=	IN_PP11M;
+POMPAGE.PR11.IN_On				:=	IN_PR11M;
+
+POMPAGE.VS11.IN_ON 				:= 	IN_VS11O;
+POMPAGE.VS11.IN_OFF				:=	IN_VS11F;
+POMPAGE.VS11.IN_POSITION.INPUT 	:=	IN_VS11Q;
+POMPAGE.VS11.I_PRESSION			:=	M11.STATE_Pression; 
+
+IF NOT COM_CRYOS.STATE_NOK THEN            (* com OK  (STATE_NOK = DEF_Port_com.DEF) *)
+    POMPAGE.PS11.IN_ON := IN_PS11M AND COM_CRYOS.STATE_Pompe;
+ELSE                                       (* com perdue : retour degrade *)
+    POMPAGE.PS11.IN_ON := IN_PS11M;
+END_IF
+POMPAGE.PS11.IN_ST11			:=	IN_ST11;
+POMPAGE.PS11.IN_ST12			:=	IN_ST12;
+
+
+
+//VJ11.IN_OFF						:=	IN_VJ11F;
+
+POMPAGE.VP11.IN_OFF				:=	IN_VP11F;
+POMPAGE.VP11.IN_ON				:=	IN_VP11O;
+
+M11.IN_Pression					:=	IN_M11Q;
+//M12.IN_Pression					:=	IN_M12Q;
+
+(* Parametre statique *)
+(*General*)
+IdXML									:=	'2';
+TagXML									:=	0;
+
+CONF_NO_FE11T							:=	FALSE;
+CONF_NO_FE12T							:=	TRUE;
+CONF_WATER_ENC							:=	2#00000000;	
+
+(*PP11*)
+CONF_N_Water_Line_PP11				:=	5;
+POMPAGE.PP11.CONF_Tim_Valid_Off 	:= 	T#100MS;
+POMPAGE.PP11.CONF_Tim_Valid_On		:=	T#10s;
+POMPAGE.PP11.DEF_On.DELAY			:=	T#10s;
+POMPAGE.PP11.DEF_Off.DELAY			:=	T#5s;
+POMPAGE.PP11.MNEMO					:=	'PP11';
+POMPAGE.PRM_Tim_Arret_PP11			:=	T#30m;
+
+(*PR11*)
+CONF_N_Water_Line_PR11				:=	0;
+POMPAGE.PR11.CONF_Tim_Valid_Off 	:= 	T#10S;
+POMPAGE.PR11.CONF_Tim_Valid_On		:=	T#10S;
+POMPAGE.PR11.DEF_On.DELAY			:=	T#15S;
+POMPAGE.PR11.DEF_Off.DELAY			:=	T#15S;
+POMPAGE.PR11.MNEMO					:=	'PR11';
+
+(*PS11*)
+CONF_N_Water_Line_PS11				:=	0;
+POMPAGE.PS11.MNEMO					:=	'PS11';
+
+(*VP11*)
+POMPAGE.VP11.CONF_EN_On				:=	0;
+POMPAGE.VP11.CONF_Tim_Valid_Off		:=	T#1S;
+POMPAGE.VP11.CONF_Tim_Valid_On		:=	T#5S;
+POMPAGE.VP11.DEF_Off.DELAY			:=	T#10S;
+POMPAGE.VP11.DEF_On.DELAY			:=	T#10S;
+POMPAGE.VP11.DEF_Lam.DELAY			:=	T#10S;
+POMPAGE.VP11.MNEMO					:=	'VP11';
+POMPAGE.VP11.CONF_DI_On				:=	TRUE;
+POMPAGE.VP11.CONF_DI_Lam			:=	FALSE;
+POMPAGE.VP11.CONF_DI_Off			:=	TRUE;
+	
+(*VS11*)
+POMPAGE.VS11.CONF_Tim_Valid_Off		:=	T#1S;
+POMPAGE.VS11.CONF_Tim_Valid_On		:=	T#1S;
+POMPAGE.VS11.CONF_EN_On				:=	0;
+POMPAGE.VS11.DEF_Position.DELAY		:=	T#20S;
+POMPAGE.VS11.DEF_Off.DELAY			:=	T#10S;
+POMPAGE.VS11.DEF_On.DELAY			:=	T#10S;
+POMPAGE.VS11.MNEMO					:=	'VS11';
+POMPAGE.VS11.CONF_Tim_WPos			:=	T#2S;		(*Temps de validation du positionnement ok*)
+POMPAGE.VS11.CONF_WPos				:=	3.0;			(*Précision d'obtention de la position 3%*)
+POMPAGE.VS11.CONF_Pr_Max_SP			:=	0.0665;
+
+(*VH11*)
+POMPAGE.VH11.CONF_DI_Off			:=	FALSE;
+POMPAGE.VH11.CONF_DI_On				:=	FALSE;
+POMPAGE.VH11.CONF_EN_On				:=	0;
+POMPAGE.VH11.CONF_Tim_Valid_Off		:=	T#500ms;
+POMPAGE.VH11.CONF_Tim_Valid_On		:=	T#500ms;
+POMPAGE.VH11.CONF_Type_Actuator		:=	0;
+POMPAGE.VH11.CONF_No_Safety_Auto	:=	FALSE;
+POMPAGE.VH11.DEF_Off.DELAY			:=	T#10s;
+POMPAGE.VH11.DEF_On.DELAY			:=	T#10s;
+POMPAGE.VH11.MNEMO					:=	'VH11';
+
+(*VINT*)
+POMPAGE.VINT.CONF_DI_Off			:=	FALSE;
+POMPAGE.VINT.CONF_DI_On				:=	FALSE;
+POMPAGE.VINT.CONF_EN_On				:=	0;
+POMPAGE.VINT.CONF_Tim_Valid_Off		:=	T#500ms;
+POMPAGE.VINT.CONF_Tim_Valid_On		:=	T#500ms;
+POMPAGE.VINT.CONF_Type_Actuator		:=	0;
+POMPAGE.VINT.CONF_No_Safety_Auto	:=	FALSE;
+POMPAGE.VINT.DEF_Off.DELAY			:=	T#10s;
+POMPAGE.VINT.DEF_On.DELAY			:=	T#10s;
+POMPAGE.VINT.MNEMO					:=	'VPINT';
+
+(*VBAL*)
+POMPAGE.VN2PP11.CONF_DI_Off				:=	FALSE;
+POMPAGE.VN2PP11.CONF_DI_On				:=	FALSE;
+POMPAGE.VN2PP11.CONF_EN_On				:=	0;
+POMPAGE.VN2PP11.CONF_Tim_Valid_Off		:=	T#10S;
+POMPAGE.VN2PP11.CONF_Tim_Valid_On		:=	T#500MS;
+POMPAGE.VN2PP11.CONF_Type_Actuator		:=	0;
+POMPAGE.VN2PP11.CONF_No_Safety_Auto		:=	FALSE;
+POMPAGE.VN2PP11.DEF_Off.DELAY			:=	T#10S;
+POMPAGE.VN2PP11.DEF_On.DELAY			:=	T#10S;
+POMPAGE.VN2PP11.MNEMO					:=	'VN2PP11';
+
+(*M11*)
+M11.MNEMO								:=	'M11';
+
+M11.PRM_Type_seuil[1]					:=	TRUE;			(* Seuil 1 = Pression > pression atm*)
+M11.PRM_Delais[1]						:=	T#10s;
+M11.PRM_Type_seuil[2]					:=	FALSE;			(* Seuil 2 = Pression <= Seuil détection grosse fuite*)
+M11.PRM_Delais[2]						:=	T#500ms;
+M11.PRM_Delais[3]						:=	T#10s;			(* Seuil 3 = Pression <= Pression de basculement en pompage secondaire*)
+M11.PRM_Type_seuil[3]					:=	FALSE;
+M11.PRM_Delais[4]						:=	T#500ms;		(* Seuil 4 = Pression >= Pression max. en pompage secondaire.*)
+M11.PRM_Type_seuil[4]					:=	TRUE;
+M11.PRM_Delais[5]						:=	T#2s;			(* Seuil 5 = Pression <= Pression max. pour autorisation transfert sous vide*)
+M11.PRM_Type_seuil[5]					:=	FALSE;
+M11.PRM_Delais[6]						:=	T#2S;			(* Seuil 6 = Pression <= Pression de basculement en pompage rapide*) (*utilisé pour interjoint*)
+M11.PRM_Type_seuil[6]					:=	FALSE;
+M11.PRM_Delais[7]						:=	T#200ms;		(* Seuil 7 = Pression <= Consigne pression étape de pompage *)
+M11.PRM_Type_seuil[7]					:=	FALSE;
+M11.PRM_Seuil[8] 						:= 	1E-0;
+M11.PRM_Delais[8]						:=	T#2s;			(* Seuil 8 = Pression <= Pression max. sécurité générateur / gaz / chauffage*)
+M11.PRM_Type_seuil[8]					:=	FALSE;
+M11.PRM_Delais[9]						:=	T#2s;			(* Seuil 9 = Pression >= Pression de bascuelement en ventilation rapide*) (*Non utilisé*)
+M11.PRM_Type_seuil[9]					:=	TRUE;
+M11.PRM_Delais[10]						:=	T#2s;			(* Seuil 10 = Pression < Pression de mise en marche de la circulation d'eau froide dans l'enceinte*)
+M11.PRM_Type_seuil[10]					:=	FALSE;
+M11.PRM_Delais[11]						:=	T#2s;			(* Seuil 11 = Pression <= Pression test RP*)
+M11.PRM_Type_seuil[11]					:=	FALSE;
+M11.PRM_Delais[12]						:=	T#500ms;		(* Seuil 12 = Pression <= Seuil de pompage avant effluvage*)
+M11.PRM_Type_seuil[12]					:=	FALSE;
+M11.PRM_Delais[13]						:=	T#2s;
+M11.PRM_Type_seuil[13]					:=  FALSE;			(* Seuil 13= Pression <= Pression de vide pour autorisation allumage canon*)
+M11.PRM_Delais[14]						:=	T#2s;
+M11.PRM_Type_seuil[14]					:=  FALSE;			(* Seuil 14= Pression <= Pression de vide pour autorisation allumage effluvage*)
+M11.PRM_Delais[15]						:=	T#2S;
+M11.PRM_Type_seuil[15]					:=	FALSE;			(* Seuil 15= Pression <= Pression basse pour autorisation allumage effluvage*)		
+
+
+M11.CONF_Unit							:=	0 ;				(* mbar*)
+M11.CONF_degas_auto						:= 	TRUE;
+M11.CONF_Tim_Degas						:=	T#20S;
+M11.PRM_Tim_Restart						:=	T#10S;
+M11.PRM_Tim_Stop						:=	T#15s;
+(*CoE*)
+M11.CONF_NetId							:=	'172.18.237.251.2.1';
+M11.CONF_SlaveAddr						:=	1029;
+
+(*M12*)
+(*M12.MNEMO								:=	'M12';
+M12.CONF_Unit							:=	0 ;			(*mbar*)
+
+(*VJ11*)
+VJ11.MNEMO								:=	'VJ11';
+VJ11.IdXML								:=	'2';
+VJ11.TagXML								:=	4;
+VJ11.DEF_On.IdXML						:=	'3';
+VJ11.DEF_On.TagXML						:=	2;
+VJ11.DEF_Off.IdXML						:=	'3';
+VJ11.DEF_Off.TagXML						:=	4;
+VJ11.DEF_Sensor.IdXML					:=	'3';
+VJ11.DEF_Sensor.TagXML					:=	13;
+VJ11.DEF_On_Imposs.IdXML				:=	'3';
+VJ11.DEF_On_Imposs.TagXML				:=	6;
+VJ11.DEF_Off_Imposs.IdXML				:=	'3';
+VJ11.DEF_Off_Imposs.TagXML				:=	9;
+VJ11.DEF_Off_auto.IdXML					:=	'3';
+VJ11.DEF_Off_auto.TagXML				:=	11;
+
+VJ11.DEF_Off.DELAY 						:= 	T#10s;
+VJ11.DEF_On.DELAY 						:= 	T#10s;
+VJ11.CONF_Type_Actuator					:=	0;
+VJ11.CONF_EN_On							:=	0;
+VJ11.CONF_DI_Off						:=	FALSE;
+VJ11.CONF_DI_On							:= 	FALSE;
+VJ11.CONF_No_Safety_Auto				:=	FALSE;
+VJ11.CONF_Tim_Valid_On					:=	T#100ms;
+VJ11.CONF_Tim_Valid_Off					:= 	T#100ms;*)
+
+(*COM CRYOS*)
+COM_CRYOS.MNEMO						:=	'COM_CRYOS';
+COM_CRYOS.IdParent					:=	MNEMO;
+
+(*mode de controle des fonctions*)
+IF (MACHINE.RQ_Ctrl_Ihm OR MACHINE.STATE_Manu)
+	AND NOT PRG_GAZ.REGULATION_GAZ_L1.RQ_Ctrl_Pompage
+	AND NOT PRG_GAZ.REGULATION_GAZ_L2.RQ_Ctrl_Pompage THEN
+	POMPAGE.CTRL_PLC := FALSE;
+ELSIF (MACHINE.RQ_Ctrl_Plc AND NOT MACHINE.STATE_Manu)
+		OR PRG_GAZ.REGULATION_GAZ_L1.RQ_Ctrl_Pompage
+		OR PRG_GAZ.REGULATION_GAZ_L2.RQ_Ctrl_Pompage THEN
+	POMPAGE.CTRL_PLC := TRUE;
+END_IF
+
+
+POMPAGE.OP_Marche_Pompes.ON_PLC  := INIT_MACHINE.RQ_START_PUMP
+										OR EXECPROC.RQ_FM_EXEC_STEP[3];
+
+POMPAGE.OP_Pompage_Sec.ON_PLC 	:= 	INIT_MACHINE.RQ_START_PUMPING
+										OR EXECPROC.RQ_FM_EXEC_STEP[1]
+										OR MAIN.STEP_EMPILEMENT.RQ_MARCHE_POMPAGE_SEC
+										OR MAIN.STEP_EFFLUVAGE.RQ_POMPAGE_SEC
+										OR PRG_GAZ.REGULATION_GAZ_L1.RQ_Pompage_Sec
+										OR PRG_GAZ.REGULATION_GAZ_L2.RQ_Pompage_Sec;
+
+POMPAGE.OP_Pompage_Prim.ON_PLC 	:=	MAIN.STEP_EFFLUVAGE.RQ_POMPAGE_PRIM;
+
+POMPAGE.OP_Pompage_Proc.ON_PLC	:=	MAIN.STEP_EMPILEMENT.RQ_MARCHE_POMPAGE_PROC;
+
+IF PRG_GAZ.REGULATION_GAZ_L1.RQ_Pompage_Proc THEN
+	POMPAGE.VS11.PRM_Mode			:=	0;	(*asservissement en position*)
+	POMPAGE.VS11.PRM_Position			:=	PRG_GAZ.REGULATION_GAZ_L1.PRM_Pos_Vanne;
+	POMPAGE.OP_Pompage_Proc.ON_PLC :=	TRUE;
+END_IF
+
+IF PRG_GAZ.REGULATION_GAZ_L2.RQ_Pompage_Proc THEN
+	POMPAGE.VS11.PRM_Mode			:=	0;	(*asservissement en position*)
+	POMPAGE.VS11.PRM_Position			:=	PRG_GAZ.REGULATION_GAZ_L2.PRM_Pos_Vanne;
+	POMPAGE.OP_Pompage_Proc.ON_PLC :=	TRUE;
+END_IF
+
+POMPAGE.OP_Arret_Pompes.ON_PLC := EXECPROC.RQ_FM_EXEC_STEP[4];
+PRG_POMPAGE.POMPAGE.OP_Regen.ON_PLC  := EXECPROC.RQ_FM_EXEC_STEP[5];
+PRG_POMPAGE.POMPAGE.OP_Regen_Part.ON_PLC := EXECPROC.RQ_FM_EXEC_STEP[19];
+PRG_POMPAGE.POMPAGE.OP_Ventilation.ON_PLC := EXECPROC.RQ_FM_EXEC_STEP[6];
+PRG_POMPAGE.POMPAGE.OP_Isolement.ON_PLC := EXECPROC.RQ_FM_EXEC_STEP[2] OR MAIN.STEP_EFFLUVAGE.RQ_ISOLEMENT;
+PRG_POMPAGE.POMPAGE.OP_Test_RP.ON_PLC := EXECPROC.RQ_FM_EXEC_STEP[14];
+
+(*Paramètre dynamique*)
+(*PP11*)
+POMPAGE.PP11.WATER					:=	PRG_SERVITUDES.WATER[CONF_N_Water_Line_PP11] AND NOT PRG_SERVITUDES.DEF_Groupe.DEF;
+POMPAGE.PP11.EN_Off_EXT				:= 	TRUE;
+POMPAGE.PP11.EN_On_EXT				:= 	TRUE;
+(*PR11*)
+POMPAGE.PR11.WATER					:=	PRG_SERVITUDES.WATER[CONF_N_Water_Line_PR11];
+POMPAGE.PR11.EN_Off_EXT				:= 	TRUE;
+POMPAGE.PR11.EN_On_EXT				:= 	TRUE;
+(*PS11*)
+POMPAGE.PS11.WATER					:=	PRG_SERVITUDES.WATER[CONF_N_Water_Line_PS11] AND NOT PRG_SERVITUDES.DEF_Groupe.DEF;
+POMPAGE.PS11.EN_Off_EXT				:= 	TRUE;
+POMPAGE.PS11.EN_On_EXT				:= 	TRUE;
+(*VS11*)
+POMPAGE.VS11.EN_Off_EXT				:=	TRUE;
+POMPAGE.VS11.EN_On_EXT				:=	TRUE;
+(*VP11*)
+POMPAGE.VP11.EN_Off_EXT				:=	TRUE;
+POMPAGE.VP11.EN_On_EXT				:=	TRUE;
+(*VH11*)
+POMPAGE.VH11.EN_Off_EXT				:=	TRUE;
+POMPAGE.VH11.EN_On_EXT				:=	(*VJ11.STATE_Off AND*) PRG_EFFLUVAGE.STATE_Ar AND PRG_GAZ.STATE_Ar AND PRG_EVAP.STATE_Ar;
+
+
+(*paramétrage déclenchement automatique opérations*)
+POMPAGE.OP_Arret_Pompes.ON_AUTO_EXT	:= 	PRG_SERVITUDES.DEF_Groupe.DEF;
+
+(*paramétrage opérations pompage*)
+POMPAGE.OP_Ventilation.ENABLE_EXT		:=	PRG_EFFLUVAGE.STATE_Ar AND PRG_GAZ.STATE_Ar AND PRG_EVAP.STATE_Ar AND M11.STATE_Ok;
+POMPAGE.OP_Isolement.ENABLE_EXT			:=	PRG_EFFLUVAGE.STATE_Ar AND PRG_GAZ.STATE_Ar AND PRG_EVAP.STATE_Ar ;
+POMPAGE.OP_Arret_Pompes.ENABLE_EXT		:=	TRUE ;
+POMPAGE.OP_Marche_Pompes.ENABLE_EXT		:=	TRUE;
+POMPAGE.OP_Pompage_Prim.ENABLE_EXT		:=	TRUE ;
+POMPAGE.OP_Pompage_Sec.ENABLE_EXT		:=	TRUE;
+POMPAGE.OP_Pompage_Proc.ENABLE_EXT		:=	TRUE;
+POMPAGE.OP_Purge.ENABLE_EXT				:=	TRUE;
+POMPAGE.OP_Regen.ENABLE_EXT				:=	PRG_EFFLUVAGE.STATE_AR AND PRG_GAZ.STATE_Ar AND PRG_EVAP.STATE_AR;
+POMPAGE.OP_Test_RP.ENABLE_EXT			:=	PRG_EFFLUVAGE.STATE_Ar AND PRG_GAZ.STATE_Ar AND PRG_EVAP.STATE_Ar AND M11.STATE_Ok;
+
+
+(*Fonction pompage*)
+POMPAGE.CONF_Pompage_interjoint		:= TRUE;
+POMPAGE.CONF_VINT					:= TRUE;
+
+
+
+
+(**************************************************************************************)
+(*	                             Fonction pompage enceinte 					   *)
+(**************************************************************************************)
+
+(*DEBUGECO*)
+IF VAR_Mem_ECO THEN
+	IF EXECPROC.RQ_FM_EXEC_STEP[1] THEN
+		DEBUG_BOOL1	:=	TRUE;
+		IF POMPAGE.OP_Pompage_Sec.AUTOR_PLC	THEN
+			DEBUG_BOOL2	:=	TRUE;
+		ELSIF NOT POMPAGE.PS11.STATE_Regen THEN
+			DEBUG_BOOL3	:=	TRUE;
+		END_IF
+	END_IF
+	IF EXECPROC.RQ_EXEC_STEP[1] THEN
+		DEBUG_BOOL4	:=	TRUE;
+	END_IF
+	IF EXECPROC.RQ_FM_EXEC_STEP[3] THEN
+		DEBUG_BOOL5	:=	TRUE;
+		IF POMPAGE.OP_Marche_Pompes.AUTOR_PLC	THEN
+			DEBUG_BOOL6	:=	TRUE;
+		END_IF
+	END_IF
+	IF EXECPROC.RQ_EXEC_STEP[3] THEN
+		DEBUG_BOOL7	:=	TRUE;
+	END_IF
+END_IF
+
+POMPAGE(
+	RESET:=					MACHINE.STATE_Off ,
+	MANUAL:= 				MACHINE.STATE_Manu,
+	I_Prep_Ventil_Ok:= 		(NOT CONF_WATER_ENC.0 OR PRG_SERVITUDES.STATE_AR[1]) AND
+							(NOT CONF_WATER_ENC.1 OR PRG_SERVITUDES.STATE_AR[2]) AND
+							(NOT CONF_WATER_ENC.2 OR PRG_SERVITUDES.STATE_AR[3]) AND
+							(NOT CONF_WATER_ENC.3 OR PRG_SERVITUDES.STATE_AR[4]) AND
+							(NOT CONF_WATER_ENC.4 OR PRG_SERVITUDES.STATE_AR[5]) AND
+							(NOT CONF_WATER_ENC.5 OR PRG_SERVITUDES.STATE_AR[6]) AND
+							(NOT CONF_WATER_ENC.6 OR PRG_SERVITUDES.STATE_AR[7]) AND
+							(NOT CONF_WATER_ENC.7 OR PRG_SERVITUDES.STATE_AR[8]),
+	I_Fin_Ventil:= 			FALSE,
+	I_Ref_Ok:=				NOT PRG_SERVITUDES.DEF_Groupe.DEF,
+	I_Stop_Mesure_OK:= 		M11.O_Pret_Pour_Rah (*AND VJ11.STATE_Off*),
+	I_Cond_Bal_PP11_Ext:=	PRG_EVAP.STATE_AR,
+	IN_Pressure_RP:=		M11.STATE_Pression,
+	IN_FE11T	:=			IN_FE11T OR CONF_NO_FE11T,
+	IN_FE12T	:= 			IN_FE12T OR CONF_NO_FE12T,
+	TH_Vide_Primaire:=		M11.STATE_Seuil[3] ,
+	TH_Grosse_Fuite:= 		M11.STATE_Seuil[2],
+	TH_Atm:= 				M11.STATE_Seuil[1],
+	TH_RP_Enc:=				NOT M11.STATE_Seuil[4],
+	TH_Test_RP:=			M11.STATE_Seuil[11],
+	PRM_Tim_SurVentil_E:= ,	(*Affecté depuis IHM*)
+	PRM_Tim_Purge:= ,		(*Affecté depuis IHM*)
+	PRM_Pr_Atm:= ,			(*Affecté depuis IHM*)
+	PRM_Pr_PPrim:= ,		(*Affecté depuis IHM*)
+	PRM_Pr_RP_PPrim:= ,		(*Affecté depuis IHM*)
+	PRM_Pr_TGF:= ,			(*Affecté depuis IHM*)
+	PRM_N_Purge:= ,			(*Affecté depuis IHM*)
+	PRM_Pr_test:=,			(*Affecté depuis IHM*)
+	IN_Temp_Etage1 :=		COM_CRYOS.STATE_Temperature[0],
+	 );
+
+
+(*************************************************************************************)
+(*                                   Jauge mesure pression enceinte M11                             *)
+(*************************************************************************************)
+
+(* Seuil 1 = Pression > pression atm*)
+(* Seuil 2 = Pression <= Seuil détection grosse fuite*)
+(* Seuil 3 = Pression <= Pression de basculement en pompage secondaire*)
+(* Seuil 4 = Pression <= Pression max. en pompage secondaire.*)
+(* Seuil 5 = Pression <= Pression MAX Sécurité transfert*) (*Non utilisé*)
+(* Seuil 6 = Pression <= Pression de basculement en prévidage rapide*) (*Non utilisé*)
+(* Seuil 7 = Pression <= Consigne pression étape de pompage *)
+(* Seuil 8 = Pression <= Pression MAX. Sécurité générateur / gaz / chauffage*)
+(* Seuil 9 = Pression > Pression de basculement en ventilation rapide*) (*Non utilisé*)
+(* Seuil 10 = Pression < Pression de mise en marche de la circulation d'eau froide dans l'enceinte*)
+(* Seuil 11 = Pression <= Pression test de remontée de pression*)
+(* Seuil 12 = Pression <= Pression avant effluvage*)
+(* Seuil 13= Pression <= Pression de vide pour autorisation allumage canon*)
+(* Seuil 14= Pression <= Pression de vide pour autorisation allumage effluvage*)
+(* Seuil 15= Pression => Pression basse pour autorisation allumage effluvage*)
+
+
+(* Paramètre dynamique*)
+M11.PRM_Seuil[1] :=			POMPAGE.PRM_Pr_Atm;
+M11.PRM_Seuil[2] := 		POMPAGE.PRM_Pr_TGF;
+M11.PRM_Seuil[3] := 		POMPAGE.PRM_Pr_PPrim;
+M11.PRM_Seuil[4] :=			POMPAGE.PRM_Pr_RP_PPrim;
+M11.PRM_Seuil[6] :=			100; 		
+M11.PRM_Seuil[7]:=			PRM_Pr_Pumping_OK;
+M11.PRM_Seuil[10] := 		PRG_SERVITUDES.PRM_Pr_REF_ENC;
+M11.PRM_Seuil[11]:=			POMPAGE.PRM_Pr_test;
+M11.PRM_Seuil[12]:=			MAIN.STEP_EFFLUVAGE.PRM_PR_EFFLUVAGE;
+M11.PRM_Seuil[13]:=			PRM_Pr_Canon_Ok;
+M11.PRM_Seuil[14]:=			1;
+M11.PRM_Seuil[15]:=			5.0E-2;
+
+M11(
+	RESET:=					MACHINE.STATE_Off,
+	MANUAL:= 				MACHINE.STATE_Manu,
+	CO_Stop:= 				FALSE,
+	CO_inhibe_Seuil:=		FALSE ,
+	I_Stop_Rah:=			POMPAGE.RQ_Stop_Mesure_Enc ,
+	I_VHxx:= 				POMPAGE.VH11.STATE_On,
+	EN_Dgz_EXT:=			POMPAGE.OP_Pompage_sec.OK OR M11.MANUAL ,
+	EN_Off_EXT:=			TRUE,
+);
+
+
+(***************************************************************************************************)
+(*                   GESTION  DE LA VANNE D'ISOLEMENT JAUGE M12				      *)
+(***************************************************************************************************)
+(*VJ11(
+	I_PARAM_SYSTEM_OK:=	PARAM_SYSTEM_OK,
+	RESET:= 				MACHINE.STATE_Off,
+	MANUAL:= 				MACHINE.STATE_Manu,
+	CO_On:= 				M11.STATE_Seuil[3]  AND POMPAGE.OP_Ventilation.AR,
+	EN_On_INT:= 			TRUE,
+	EN_Off_INT:= 			TRUE,
+	EN_On_EXT:= 			M11.STATE_Seuil[3]  AND POMPAGE.VH11.STATE_Off,
+	EN_Off_EXT:= 			TRUE
+	);*)
+
+(***************************************************************************)
+(*                              JAUGE CAPACITIVE M12                                        *)
+(***************************************************************************)
+(*M12(
+	RESET:=				MACHINE.STATE_Off,
+	MANUAL:= 			MACHINE.STATE_Manu,
+	CO_inhibe_Seuil:=	FALSE ,
+	);*)
+
+(*************************************************************************************)
+(*                        Communication pompes cryos				                    *)
+(*************************************************************************************)
+COM_CRYOS.CO_Regen			:=	POMPAGE.PS11.OUT_Regen;
+COM_CRYOS.CO_Etat			:=	POMPAGE.PS11.OUT_On ;
+COM_CRYOS.CO_states_regen 	:=  POMPAGE.PS11.STATE_Regen;
+COM_CRYOS(
+	RESET:= 				MACHINE.STATE_Off,
+	OFF:= 					FALSE,
+);
+
+
+(* INFORMATION EN SORTIE DU PROGRAMME*)
+O_REF_ENC		:=		M11.STATE_Seuil[10] AND POMPAGE.OP_Ventilation.AR;
+
+(*Affectation des sorties*)
+(*Vanne VP11.1 & VP11.2 même commande OUT_VP11*)
+OUT_VP111		:= 		POMPAGE.VP11.OUT_V11;
+OUT_VP112		:=		POMPAGE.VP11.OUT_V12;
+
+OUT_OVS11		:=      POMPAGE.VS11.OUT_On;
+OUT_FVS11		:=      POMPAGE.VS11.OUT_Off;
+OUT_LVS11		:=      POMPAGE.VS11.OUT_Mode;
+OUT_QVS11		:=      POMPAGE.VS11.OUT_SetPoint.OUTPUT;
+
+OUT_VH11		:=		POMPAGE.VH11.OUT_On;
+OUT_VINT		:=		POMPAGE.VINT.OUT_On;
+
+OUT_PP11		:=		POMPAGE.PP11.OUT_On;
+OUT_PR11		:=		POMPAGE.PR11.OUT_On;
+OUT_PS11		:=		POMPAGE.PS11.OUT_On;
+
+OUT_VN2PP11		:=		POMPAGE.VN2PP11.OUT_On;
+
+(*OUT_VJ11		:=		VJ11.OUT_On;*)
+(*
+OUT_DGZM11	:=		M11.OUT_DGZ;
+OUT_M11		:=		M11.OUT_M1;
+*)
+(*Gestion des demandes de refroidissements*)
+FOR i:= 1 TO 8 DO
+	RQ_REF[I]	:=	(POMPAGE.PP11.RQ_Cool  AND (I=CONF_N_Water_Line_PP11))
+					OR (POMPAGE.PR11.RQ_Cool AND (I=CONF_N_Water_Line_PR11))
+					OR (POMPAGE.PS11.RQ_Cool AND (I=CONF_N_Water_Line_PS11));
+END_FOR
+RQ_PREP_VENTIL	:=	POMPAGE.RQ_Prep_Ventil_Enc;
+
+O_STEP_PUMPING_OK	:=	POMPAGE.OP_Pompage_Sec.OK AND M11.STATE_Seuil[7];
+
+
+(*Défaut entrainant l'interruption du procédé*)
+STATE_Def_IProc		:=	POMPAGE.OP_Arret_Pompes.DEF_AUTO_ON.DEF OR POMPAGE.OP_Isolement.DEF_AUTO_ON.DEF
+						OR POMPAGE.OP_Pompage_Prim.DEF_ON_REJECTED.DEF OR POMPAGE.OP_Pompage_Sec.DEF_ON_REJECTED.DEF
+						OR POMPAGE.OP_Pompage_Proc.DEF_ON_REJECTED.DEF OR POMPAGE.OP_Purge.DEF_ON_REJECTED.DEF
+						OR POMPAGE.OP_Regen.DEF_ON_REJECTED.DEF
+						OR POMPAGE.VS11.DEF_Surv_Pression.DEF OR POMPAGE.VS11.DEF_Pression.DEF OR POMPAGE.VS11.DEF_Position.DEF;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

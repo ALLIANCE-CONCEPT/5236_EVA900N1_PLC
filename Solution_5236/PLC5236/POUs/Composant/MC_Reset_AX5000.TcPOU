@@ -1,0 +1,304 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="MC_Reset_AX5000" Id="{bdbfff06-86bc-4b20-b5fb-5a9dd4939fdf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK MC_Reset_AX5000
+(* Reset des AX5000
+
+													PH, 04/2008 *)
+
+VAR_INPUT
+	sNetId : STRING;	 		(* AMS Net ID du périphérique maitre EtherCAT - Onglet EtherCAT *)
+	nDriveType : BYTE;			(* Courant du variateur : AX5203 = 3 *)
+	nSlaveAddr : WORD;			(* Adresse EtherCAT du variateur : Périphérique E/S - AX - Onglet EtherCAT - EtherCAT Adr *)
+	bExecute : BOOL;
+END_VAR
+VAR_OUTPUT
+	bDone : BOOL;
+	bError : BOOL;
+	nErrID : UDINT;
+	StepError : WORD;
+END_VAR
+VAR
+	Step_Reset: WORD;
+
+	IDN_S_11_A: WORD;
+	IDN_S_11_B: WORD;
+	IDN_S_99: WORD;
+	IDN_P_324: ARRAY[0..20] OF BYTE;
+
+	stAxisRef :ST_SoE_DriveRef;
+
+	SoEWriteIDN_ByDriveRef: FB_SoEWrite_ByDriveRef;
+	SoEReadIDN_ByDriveRef: FB_SoERead_ByDriveRef;
+	EcSetSlaveState: FB_EcSetSlaveState;
+	EcGetSlaveState: FB_EcGetSlaveState;
+	FrtM_bExecute: R_TRIG;
+	Fin_EcGetSlaveState: F_TRIG;
+	Ticks_GetState: TON;
+	TON_TimeOUT: TON;
+
+	AX_2channels: BOOL;
+	Init: BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Ticks_GetState (IN:= NOT Ticks_GetState.Q AND NOT EcGetSlaveState.bBusy, PT:=T#1S);						(* Lecture de l'état de l'AX5000 sur EtherCAT*)
+EcGetSlaveState(	sNetId:= sNetId,
+					nSlaveAddr:= nSlaveAddr,
+					bExecute:= Ticks_GetState.Q,
+					tTimeout:= T#10s);
+Fin_EcGetSlaveState (CLK:= EcGetSlaveState.bBusy );
+
+
+CASE Step_Reset OF
+	0:		FrtM_bExecute(CLK:= bExecute);
+			IF FrtM_bExecute.Q THEN
+				bDone := FALSE;
+				bError := FALSE;
+				nErrID := 0;
+				StepError := 0;
+				IDN_S_11_A := 0;
+				IDN_S_11_B := 0;
+				stAxisRef.sNetId := sNetId;				(* AMS NetID du périphérique EtherCAT *)
+				stAxisRef.nDriveNo := 0;					(* Channel 1 ou 2*)
+				stAxisRef.nDriveType := nDriveType;		(* Courant nominal du variateur *)
+				stAxisRef.nSlaveAddr := nSlaveAddr;		(* Adresse EtherCAT du variateur *)
+				Step_Reset:=Step_Reset+1;
+			END_IF
+
+(*****************************************************************************************************************************************************  Initialisation *************************)
+	1: 		IF Fin_EcGetSlaveState.Q THEN																(* Si <> OP ou PRE-OP, on passe en PRE OP *)
+				IF  EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_PREOP
+					OR  EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_OP THEN
+					Step_Reset:=Step_Reset+1;
+					Init := FALSE;
+				ELSE
+					Step_Reset:=150;
+					Init := TRUE;
+				END_IF
+			END_IF
+
+	2:		SoEReadIDN_ByDriveRef(	stDriveRef:= stAxisRef,											(* Lecture du type d'AX5000 - Possible uniquement en PRE OP ou OP *)
+										nIdn:= 16#8000 + 324,
+										nElement:= 16#40,
+										pDstBuf:= ADR(IDN_P_324),
+										cbBufLen:= SIZEOF(IDN_P_324),
+										bExecute:= TRUE );
+			IF SoEReadIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	3:		SoEReadIDN_ByDriveRef();
+			IF NOT SoEReadIDN_ByDriveRef.bBusy OR SoEReadIDN_ByDriveRef.bError THEN
+				SoEReadIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEReadIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					AX_2channels := IDN_P_324[8] = 50;  (*IDN_P_324[5..20] = AX5206-0000-0006 ->IDN_P_324[8]=Nb de canaux *)
+					Step_Reset:=100;
+				END_IF
+			END_IF
+
+
+(*****************************************************************************************************************************************************  Reset de l'axe *************************)
+	100:	IDN_S_99 := 3;																	(* Reset d'un canal : IDN99 = 1*)
+			SoEWriteIDN_ByDriveRef(	stDriveRef:= stAxisRef,
+										nIdn:= 99,
+										nElement:= 16#40,
+										pSrcBuf:= ADR(IDN_S_99),
+										cbBufLen:= SIZEOF(IDN_S_99),
+										bExecute:= TRUE);
+			IF SoEWriteIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	101:	SoEWriteIDN_ByDriveRef();
+			IF NOT SoEWriteIDN_ByDriveRef.bBusy OR SoEWriteIDN_ByDriveRef.bError THEN
+				SoEWriteIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEWriteIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEWriteIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					Step_Reset:=Step_Reset+1;
+				END_IF
+			END_IF
+
+	102:	SoEReadIDN_ByDriveRef(	stDriveRef:= stAxisRef,								(* Vérification IDN99 = 1 *)
+										nIdn:= 99,
+										nElement:= 16#40,
+										pDstBuf:= ADR(IDN_S_99),
+										cbBufLen:= SIZEOF(IDN_S_99),
+										bExecute:= TRUE );
+
+			IF SoEReadIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	103:	SoEReadIDN_ByDriveRef();
+			IF NOT SoEReadIDN_ByDriveRef.bBusy OR SoEReadIDN_ByDriveRef.bError THEN
+				SoEReadIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEReadIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					IF IDN_S_99=3 THEN
+						Step_Reset:=Step_Reset+1;
+					ELSE
+						Step_Reset:=Step_Reset-1;
+					END_IF
+				END_IF
+			END_IF
+
+	104:	IDN_S_99 := 0;																	(* IDN99 = 0 *)
+			SoEWriteIDN_ByDriveRef(	stDriveRef:= stAxisRef,
+										nIdn:= 99,
+										nElement:= 16#40,
+										pSrcBuf:= ADR(IDN_S_99),
+										cbBufLen:= SIZEOF(IDN_S_99),
+										bExecute:= TRUE);
+			IF SoEWriteIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	105:	SoEWriteIDN_ByDriveRef();
+			IF NOT SoEWriteIDN_ByDriveRef.bBusy OR SoEWriteIDN_ByDriveRef.bError THEN
+				SoEWriteIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEWriteIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEWriteIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					Step_Reset:=Step_Reset+1;
+				END_IF
+			END_IF
+
+	106:	SoEReadIDN_ByDriveRef(	stDriveRef:= stAxisRef,								(* Vérification IDN99 = 0 *)
+										nIdn:= 99,
+										nElement:= 16#40,
+										pDstBuf:= ADR(IDN_S_99),
+										cbBufLen:= SIZEOF(IDN_S_99),
+										bExecute:= TRUE );
+
+			IF SoEReadIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	107:	SoEReadIDN_ByDriveRef();
+			IF NOT SoEReadIDN_ByDriveRef.bBusy OR SoEReadIDN_ByDriveRef.bError THEN
+				SoEReadIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEReadIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					IF IDN_S_99=0 THEN
+						Step_Reset:=Step_Reset+1;
+					ELSE
+						Step_Reset:=Step_Reset-1;
+					END_IF
+				END_IF
+			END_IF
+
+	108:	IF AX_2channels AND stAxisRef.nDriveNo = 0 THEN							(* Si c'est un AX52xx, on reset l'autre canal *)
+				stAxisRef.nDriveNo := 1;
+				Step_Reset:=100;
+			ELSE
+				stAxisRef.nDriveNo := 0;
+				Step_Reset:=Step_Reset+1;
+			END_IF
+
+	109:	stAxisRef.nDriveNo := 0;
+			SoEReadIDN_ByDriveRef(	stDriveRef:= stAxisRef,							(* Lecture des défaut du canal 1 de l'AX5000 - IDN11*)
+										nIdn:= 11,
+										nElement:= 16#40,
+										pDstBuf:= ADR(IDN_S_11_A),
+										cbBufLen:= SIZEOF(IDN_S_11_A),
+										bExecute:= TRUE );
+
+			IF SoEReadIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	110:	SoEReadIDN_ByDriveRef();
+			IF NOT SoEReadIDN_ByDriveRef.bBusy OR SoEReadIDN_ByDriveRef.bError THEN
+				SoEReadIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEReadIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					IF AX_2channels THEN												 (* Si c'est un AX52xx, on lit l'état de l'autre canal *)
+						Step_Reset:=Step_Reset + 1;
+					ELSE
+						IDN_S_11_B := 0 ;
+						Step_Reset:=150;
+					END_IF
+				END_IF
+			END_IF
+
+	111:	stAxisRef.nDriveNo := 1;
+			SoEReadIDN_ByDriveRef(	stDriveRef:= stAxisRef,							(* Lecture des défaut du canal 2 de l'AX5000 - IDN11*)
+										nIdn:= 11,
+										nElement:= 16#40,
+										pDstBuf:= ADR(IDN_S_11_B),
+										cbBufLen:= SIZEOF(IDN_S_11_B),
+										bExecute:= TRUE );
+
+			IF SoEReadIDN_ByDriveRef.bBusy THEN Step_Reset:=Step_Reset+1; END_IF
+
+	112:	SoEReadIDN_ByDriveRef();
+			IF NOT SoEReadIDN_ByDriveRef.bBusy OR SoEReadIDN_ByDriveRef.bError THEN
+				stAxisRef.nDriveNo := 0;
+				SoEReadIDN_ByDriveRef(bExecute:= FALSE);
+				IF SoEReadIDN_ByDriveRef.bError THEN
+					bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := Step_Reset; Step_Reset := 0;
+				ELSE
+					Step_Reset:= 150;
+				END_IF
+			END_IF
+
+
+(*****************************************************************************************************************************************************  Changement de l'état EtherCAT de L'AX si le défaut n'est pas éffacé*******)
+	150:	IF Fin_EcGetSlaveState.Q THEN														(* Attente dernière lecture valide *)
+
+				IF  EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_PREOP THEN
+						EcSetSlaveState.reqState := EC_DEVICE_STATE_OP;
+						EcSetSlaveState.bExecute := TRUE;
+						Step_Reset:=Step_Reset + 1;
+
+				ELSIF EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_OP THEN
+						IF IDN_S_11_A = 0 AND  IDN_S_11_B = 0  THEN
+							bDone := TRUE;
+							Step_Reset:=0;
+						ELSE
+							EcSetSlaveState.reqState := EC_DEVICE_STATE_PREOP;
+							EcSetSlaveState.bExecute := TRUE;
+							Step_Reset:=Step_Reset + 1;
+						END_IF
+
+				ELSIF EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_PREOP  + EC_DEVICE_STATE_ERROR THEN
+						EcSetSlaveState.reqState := EC_DEVICE_STATE_INIT;
+						EcSetSlaveState.bExecute := TRUE;
+						Step_Reset:=Step_Reset + 1;
+
+				ELSIF EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_INIT THEN
+						EcSetSlaveState.reqState := EC_DEVICE_STATE_PREOP;
+						EcSetSlaveState.bExecute := TRUE;
+						Step_Reset:=Step_Reset + 1;
+				END_IF
+
+			END_IF
+
+	151:	IF NOT EcSetSlaveState.bBusy AND Fin_EcGetSlaveState.Q THEN
+				IF  EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_PREOP
+					OR  EcGetSlaveState.state.deviceState = EC_DEVICE_STATE_OP THEN
+						Step_Reset:=100;
+				ELSE
+						Step_Reset:=Step_Reset - 1;
+				END_IF
+
+				IF Init THEN
+						Step_Reset:=1;
+				END_IF
+			END_IF
+END_CASE
+
+EcSetSlaveState(	sNetId:= sNetId,												(* Modification de l'état de l'AX5000 sur EtherCAT*)
+					nSlaveAddr:= nSlaveAddr,
+					tTimeout:= T#10s);
+IF NOT EcSetSlaveState.bBusy THEN EcSetSlaveState.bExecute := FALSE; END_IF
+
+
+TON_TimeOUT(IN:= Step_Reset<>0, PT:= T#60s);								(* Time out *)
+IF TON_TimeOUT.Q THEN
+	bError := TRUE; 	nErrID:=	 SoEReadIDN_ByDriveRef.iErrId; StepError := 999; Step_Reset := 0;
+	SoEWriteIDN_ByDriveRef.bExecute := FALSE;
+	SoEReadIDN_ByDriveRef.bExecute := FALSE;
+	EcSetSlaveState.bExecute := FALSE;
+	EcGetSlaveState.bExecute := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="MC_Reset_AX5000">
+      <LineId Id="39" Count="254" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,84 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Util_Userlist" Id="{8c1ac405-d2b5-444c-9e48-e1430bdf654a}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Liste des utilisateurs"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Liste des utilisateurs</v>
+                <v>User list</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Liste des groupes"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Liste des groupes</v>
+                <v>Group list</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Create user"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Création d'un nouvel utilisateur</v>
+                <v>New user creation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"user info"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Informations sur l'utilisateur</v>
+                <v>User information</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"choix groupe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sélection du groupe</v>
+                <v>Group selection</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Modify user"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Modification d'un utilisateur</v>
+                <v>User modification</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{30944581-7dfc-45d0-8c42-8d2a81a4a5c7}</v>
+          <v n="GuidReInit">{612fdfbd-3fc0-419a-a58a-a9de20c3076f}</v>
+          <v n="GuidExitX">{25b49972-1a4c-4b94-aca3-774fece62ddf}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CPT_TEMPS" Id="{1b4d8023-c8c0-4722-a089-08535becd28d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CPT_TEMPS
+
+(* Fonction de compteur temporel d'utilisation  *)
+(*Version 2.0 SP BA8-7326 amélioration par l'utilisation du temps CPU*)
+
+VAR_INPUT
+	I_On :						BOOL;					(*donne si la fonction appelante est dans l'état marche (true) ou arret (false) *)
+	IN:							BOOL;
+END_VAR
+
+VAR_OUTPUT
+
+END_VAR
+
+VAR
+	VAR_Date_Off:				T_ULARGE_INTEGER;
+	VAR_Date_On:				T_ULARGE_INTEGER;
+	FP_On:						R_TRIG;					(*front montant de Etat*)
+	FD_On:						F_TRIG;
+	TIMER_VALID_ON:				TON;
+	_GetCpuCounter:				FW_GetCpuCounter;
+
+END_VAR
+
+VAR_INPUT PERSISTENT
+	TagXML:				UINT;
+	DISABLE:				BOOL;											(*indique que le compteur est desactivé*)
+END_VAR
+
+VAR_TEMP
+
+	_TIM1:						T_ULARGE_INTEGER;
+	_TIM2:						LREAL;
+	VAR1:						UDINT;
+	VAR2:						UDINT;
+	VAR3: 						UDINT;
+	VAR4:						UDINT;
+END_VAR
+VAR PERSISTENT
+	STATE_Cpt:					 UDINT;				(*contient le temps cumulé d'utilisation de la fonction en seconde*)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF DISABLE THEN
+	RETURN;
+END_IF
+
+FP_On(clk:=I_On);
+FD_On(clk:= I_On);
+
+TIMER_Valid_On(IN := I_ON ,PT := T#10s);
+
+(*sur front montant de l'odre de marche, on mémorise la date et l'heure courante*)
+IF FP_On.Q THEN
+	_GetCpuCounter(
+				dwCpuCntLo=>VAR1,
+				dwCpuCntHi=>VAR2
+				);
+
+	VAR_Date_On.dwLowPart := UDINT_TO_DWORD(VAR1);
+	VAR_DATE_On.dwHighPart := UDINT_TO_DWORD(VAR2);
+END_IF;
+
+(*sur le front descendant ou cycliquement, on met à jour la valeur de temps toutes les minutes*)
+IF FD_On.Q OR timer_Valid_on.Q THEN
+	TIMER_Valid_On(IN := FALSE);
+	_GetCpuCounter(
+						dwCpuCntLo=>	VAR3  ,
+						dwCpuCntHi=>	VAR4
+				 );
+
+	VAR_Date_Off.dwLowPart := UDINT_TO_DWORD(VAR3);
+	VAR_DATE_Off.dwHighPart := UDINT_TO_DWORD(VAR4);
+
+	_TIM1 := UInt64Sub64(VAR_DATE_OFF,VAR_DATE_ON);
+	_TIM2 := UINT64_TO_LREAL(_TIM1) / 10000000;
+	STATE_CPT := STATE_CPT + LREAL_TO_UDINT(((_TIM2)));
+	VAR_Date_On := VAR_Date_Off;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CPT_TEMPS">
+      <LineId Id="42" Count="35" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

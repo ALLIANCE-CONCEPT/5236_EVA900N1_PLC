@@ -1,0 +1,206 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_LIGNE_GAZ_NO_DG" Id="{84b246a0-afb3-4c1e-aa66-1f1a8ae194b9}" SpecialFunc="None">
+    <Declaration><![CDATA[	FUNCTION_BLOCK BLOCK_LIGNE_GAZ_NO_DG
+(* Gestion d'une ligne de gaz avec une vanne et pas de débimètre *)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - GV - VERSION INITIALE - Gestion d'une ligne de gaz sans débimètre - 8650*)
+(* Version 2-0 - GV - Adaptation pour journal des évènements externe - 9070 - 07/2015*)
+
+(*************************************************************************)
+
+VAR_INPUT
+(*informations générales*)
+	RESET:					BOOL;		(* Condition de réinitialisation de la fonction *)
+	MANUAL:				BOOL;		(* Ordre de commmande manuel de la fonction *)
+	CTRL_PLC:				BOOL;		(* Mode de contrôle de la fonction - 0 = contrôle depuis l'IHM - 1=contrôle depuis l'automate*)
+(*sécurité*)
+	VAC:					BOOL;		(* Entrée d'interlock de vide*)
+	DOOR:					BOOL;		(* Entrée d'interlock porte*)
+(*Composants*)
+	VGI:						BLOCK_ACTUATOR2;				(* Vanne injection de gaz de la ligne*)
+
+(*Opérations*)
+	OP_MARCHE:			BLOCK_OPERATION;		(* Opération mise en gaz ligne*)
+	OP_ARRET:				BLOCK_OPERATION;		(* Opération arret gaz*)
+END_VAR
+
+VAR_OUTPUT
+	STATE_NOK:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Défaut ligne de gaz*)
+	STATE_Ready:			BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Mise en gaz autorisée*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Début de bloc*)
+PRL();
+(*Opération arrêt gaz*)
+ACT_STOP();
+(*Opération marche gaz*)
+ACT_START();
+(*Fin de bloc*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_START" Id="{d427eea3-ed89-4b44-ac7f-e4251eb3ecc3}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION MARCHE GAZ*)
+(*Marche gaz en continu*)
+
+OP_MARCHE(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= reset,
+	MANUAL:=manual ,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 3,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_MARCHE.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_MARCHE.ETAPE = 0
+		THEN
+				OP_MARCHE.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_ARRET.ETAPE.1
+		THEN
+				OP_MARCHE.ETAPE := 0;
+				OP_MARCHE.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_MARCHE.ETAPE.0 AND OP_MARCHE.MARCHE_OP
+		THEN
+				OP_MARCHE.ETAPE.1:=TRUE;
+				OP_MARCHE.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_MARCHE.ETAPE.1 AND OP_ARRET.ETAPE.0
+		THEN
+				OP_MARCHE.ETAPE.2:=TRUE;
+				OP_MARCHE.ETAPE.1:=FALSE;
+(*étape 2-3*)
+ELSIF	OP_MARCHE.ETAPE.2 AND VGI.STATE_On
+		THEN
+				OP_MARCHE.ETAPE.3:=TRUE;
+				OP_MARCHE.ETAPE.2:=FALSE;
+(*étape 3-2*)
+ELSIF	OP_MARCHE.ETAPE.3 AND OP_MARCHE.MARCHE_OP
+		THEN
+				OP_MARCHE.ETAPE.2:=TRUE;
+				OP_MARCHE.ETAPE.3:=FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_MARCHE.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{d1d84d46-45fb-4f14-9c4e-73fc1deae0d0}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION STOP GAZ*)
+
+OP_ARRET(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= reset,
+	MANUAL:=manual ,
+	RESTART_ENABLE_IF_OK:=FALSE ,
+	N_STEP_OP_OK:= 2,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_ARRET.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_ARRET.ETAPE = 0
+		THEN
+				OP_ARRET.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_MARCHE.ETAPE.1
+		THEN
+				OP_ARRET.ETAPE := 0;
+				OP_ARRET.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_ARRET.ETAPE.0 AND OP_ARRET.MARCHE_OP
+		THEN
+				OP_ARRET.ETAPE.1:=TRUE;
+				OP_ARRET.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_ARRET.ETAPE.1 AND VGI.STATE_OFF AND OP_MARCHE.Etape.0
+		THEN
+				OP_ARRET.ETAPE.2:=TRUE;
+				OP_ARRET.ETAPE.1:=FALSE;
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_ARRET.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{0e53058d-6d23-4a9e-9e47-52944c397791}">
+      <Implementation>
+        <ST><![CDATA[(*Etat prêt*)
+STATE_READY	:=	VAC AND DOOR;
+
+(*Autorisations*)
+OP_ARRET.ON_AUTO_INT	:=	VGI.DEF_Off_auto.DEF AND NOT Manual;
+OP_ARRET.ENABLE_INT		:=	TRUE;
+OP_MARCHE.ENABLE_INT	:=	STATE_Ready;
+
+(*Gestion vanne*)
+VGI.CO_On	:= 	(OP_MARCHE.Etape.2 OR OP_MARCHE.Etape.3);
+VGI(
+	RESET:=Reset ,
+	MANUAL:=Manual ,
+	EN_On_INT:=STATE_Ready);
+
+(*Etat défaut*)
+STATE_NOK		:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{11aa63da-3d0f-44d0-b272-f60cb524d40d}">
+      <Implementation>
+        <ST><![CDATA[	OP_MARCHE.IdParent		:=	MNEMO;
+	OP_MARCHE.MNEMO			:=	CONCAT(MNEMO,'_MARCHE');
+	OP_MARCHE.IdXML			:=	'0';
+	OP_MARCHE.TagXML		:=	1;
+
+	OP_ARRET.IdParent		:=	MNEMO;
+	OP_ARRET.MNEMO			:=	CONCAT(MNEMO,'_ARRET');
+	OP_ARRET.IdXML			:=	'0';
+	OP_ARRET.TagXML			:=	2;
+
+	VGI.IdXML					:=	'1';
+	VGI.TagXML					:=	1;
+	VGI.IdParent					:=	MNEMO;
+	VGI.DEF_Off_auto.IdXML		:=	'3';
+	VGI.DEF_Off_auto.TagXML		:=	11;
+	VGI.DEF_Off_Imposs.IdXML		:=	'3';
+	VGI.DEF_Off_Imposs.TagXML	:=	9;
+	VGI.DEF_On_Imposs.IdXML		:=	'3';
+	VGI.DEF_On_Imposs.TagXML	:=	6;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_LIGNE_GAZ_NO_DG">
+      <LineId Id="40" Count="7" />
+    </LineIds>
+    <LineIds Name="BLOCK_LIGNE_GAZ_NO_DG.ACT_START">
+      <LineId Id="0" Count="46" />
+    </LineIds>
+    <LineIds Name="BLOCK_LIGNE_GAZ_NO_DG.ACT_STOP">
+      <LineId Id="0" Count="36" />
+    </LineIds>
+    <LineIds Name="BLOCK_LIGNE_GAZ_NO_DG.POST">
+      <LineId Id="0" Count="16" />
+    </LineIds>
+    <LineIds Name="BLOCK_LIGNE_GAZ_NO_DG.PRL">
+      <LineId Id="0" Count="18" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

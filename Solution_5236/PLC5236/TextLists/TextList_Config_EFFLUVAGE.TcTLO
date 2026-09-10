@@ -1,0 +1,156 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Config_EFFLUVAGE" Id="{86a2f90f-6cdf-4674-bbf0-a482513eb7d3}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Effluvage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>EFFLUVAGE</v>
+                <v>GLOW DISCHARGE</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"PRM_Tp_Vent"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température max. pour ventilation enceinte</v>
+                <v>Max. temperature for chamber venting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"PRM_Max_Temp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne température max.</v>
+                <v>Max. temperature setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"CONF_Pmax"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Puissance max.</v>
+                <v>Max. setpoint</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"P"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Gain</v>
+                <v>Amplification factor</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Ti"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'action intégrale</v>
+                <v>Integral action time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Td"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'action dérivée</v>
+                <v>Derivative action time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Ta"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps d'amortissement</v>
+                <v>Damping time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Tc Ctrl"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de courant de détéction du plasma</v>
+                <v>Plasma current detection threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Tc Disp"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil de tension de détéction du plasma</v>
+                <v>Plasma voltage detection threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"Alimentation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>ALIMENTATION</v>
+                <v>POWER SUPPLY</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"alm surv delay"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de surveillance avant alarme</v>
+                <v>Delay before alarm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"alm surv offset"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Offset de surveillance avant alarme</v>
+                <v>Offset before alarm</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"dft surv delay"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de surveillance avant défaut</v>
+                <v>Delay before fault</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"dft surv offset"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Offset de surveillance avant défaut</v>
+                <v>Offset before fault</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{93cf1567-840f-4d47-8be5-ce9dd94deded}</v>
+          <v n="GuidReInit">{582a9273-6b1f-4e16-90f2-5eb8530efa88}</v>
+          <v n="GuidExitX">{1dc11567-860b-4357-9a8e-f3af743de6fd}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

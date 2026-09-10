@@ -1,0 +1,154 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_PRG_MOUVEMENT_PS" Id="{b55d95e5-bb1d-4bbc-b7ba-43648433624e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_PRG_MOUVEMENT_PS
+VAR_INPUT
+	ROTATION_PS:					BLOCK_ROTATION_CONTINUE_ATV;
+	PRM_Vitesse:					REAL;		(*Consigne de vitesse en procédé*)
+
+	IN_SAFETY_OFF		AT%I*:		BOOL;		(*Permet de shunter les sécurité*)
+	IN_CPS				AT%I*:		BOOL;		(*Capteur positionnement PS*)
+	IN_JOG				AT%I*:		BOOL;		(*mouvement porte ouverte*)
+END_VAR
+VAR_INPUT PERSISTENT
+(* Entité*)
+	IsAssembly:				 	BOOL;			(*entité de type fonction*)
+	TagXml:						UINT;
+	IdXml: 						STRING;
+	IdParent: 					STRING;			(*MNEMO du pére*)
+	MNEMO:						STRING;			(*MNEMO de cette entité *)
+
+(*Configuration pour visu - moteur ROTATION*)
+	CONF_Positionnement:		BOOL;			(*Moteur utilisé pour du positionnement*)
+	CONF_Rotation:				BOOL;			(*Moteur utilisé pour de la rotation continu*)
+	CONF_Balayage:				BOOL;			(*Moteur utilisé pour du balayage*)
+
+END_VAR
+
+VAR_OUTPUT
+	STATE_Ar:					BOOL;			(*I__STANDARD -indique que la fonction est à l'arrêt*)
+	STATE_Pos_Ps_ok:			BOOL;			(*I__STD -- Indique que le positionnement du PS est OK*)
+	STATE_Def_IProc:			BOOL;			(*I_STANDARD -indique la présence d'un défaut entrainant l'arrêt du procédé*)
+
+END_VAR
+VAR
+	VAR_IN_Position:			BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*paramètres de structure*)
+IdXml								:= '5';
+TagXml								:= 0;
+IdParent							:=	MACHINE.MNEMO;
+MNEMO								:=	CONCAT(IdParent,'_ATV320');
+
+(*Configuration pour la visu*)
+CONF_Positionnement					:=	FALSE;
+CONF_Rotation						:=	TRUE;
+CONF_Balayage						:=	FALSE;
+
+ROTATION_PS.CONF_C1					:=	FALSE;
+ROTATION_PS.CONF_C2					:=	FALSE;
+
+ROTATION_PS.IN_POS_C1				:=	IN_CPS;
+ROTATION_PS.IN_MVT					:=	IN_JOG;
+
+ROTATION_PS.PS.PRM_Rapport		:=	98;
+ROTATION_PS.PS.MNEMO			:=	'PS';
+ROTATION_PS.PS.I_Valid_INPUT	:=	TRUE;
+
+(*Configuration vitesse PS*)
+ROTATION_PS.CONF_VMIN			:=	1;
+ROTATION_PS.CONF_VMAX			:= 	20;
+ROTATION_PS.CONF_V_Door_Open	:=	4;
+ROTATION_PS.CONF_V_Pos			:=	3;
+
+(*Configuration positionnement*)
+ROTATION_PS.DEF_Position.DELAY		:=	T#2M;
+ROTATION_PS.CONF_Pos_AvantSup		:=	FALSE;
+ROTATION_PS.CONF_Pos_Capt			:=	1;
+ROTATION_PS.CONF_Pos_MarcheArriere	:=	FALSE;
+ROTATION_PS.CONF_Tim_AvantSup		:=	T#0MS;
+ROTATION_PS.CONF_Tim_MarcheArriere	:=	T#0MS;
+
+
+(*Gestion du mode de pilotage*)
+IF MACHINE.RQ_Ctrl_Ihm AND NOT PRG_POMPAGE.RQ_PREP_VENTIL THEN
+	ROTATION_PS.CTRL_PLC := FALSE;
+ELSIF MACHINE.RQ_Ctrl_Plc OR PRG_POMPAGE.RQ_PREP_VENTIL THEN
+	ROTATION_PS.CTRL_PLC := TRUE;
+END_IF
+
+ROTATION_PS.OP_ARRET.ON_PLC := INIT_MACHINE.RQ_STOP_MVTS
+								OR EXECPROC.RQ_FM_EXEC_STEP[12]
+								OR MACHINE.RQ_Prep_Prod
+								OR MAIN.STEP_EFFLUVAGE.RQ_STOP_ROTATION_PS
+								OR MAIN.STEP_TIMER.RQ_STOP_ROTATION_PS
+								OR (MAIN.STEP_TIMER.RQ_ROTATION_PS AND (PRM_vitesse = 0))
+								OR MAIN.STEP_EMPILEMENT.RQ_STOP_ROTATION_PS
+								OR (MAIN.STEP_EMPILEMENT.RQ_ROTATION_PS AND (PRM_vitesse = 0));
+
+ROTATION_PS.OP_Rotation.ON_PLC := 	EXECPROC.RQ_FM_EXEC_STEP[11]
+									OR MAIN.STEP_EFFLUVAGE.RQ_ROTATION_PS
+									OR (MAIN.STEP_TIMER.RQ_ROTATION_PS AND (PRM_vitesse <> 0))
+									OR (MAIN.STEP_EMPILEMENT.RQ_ROTATION_PS AND (PRM_vitesse <> 0));
+
+ROTATION_PS.OP_Rotation.ENABLE_EXT := MACHINE.STATE_Auto;
+
+(*transmission consigne vitesse en procédé, sinon mise au mini et non nulle*)
+IF (MAIN.STEP_TIMER.RQ_ROTATION_PS AND (PRM_vitesse <> 0)) OR MAIN.STEP_EMPILEMENT.OP_RUN.EC THEN
+	ROTATION_PS.PRM_vitesse	:=	PRM_Vitesse;
+END_IF
+
+(*Moteur de rotation*)
+ROTATION_PS(
+	RESET:= MACHINE.STATE_Off,
+	MANUAL:= MACHINE.STATE_Manu ,
+	I_DOOR:=PRG_POMPAGE.DOOR OR IN_SAFETY_OFF ,
+	STATE_NOK=> );
+
+
+STATE_Def_IProc		:=		ROTATION_PS.OP_ARRET.DEF_AUTO_ON.DEF OR ROTATION_PS.OP_ARRET.DEF_ON_REJECTED.DEF
+							OR ROTATION_PS.OP_Rotation.DEF_AUTO_ON.DEF OR ROTATION_PS.OP_Rotation.DEF_ON_REJECTED.DEF
+							OR ROTATION_PS.OP_POSITION.DEF_AUTO_ON.DEF OR ROTATION_PS.OP_POSITION.DEF_ON_REJECTED.DEF
+							OR ROTATION_PS.PS.DEF_Variateur.DEF OR ROTATION_PS.PS.DEF_off_auto.DEF
+							OR ROTATION_PS.DEF_Rotation.DEF OR ROTATION_PS.DEF_Position.DEF
+							OR ROTATION_PS.DEF_Capt_C1.DEF OR ROTATION_PS.DEF_Capt_C2.DEF;
+
+STATE_AR 			:= 		((MACHINE.STATE_Auto OR MACHINE.STATE_Prod) AND ROTATION_PS.OP_ARRET.OK)
+							OR (MACHINE.STATE_Manu AND (ROTATION_PS.PS.OUT_Velocity =0));
+
+STATE_Pos_Ps_ok		:=		ROTATION_PS.OP_Rotation.OK;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_PRG_MOUVEMENT_PS">
+      <LineId Id="31" Count="1" />
+      <LineId Id="142" Count="1" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="36" Count="3" />
+      <LineId Id="144" Count="0" />
+      <LineId Id="183" Count="1" />
+      <LineId Id="186" Count="0" />
+      <LineId Id="146" Count="0" />
+      <LineId Id="145" Count="0" />
+      <LineId Id="147" Count="0" />
+      <LineId Id="180" Count="0" />
+      <LineId Id="148" Count="15" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="42" Count="12" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="223" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="230" Count="0" />
+      <LineId Id="56" Count="2" />
+      <LineId Id="109" Count="0" />
+      <LineId Id="59" Count="2" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="225" Count="3" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="174" Count="4" />
+      <LineId Id="69" Count="2" />
+      <LineId Id="187" Count="4" />
+      <LineId Id="72" Count="0" />
+      <LineId Id="74" Count="4" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

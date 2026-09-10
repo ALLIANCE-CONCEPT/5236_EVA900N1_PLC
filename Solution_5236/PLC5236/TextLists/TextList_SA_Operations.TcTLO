@@ -1,0 +1,302 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_SA_Operations" Id="{366ca346-e9df-42b4-bb8e-cf233c024502}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"Pompage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage</v>
+                <v>Pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"Marche pompe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche
+Pompes</v>
+                <v>Start
+Pumps</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"Arret pompe"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt
+Pompes</v>
+                <v>Stop
+Pumps</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"Isol"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Isolement</v>
+                <v>Standby</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"Vent"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ventilation</v>
+                <v>Venting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"Marche"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche</v>
+                <v>Start</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"Validation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Validation</v>
+                <v>Validation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"Arrêt"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt</v>
+                <v>Stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Position"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Positionnement</v>
+                <v>Positioning</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"Initialisation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Repli</v>
+                <v>Folding</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"cooling"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Refroidissement
+d'urgence</v>
+                <v>Emergency
+Cooling</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"pomp proc"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage
+Procédé</v>
+                <v>Process
+Pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"on gaz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mise en
+gaz</v>
+                <v>Start
+gas</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"off gaz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt
+gaz</v>
+                <v>Stop
+gas</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"rampee"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Rampe
+gaz</v>
+                <v>Gas
+ramp</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"rotation"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Rotation</v>
+                <v>Rotation</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"Bal"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Balayage</v>
+                <v>Sweeping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"regen"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Régénération
+Cryo</v>
+                <v>Cryo
+Regeneration</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"charg"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Chargement
+Chambre</v>
+                <v>Chamber
+Loading</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"decharg"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Déchargement
+Chambre</v>
+                <v>Chamber
+Unloading</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"Init"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Initialisation</v>
+                <v>Initialization</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"Scan quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Scan quartz</v>
+                <v>Scan crystal</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"Positionnement quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Positionnement quartz</v>
+                <v>Position crystal</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">"Position"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Position</v>
+                <v>Position</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">"marche ch"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche
+chauffage</v>
+                <v>Start
+heating</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">"arret ch"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt
+chauffage</v>
+                <v>Stop
+heating</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">"Marche decap"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche décapage</v>
+                <v>Start ion etching</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"27"</v>
+              <v n="TextDefault">"Stop decap"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Arrêt décapage</v>
+                <v>Stop ion etching</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"28"</v>
+              <v n="TextDefault">"Pompage prim"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pompage
+primaire</v>
+                <v>Primary
+pumping</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"29"</v>
+              <v n="TextDefault">"Marche"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Marche</v>
+                <v>Start</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{814b133d-33c1-4fd2-bc1a-c49b42454792}</v>
+          <v n="GuidReInit">{b6018092-e475-4d17-b118-8b8c2a9e3006}</v>
+          <v n="GuidExitX">{0d0ebe82-4944-42af-ad47-12c1348dda8a}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

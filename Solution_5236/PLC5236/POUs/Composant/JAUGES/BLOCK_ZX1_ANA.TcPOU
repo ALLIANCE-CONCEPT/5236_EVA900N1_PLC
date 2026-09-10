@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_ZX1_ANA" Id="{ff094f6e-7a94-4e0a-99c3-78088a7f680f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_ZX1_ANA
+
+(*Gestion d'un capteur de distance laser ZX1 OMRON*)
+
+VAR_INPUT
+(*paramètre standard*)
+	RESET:   					BOOL; 					(*Condition RAZ actionneur*)
+	MANUAL:  					BOOL; 					(*Mode manuel*)
+
+	IN_Distance: 				ANALOG_INPUT; 			(* Entrée analogique du capteur de distance *)
+
+	CO_Stop:					BOOL;					(* Condition de forcage d'arrêt d'alimentation de la jauge *)
+
+END_VAR
+VAR_OUTPUT
+	STATE_Distance:				REAL; 		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Valeur de la distance en mm *)
+	STATE_Ok:					BOOL;		(* Capteur OK*)
+	STATE_Nok:					BOOL;		(* Capteur en défaut*)
+
+
+(*Sortie TOR*)
+	OUT_Dome:					BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Sortie TOR de marche du capteur laser*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	CONF_Max_Current: 			INT; 		(* Courant Max *)
+	CONF_Min_Current: 			INT; 		(* Courant Min *)
+	CONF_Max_Distance: 			INT; 		(* Distance max*)
+	CONF_Min_Distance: 			INT; 		(* Distance min*)
+
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IdXML					:=	'2';
+TagXML					:=	2;
+
+(*Conversion du signal d'entrée en mA*)
+IN_Distance(
+	CONF_Bipolar	:= 	FALSE,
+	CONF_Range	:=	1,
+	CONF_Max 		:= 	CONF_Max_Current,
+	CONF_Min		:= 	CONF_Min_Current
+	);
+
+(*Calcul distance en mm*)
+STATE_Distance:= ((IN_Distance.Value - CONF_Min_Current) * (CONF_Max_Distance - CONF_Min_Distance)/(CONF_Max_Current - CONF_Min_Current)) + CONF_Min_Distance;
+
+OUT_Dome:= NOT CO_Stop (*AND NOT MANUAL*);]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_ZX1_ANA">
+      <LineId Id="40" Count="14" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

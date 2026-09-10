@@ -1,0 +1,350 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_EFFLUVAGE" Id="{d01f46f3-4576-4110-b927-e7fdecc2d3e9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_EFFLUVAGE
+(* Fonction effluvage *)
+
+(****************historique des versions*****************************)
+
+(* Version 0-0 - SD - VERSION INITIALE EVA760 n°11 - 8152 *)
+(* Version 1-0 - GV - Ajout arret automatique de sécurité si rotation en cours et pas porte*)
+
+(*************************************************************************)
+
+VAR_INPUT
+(*information générale*)
+	RESET:					BOOL;
+	MANUAL:					BOOL;
+	DOOR:					BOOL;	(*etat de fermeture des portes*)
+	VAC:					BOOL;
+	IN_Fin_Etape :			BOOL;
+	CTRL_PLC:				BOOL;
+
+(*Objet*)
+	ALEFF:					ALIM_EFFLUVAGE;
+(*Opérations *)
+	OP_Marche_Eff:			BLOCK_OPERATION;
+	OP_Arret_Eff:			BLOCK_OPERATION;
+	OP_Gestion_Eff:			BLOCK_G7;
+
+END_VAR
+VAR_INPUT PERSISTENT
+	PRM_TPS_effluvage:		TIME;			(*durée de l'effluvage*)
+	PRM_consigne:			REAL;			(*Consigne de l'effluvage*)
+	PRM_Tension_attendue:	REAL;			(*Tension attendue pour surveillance*)
+	IsAssembly:				BOOL;			(*entité de type ensemble*)
+	TagXml:					UINT;
+	IdXml: 					STRING;
+	IdParent: 				STRING;			(*MNEMO du pére*)
+	MNEMO:					STRING;			(*MNEMO de cette entité *)
+END_VAR
+
+VAR_OUTPUT
+	STATE_TEMPS_EFF:		TIME;				(*retour de temps d'effluvage*)
+	STATE_TIMER_EC:			BOOL;				(*Tempo effluvage en cours*)
+END_VAR
+
+VAR
+	TIMER_Effluvage:		TON;			(*Temporisation de l'effluvage*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+(*appel des opérations*)
+ACT_Arret_Eff();
+ACT_Marche_Eff();
+
+(*action en sortie*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_Arret_Eff" Id="{73ee43dc-3f30-4202-97f4-c401f624df15}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION ARRET Effluvage*)
+(* arrêt de l'effluvage*)
+
+(*initialisation de l'opération*)
+OP_Arret_Eff(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:=TRUE,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= ALEFF.DEF_Off_auto.DEF AND NOT MANUAL,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:=3 ,
+	N_STEP_OP_NOK:=0
+	);
+
+
+Op_arret_eff.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Arret_Eff.ETAPE = 0 THEN
+				OP_Arret_Eff.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR
+		OP_Marche_eff.Etape.1 OR
+		RESET
+					THEN
+
+				OP_Arret_Eff.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Arret_Eff.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Arret_Eff.ETAPE.0
+			AND OP_Arret_Eff.MARCHE_OP
+				THEN
+				OP_Arret_Eff.ETAPE.1:=TRUE;
+				OP_Arret_Eff.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Arret_Eff.ETAPE.1
+		AND OP_Marche_Eff.etape.0 THEN
+				OP_Arret_Eff.Etape.2:=TRUE;
+				OP_Arret_Eff.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Arret_Eff.Etape.2
+			 THEN
+				OP_Arret_Eff.Etape.3:=TRUE;
+				OP_Arret_Eff.Etape.2:=FALSE;
+END_IF;
+
+
+(*cloture du traitement de l'opération*)
+OP_Arret_Eff.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_Gestion_Eff" Id="{8d353d1f-7a2b-42d0-b90c-f9fb4de4f264}">
+      <Implementation>
+        <ST><![CDATA[(*(* OPERATION gestion Effluvage*)
+(*gestion global de l'effluvage de l'effluvage*)
+
+(*initialisation de l'opération*)
+OP_Gestion_Eff(
+	N_STEP_OP_OK:=7,
+	N_STEP_OP_NOK:=0 ,
+	 );
+
+
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Gestion_Eff.ETAPE = 0 THEN
+				OP_Gestion_Eff.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR
+		OP_Arret_eff.Etape.1 OR
+		RESET
+					THEN
+
+				OP_Gestion_Eff.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Gestion_Eff.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Gestion_Eff.ETAPE.0
+			(*AND demande de marche d'effluvage*)
+				OP_Gestion_Eff.ETAPE.1:=TRUE;
+				OP_Gestion_Eff.ETAPE.0:=FALSE;
+(*étape 1 ou 2 ou 3 ou 4 à 5*)
+ELSIF IN_Recp_Fin_Etape
+		 AND (OP_Gestion_Eff.ETAPE.1 OR OP_Gestion_Eff.ETAPE.2
+				OR OP_Gestion_Eff.ETAPE.3 OR OP_Gestion_Eff.ETAPE.4)
+		 THEN
+				OP_Gestion_Eff.Etape.5:=TRUE;
+				OP_Gestion_Eff.Etape.1:=FALSE;
+				OP_Gestion_Eff.Etape.2:=FALSE;
+				OP_Gestion_Eff.Etape.3:=FALSE;
+				OP_Gestion_Eff.Etape.4:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Gestion_Eff.ETAPE.1
+		AND PRG_POMPAGE.POMPAGE.OP_Marche_Pompes.OK AND TH_Pompage THEN
+				OP_Gestion_Eff.Etape.2:=TRUE;
+				OP_Gestion_Eff.Etape.1:=FALSE;
+
+(*étape 2-3*)
+ELSIF 	OP_Marche_Eff.Etape.2
+		AND PRG_POMPAGE.POMPAGE.OP_Isolement.OK (*AND rotaion du Ps ok*)
+			 THEN
+				OP_Marche_Eff.Etape.3:=TRUE;
+				OP_Marche_Eff.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Gestion_Eff.Etape.3
+		AND PRG_SERVITUDES.LIGNE_REF[2].STATE_Ok (*fonction gaz ligne de gaz 2 ok ??*)AND TH_Effluvage
+			 THEN
+				OP_Gestion_Eff.Etape.4:=TRUE;
+				OP_Gestion_Eff.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Gestion_Eff.Etape.4
+		AND OP_Marche_Eff.OK
+			 THEN
+				OP_Gestion_Eff.Etape.5:=TRUE;
+				OP_Gestion_Eff.Etape.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_Gestion_Eff.Etape.5
+		AND OP_Arret_Eff.OK AND  PRG_SERVITUDES.LIGNE_REF[2].STATE_Ar (*fonction gaz ligne de gaz 2 à l'arret ??*)
+			 THEN
+				OP_Gestion_Eff.Etape.6:=TRUE;
+				OP_Gestion_Eff.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF 	OP_Gestion_Eff.Etape.6
+		AND PRG_POMPAGE.POMPAGE.OP_Marche_Pompes.ok
+			 THEN
+				OP_Gestion_Eff.Etape.7:=TRUE;
+				OP_Gestion_Eff.Etape.6:=FALSE;
+END_IF;
+
+
+(*cloture du traitement de l'opération*)
+OP_Gestion_Eff.POST;*)
+RETURN;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_Marche_Eff" Id="{e8385e3a-0360-49f5-83a4-b2a9a2095811}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION Marche Effluvage*)
+
+
+(*initialisation de l'opération*)
+OP_Marche_Eff(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= RESET,
+	ENABLE_INT:= DOOR AND VAC,
+	MANUAL:= MANUAL,
+	ON_AUTO_INT:= FALSE,
+	RESTART_ENABLE_IF_OK:= FALSE,
+	N_STEP_OP_OK:=4,
+	N_STEP_OP_NOK:=0);
+
+Op_marche_eff.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Marche_Eff.ETAPE = 0 THEN
+				OP_Marche_Eff.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR
+		OP_Arret_eff.Etape.1 OR
+		RESET
+					THEN
+
+				OP_Marche_Eff.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Marche_Eff.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Marche_Eff.ETAPE.0
+			AND OP_Marche_Eff.MARCHE_OP
+			THEN
+				OP_Marche_Eff.ETAPE.1:=TRUE;
+				OP_Marche_Eff.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Marche_Eff.ETAPE.1
+		AND OP_Arret_Eff.etape.0 THEN
+				OP_Marche_Eff.Etape.2:=TRUE;
+				OP_Marche_Eff.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Marche_Eff.Etape.2
+		AND ALEFF.STATE_plasma
+			 THEN
+				OP_Marche_Eff.Etape.3:=TRUE;
+				OP_Marche_Eff.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Marche_Eff.Etape.3
+		AND TIMER_Effluvage.q
+			 THEN
+				OP_Marche_Eff.Etape.4:=TRUE;
+				OP_Marche_Eff.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_Marche_Eff.Etape.4
+		AND ALEFF.STATE_OFF
+			 THEN
+				OP_Marche_Eff.Etape.0:=TRUE;
+				OP_Marche_Eff.Etape.4:=FALSE;
+END_IF;
+
+
+
+(*cloture du traitement de l'opération*)
+OP_Marche_Eff.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{04dd83ce-5736-4056-b66c-13a55e6e2b06}">
+      <Implementation>
+        <ST><![CDATA[(********************************************************************************)
+(*      MEFF :    Sortie TOR de pilotage du générateur d'effluvage        *)
+(********************************************************************************)
+IF OP_Marche_Eff.Etape.2
+THEN
+	ALEFF.CO_On		:= 	TRUE;
+ELSIF OP_Marche_Eff.Etape.4 OR
+		OP_Arret_Eff.Etape.2 OR
+		OP_marche_eff.etape.0 AND OP_Arret_Eff.Etape.0
+	THEN
+	ALEFF.CO_ON	:= 	FALSE;
+END_IF;
+
+
+(*---------------------------------------------------------------------------------------------------------------------*)
+(* consigne d'effluvage*)
+IF  OP_Marche_Eff.Etape.2 OR OP_Marche_eff.Etape.3 OR
+	 OP_marche_eff.Etape.4 OR MANUAL THEN
+		ALEFF.PRM_Consigne := PRM_consigne;
+		ALEFF.PRM_Tension_attendue := PRM_Tension_attendue;
+ELSIF NOT MANUAL THEN
+		ALEFF.PRM_Consigne := 0.0;
+		ALEFF.PRM_Tension_attendue := 0.0;
+END_IF
+
+
+(***********************************************)
+(*                Demande diverse                       *)
+(***********************************************)
+(*                Temporisations                            *)
+(*            Tempo d'effluvage                          *)
+
+TIMER_Effluvage	(
+					PT:=PRM_TPS_Effluvage,
+					IN:=OP_Marche_eff.Etape.3
+					);
+STATE_TEMPS_EFF := TIMER_Effluvage.ET;
+STATE_TIMER_EC := OP_Marche_Eff.Etape.3;
+ALeff(
+	RESET:= RESET,
+	MANUAL:=MANUAL ,
+	DOOR:= DOOR,
+	VAC:=VAC,
+	EN_On_INT:=TRUE );]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{52a4391b-507b-4d11-8e28-521e4e985c55}">
+      <Implementation>
+        <ST><![CDATA[	OP_Marche_Eff.IdParent	:=	MNEMO;
+	OP_Marche_Eff.MNEMO	:=	CONCAT(MNEMO,'_MARCHE');
+	OP_Marche_Eff.IdXML		:=	'0';
+	OP_Marche_Eff.TagXML	:=	1;
+
+	OP_Arret_Eff.IdParent		:=	MNEMO;
+	OP_Arret_Eff.MNEMO		:=	CONCAT(MNEMO,'_ARRET');
+	OP_Arret_Eff.IdXML		:=	'0';
+	OP_Arret_Eff.TagXML		:=	2;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_EFFLUVAGE">
+      <LineId Id="45" Count="7" />
+    </LineIds>
+    <LineIds Name="BLOCK_EFFLUVAGE.ACT_Arret_Eff">
+      <LineId Id="0" Count="50" />
+    </LineIds>
+    <LineIds Name="BLOCK_EFFLUVAGE.ACT_Gestion_Eff">
+      <LineId Id="0" Count="79" />
+    </LineIds>
+    <LineIds Name="BLOCK_EFFLUVAGE.ACT_Marche_Eff">
+      <LineId Id="0" Count="62" />
+    </LineIds>
+    <LineIds Name="BLOCK_EFFLUVAGE.POST">
+      <LineId Id="0" Count="18" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="19" Count="1" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="21" Count="20" />
+    </LineIds>
+    <LineIds Name="BLOCK_EFFLUVAGE.PRL">
+      <LineId Id="0" Count="8" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

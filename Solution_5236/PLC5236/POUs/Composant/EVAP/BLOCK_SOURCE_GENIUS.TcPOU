@@ -1,0 +1,196 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_SOURCE_GENIUS" Id="{bd274fa3-af3e-4894-9c5c-09559da7dfd0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_SOURCE_GENIUS
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - Sezai - VERSION INIITIALE - 8152*)
+(* Version 2-0 - GV - 10/2017 - Modification HV en BLOCK_ACTUATOR pour gerer les défauts d'arrêt/marche + Modification pour être sur que l'on a un retour de courant avant de considérer en marche *)
+(* Version 2-1 - GV - 09/2018 - Ajout gestion perte brève du retour IN_HV_ON*)
+
+(*************************************************************************)
+
+VAR_INPUT
+	DOOR:					BOOL;		(*porte fermée*)
+	VAC:					BOOL;		(*sécurité vide*)
+	WATER:					BOOL;		(*refroidissement source ok*)
+	MANUAL:					BOOL;		(*demande mode manuel*)
+	I_CR_OK:				BOOL;		(*Positionnement creuset ok*)
+	RESET:					BOOL;		(*reset*)
+
+	HV:						BLOCK_ACTUATOR;		(*Source HT*)
+
+	IN_HVON		AT%I*:		BOOL;	(*Etat Source HT en marche*)
+	IN_ERROR	AT%I*:		BOOL;	(*Etat d'erreur du Genius*)
+
+	IN_HVQ		AT%I*:		INT;		(*Entrée analogique Haute Tension source*)
+	IN_FILQ		AT%I*:		INT;		(*Entrée analogique Courant filament*)
+
+
+	AI_HV:			ANALOG_INPUT;
+	AI_FIL:			ANALOG_INPUT;
+
+	I_POWER:			REAL;		(*consigne de puissance appliquée en mode automatique*)
+	PRM_POWER:			REAL;		(*Consigne de puissance appliquée en mode manuel*)
+	CO_SRC:				BOOL;		(*Commande externe de marche de la source en automatique*)
+	PRM_HV:				REAL;
+
+	DEF_Source:			PRCDEF;
+
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	(*Entité*)
+	IsComponent:		BOOL;			(*entité : composant*)
+	IdXML:				STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:				UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:				STRING;			(*MNEMO de l'entité*)
+END_VAR
+
+VAR_OUTPUT
+	OUT_ITLCK_EAU			AT%Q*:		BOOL;			(* sortie interlock eau*)
+	OUT_ITLCK_VIDE			AT%Q*:		BOOL;			(* sortie interlock vide*)
+	OUT_ITLCK_CHAMBRE		AT%Q*:		BOOL;			(* sortie interlock chambre*)
+	OUT_ITCLK_EX			AT%Q*:		BOOL;			(* sortie interlock externe*)
+
+	OUT_HV_ON				AT%Q*:		BOOL;			(* Marche Source*)
+	OUT_HV_OFF				AT%Q*:		BOOL;			(* Arrêt Source*)
+
+	AO_QHV:					ANALOG_OUTPUT;				(*sortie analogique alimentation HT*)
+	OUT_QHV					AT%Q*:		INT;			(*Consigne Filament*)
+
+	STATE_HV:			BOOL;							(*demande de mise en marche de la source en cours*)
+	STATE_HV_ON:		BOOL;							(*Source en marche*)
+
+	STATE_V_HV:			REAL;							(*HT appliqué*)
+	STATE_I_FIL:		REAL;							(*Courant de filament*)
+
+	STATE_POWER:		REAL;							(*Puissance appliquée en %*)
+
+	STATE_NOK:			BOOL;							(*Alimentation en défaut*)
+	STATE_READY:		BOOL;
+END_VAR
+VAR
+	(*Gestion perte brève du retour IN_HVON*)
+	TIMER_ON:			TP;
+	FD_ON:				F_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[HV.IdParent := MNEMO;
+HV.IdXML := '16';
+HV.TagXML := 1;
+HV.MNEMO := CONCAT(MNEMO,'_HV');
+
+(*Défaut*)
+HV.DEF_Off.IdXML				:=	'3';
+HV.DEF_Off.TagXML				:=	3;
+HV.DEF_On.IdXML					:=	'3';
+HV.DEF_On.TagXML				:=	1;
+HV.DEF_Off_Auto.IdXml			:=	'3';
+HV.DEF_Off_Auto.TagXml			:=	10;
+HV.DEF_On_imposs.IdXml			:=	'3';
+HV.DEF_On_imposs.TagXml			:=	5;
+HV.DEF_Off_imposs.IdXml			:=	'3';
+HV.DEF_Off_imposs.TagXml		:=	8;
+
+DEF_Source.IdXML				:=	'14';
+DEF_Source.TagXML				:=	19;
+
+
+AI_FIL(
+	CONF_Max:= 1.0,		(*TODO Range*)
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1,
+	INPUT:= IN_FILQ );
+
+AI_HV(
+	CONF_Max:= 10.0,	(*TODO Range*)
+	CONF_Min:= 0.0,
+	CONF_Bipolar:=FALSE ,
+	CONF_Range:= 1,
+	INPUT:= IN_HVQ );
+
+
+
+(*Temporisation HV.STATE_ON sur perte brève de IN_HVON *)
+FD_ON.CLK := IN_HVON;
+FD_ON();
+
+TIMER_ON.IN := FD_ON.Q;
+TIMER_ON.PT := T#20ms;
+TIMER_ON();
+
+HV(
+	RESET:= RESET,
+	MANUAL:= MANUAL,
+	IN_ON := IN_HVON OR TIMER_ON.Q,
+	CO_On:=CO_SRC ,
+	EN_On_INT:=DOOR AND WATER AND VAC AND  (I_CR_OK OR (STATE_POWER = 0)),
+	EN_Off_INT:= TRUE,
+	CONF_Type_Actuator := 0,
+	CONF_EN_On := 1,
+	CONF_DI_Off:= FALSE,
+	CONF_DI_On:= TRUE,
+	CONF_No_Safety_Auto:=FALSE,
+	CONF_Tim_Valid_On:= T#30s,
+	CONF_Tim_Valid_Off:= T#2s,
+	OUT_On=>,
+	STATE_On=>STATE_HV_ON,
+	STATE_Nok=> );
+
+HV.DEF_Off.DELAY := T#20s;
+HV.DEF_On.DELAY := T#60s;
+
+(*Demande marche HT*)
+OUT_HV_ON := HV.OUT_On;
+STATE_HV := HV.OUT_On;
+
+(*Demande arrêt HT*)
+OUT_HV_OFF:= NOT HV.OUT_On;
+
+(*Gestion de la sortie analogique filament*)
+IF NOT STATE_HV_ON OR RESET THEN
+	AO_QHV.Value := 0.0;
+ELSIF MANUAL THEN
+	AO_QHV.Value := PRM_POWER;
+ELSE
+	AO_QHV.Value := I_POWER;
+END_IF;
+AO_QHV(
+	CONF_Max:=100,
+	CONF_Min:= 0,
+	CONF_Bipolar:=FALSE,
+	CONF_Range:=1 );
+
+OUT_QHV := AO_QHV.OUTPUT;
+
+STATE_V_HV:= AI_HV.Value;
+STATE_I_FIL:= AI_FIL.Value;
+STATE_POWER := AO_QHV.Value;
+
+(*gestion des interlock*)
+OUT_ITLCK_EAU:= WATER;
+OUT_ITLCK_VIDE:= VAC;
+OUT_ITLCK_CHAMBRE:= DOOR;
+OUT_ITCLK_EX:= DOOR;
+
+
+(*Gestion des défauts*)
+DEF_Source.CONDITION	:=	IN_ERROR;
+DEF_Source.DELAY		:=	T#1s;
+DEF_Source();
+
+(*Retour Source en défaut*)
+STATE_NOK:= HV.STATE_Nok OR DEF_Source.DEF;
+
+STATE_READY:= WATER AND DOOR AND VAC AND I_CR_OK;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_SOURCE_GENIUS">
+      <LineId Id="77" Count="108" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

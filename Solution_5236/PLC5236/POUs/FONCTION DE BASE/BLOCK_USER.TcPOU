@@ -1,0 +1,1113 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_USER" Id="{74a12317-6ce7-4669-a8ce-101d485432d7}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_USER
+(* --------------------------------------------------------------------------------------- *)
+(* Fonction de gestion des utilisateurs                                               *)
+(* Gestion jusqu'à 10 groupes d'utilisateurs et 20 utilisateurs     *)
+(* Version 0 - SP - 02/2012 - 7326 BA8						*)
+(* Version 0.1 - AB - rebouclage droit demodif en ligne sur droit                            *)
+(* ---------------------------------------------------------------------------------------  *)
+
+VAR
+	PREVIOUS_USER:	STRING;		(*nom du dernier utilisateur*)
+	CONNECTED_USER:		STRING;		(*nom de l'actuel utilisateur*)
+	{attribute 'OPC.UA.DA' := '1'}
+	ACTU_USER:		USER_ACTU;
+	USER_TEMP:		USER;
+	GROUP_TEMP:		USER_GROUP;
+	MANUFACTURER:	BOOL;	(*Indique que le fabriquant de la machine est connecté*)
+
+	LOAD_EC:			BOOL;
+	SAVE_EC:			BOOL;
+	STOP_GROUP:		BOOL;
+	STOP_USER:		BOOL;
+
+	LOG_TEMP:			STRING[30];
+	PASS_TEMP:			STRING[30];
+	PASS_TEMP_DISPLAY:	STRING[30];
+
+	UTIL_EC:			BOOL;
+	LOG_EC:				STRING[30];
+	INIT_DROIT:			BOOL;
+
+	DD_LOG1:			BOOL;				(* Init avant page log *)
+	DD_LOG:			BOOL;				(* Demande de connexion *)
+	DD_DELOG:			BOOL;				(* Demande de déconnexion *)
+	DD_NEW_USER:		BOOL;				(* Demande de création nouvelle utilisateur *)
+	DD_NEW_GROUP:	BOOL;				(* Demande de création nouveau groupe *)
+	DD_EFFACE_NEW:	BOOL;				(* Demande init avant page création user *)
+	DD_EFFACE_NEW2:	BOOL;				(* Demande init avant page création groupe *)
+	DD_DEL_USER:		BOOL;				(* Demande de suppression utilisateur *)
+	DD_DEL_GROUP:	BOOL;				(* Demande de suppression groupe *)
+	DD_mod_group1:		BOOL;				(* Demande inut avant page modification groupe *)
+	DD_mod_group2:		BOOL;				(* Demande de modification d'un groupe *)
+	DD_mod_user1:		BOOL;				(* Demande inut avant page modification user *)
+	DD_mod_user2:		BOOL;				(* Demande de modification d'un user *)
+	DD_sauv:			BOOL;				(* Demande de sauvegarde de la liste utilisateurs *)
+	DD_load:			BOOL;				(* Demande de chargement liste utilisateurs *)
+	DD_mod_def1:		BOOL;				(* Demande init avant page modification droits par défaut *)
+	DD_mod_def2:		BOOL;				(* Demande modification droits par défaut *)
+	DD_ORG_GRP:		BOOL;				(* Demande organisation groupe *)
+	DD_ORG_USER:		BOOL;				(* Demande organisation utilisateur *)
+
+	UTIL_INEXISTANT:	BOOL;				(* Utilisateur non trouvé *)
+	GROUP_INEXISTANT:	BOOL;				(* Groupe non trouvé *)
+	UTIL_EXIST:			BOOL;				(* Utilisateur deja existant *)
+	GROUP_EXIST:		BOOL;				(* Groupe deja existant *)
+	DEL_GROUP_IMPOS:	BOOL;				(* Suppression groupe impossible *)
+
+	FCT_Ouv_File:		FB_FileOpen;			(*Fonction d'ouverture du fichier*)
+	FCT_Write_File:		FB_FileWrite;
+	FCT_Ferm_File:		FB_FileClose;
+	FCT_Read_File:		FB_FileGets;
+
+	hDestFile:			UINT	:= 0;
+	Buffer:				STRING[30];
+	Buff2:				STRING;
+	NB:					INT;
+	NB2:				INT;
+	TROUV:				BOOL;
+	TROUV2:			BOOL;
+	LIGNE:				INT:=1;
+	LIGNE_GROUP:		INT:=1;
+	ITER:				INT;
+	ITER2:				INT;
+	ITER3:				INT;
+	ITER4:				INT;
+	Step:				INT;
+	Step2:				INT;
+	cbReadLength: 		UDINT;
+
+	Patch_file:			STRING;
+
+	AUT_MOD_GRP:		BOOL;					(* Autorisation modification et suppression groupe *)
+	AUT_NOM_GRP:		BOOL;					(* Autorisation nom du groupe *)
+	AUT_MOD_USER:	BOOL;					(* Autorisation modification et suppression utilisateur *)
+	AUT_NOM_USER:	BOOL;					(* Autorisation nom de l'utilisateur *)
+	AUT_NEW_USER:	BOOL;					(* Autorisation création utlisateur *)
+	AUT_OPT_LOGOUT:	BOOL;					(* Autorisation utilisation logout auto *)
+
+	NB_GROUP:		INT;
+	NB_USER:		INT;
+
+	TPS_ECOUL:		TON;						(* Temps écoulé pour le logout auto *)
+
+	VISU_FEN1:		BOOL;
+	VISU_FEN2:		BOOL;
+	VISU_FEN3:		BOOL;
+	VISU_FEN4:		BOOL;
+
+	PASS_CONF:			STRING[30];
+	PASS_CONF_DISPLAY:	STRING[30];
+	FM_UTIL_EC:		R_TRIG;
+	FD_UTIL_EC:		F_TRIG;
+END_VAR
+
+VAR_INPUT
+	EV_CONNECT:		PRCDEF;	(*evenement de connexion d'un nouvel utilisateur*)
+	EV_DISCONNECT:	PRCDEF;	(*evenement de déconnexion d'un nouvel utilisateur*)
+END_VAR
+
+VAR PERSISTENT
+	OPT_LOGOUT:			BOOL;
+	TIM_LOGOUT:			TIME;
+	TBL_USER:				ARRAY [0..501] OF USER;
+	TBL_GROUP:			ARRAY [0..50] OF USER_GROUP;
+	GROUP_DEFAUT:		USER_GROUP;
+	(* Entité*)
+	IsFunction:		BOOL;			(*entité : ensemble*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:			STRING;			(*MNEMO de l'appelant*)
+	MNEMO:			STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF NOT PARAM_SYSTEM_OK THEN
+	IdParent	:= MACHINE.MNEMO ;
+	IdXML:='14';
+	TagXML:=1;
+	EV_CONNECT.Groupe :=2;
+	EV_DISCONNECT.Groupe :=2;
+	EV_CONNECT.IdXML := '15';
+	EV_DISCONNECT.IdXML := '15';
+	EV_CONNECT.tagXML := 1;
+	EV_DISCONNECT.tagXML := 2;
+	MNEMO:='USER';
+END_IF
+
+(*affichage codé des password*)
+IF USER_TEMP.PASS <> '' THEN
+	USER_TEMP.PASS_DISPLAY := '*****';
+ELSE
+	USER_TEMP.PASS_DISPLAY := '';	
+END_IF
+
+IF PASS_TEMP <> '' THEN
+	PASS_TEMP_DISPLAY := '*****';
+ELSE
+	PASS_TEMP_DISPLAY := '';
+END_IF
+
+IF PASS_CONF <> '' THEN
+	PASS_CONF_DISPLAY := '*****';
+ELSE
+	PASS_CONF_DISPLAY := '';
+END_IF
+
+
+
+IF LIGNE < 1 THEN
+	LIGNE := 1;
+END_IF
+IF LIGNE_GROUP < 1 THEN
+	LIGNE_GROUP := 1;	
+END_IF
+
+(* Error Code :
+01 / L"utilisateur n"existe pas ou le mot de passe n"est pas bon
+02 / Le groupe utilisateur n"est plus présent.
+03 / Veuillez sélectionner un groupe valide.  
+04 / Un autre utilisateur possède le meme identifiant. 
+05 / Ce groupe existe déjà !
+06 / Un utilisateur possède ce groupe. Suppression impossible
+07 / Le fichier de sauvegarde n"est pas accessible.
+08 / Erreur d"écriture dans le fichier.
+09 / Erreur de fermeture du fichier.
+10 / Le fichier de sauvegarde n"est pas accessible.
+11 / Problème de lecture du fichier.
+12 / Erreur de fermeture du fichier. *)
+
+Patch_file		:=	'C:\Machine\User\Sauv.util';
+
+NB_GROUP	:=	10;		(* Max 50 *)
+NB_USER		:=	500;		(* Max 100 *)
+
+(*************************************** Initialisation des droits utilisateurs **********************************************)
+(* si pas d'utilisateur connecté, on applique les droits par défaut									    *)
+
+IF NOT UTIL_EC THEN
+	ACTU_USER.GROUPE				:=	'Default';
+	ACTU_USER.CONF_MACHINE			:=	GROUP_DEFAUT.CONF_MACHINE;
+	ACTU_USER.FONCTION_SA			:=	GROUP_DEFAUT.FONCTION_SA;
+	ACTU_USER.MAINTENANCE			:=	GROUP_DEFAUT.MAINTENANCE;
+	ACTU_USER.PRODUCTION			:=	GROUP_DEFAUT.PRODUCTION;
+	ACTU_USER.PROGRAMMATION			:=	GROUP_DEFAUT.PROGRAMMATION;
+	ACTU_USER.SUPERVISEUR			:=	GROUP_DEFAUT.SUPERVISEUR;
+	ACTU_USER.CONF_TRF				:=	GROUP_DEFAUT.CONF_TRF;
+	ACTU_USER.MODIF_ENLIGNE			:=	GROUP_DEFAUT.MODIF_ENLIGNE OR GROUP_DEFAUT.PROGRAMMATION;
+	ACTU_USER.ARCHIVE_EV			:=	GROUP_DEFAUT.ARCHIVE_EV;
+	ACTU_USER.DECONSIGNATION		:=	GROUP_DEFAUT.DECONSIGNATION;
+END_IF
+(*=======================================================================================*)
+
+
+(************************************************* Demande de déconnexion *********************************************)
+IF DD_DELOG THEN
+	IF UTIL_EC THEN
+			IF NOT (ACTU_USER.PRENOM  = '') OR NOT (ACTU_USER.NOM = '') THEN
+				PREVIOUS_USER:=CONCAT(ACTU_USER.PRENOM, CONCAT(' ',ACTU_USER.NOM));
+			ELSE
+				PREVIOUS_USER:=ACTU_USER.LOGIN;
+			END_IF
+	END_IF
+	CONNECTED_USER := '';
+	ACTU_USER.GROUPE			:=	'';
+	ACTU_USER.LOGIN				:=	'';
+	ACTU_USER.NOM				:=	'';
+	ACTU_USER.PASS				:=	'';
+	ACTU_USER.PRENOM			:=	'';
+	ACTU_USER.CONF_MACHINE		:=	FALSE;
+	ACTU_USER.FONCTION_SA		:=	FALSE;
+	ACTU_USER.MAINTENANCE		:=	FALSE;
+	ACTU_USER.PRODUCTION		:=	FALSE;
+	ACTU_USER.PROGRAMMATION		:=	FALSE;
+	ACTU_USER.SUPERVISEUR		:=	FALSE;
+	ACTU_USER.CONF_TRF			:=	FALSE;
+	ACTU_USER.MODIF_ENLIGNE		:=	FALSE;
+	ACTU_USER.ARCHIVE_EV		:=	FALSE;
+	ACTU_USER.DECONSIGNATION	:=	FALSE;
+	UTIL_EC						:=	FALSE;
+	DD_DELOG					:=	FALSE;
+	MANUFACTURER				:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Demande d'ouverture  *********************************************)
+(*									de la fenêtre de mot de passe						       *)
+IF DD_LOG1 THEN
+	LOG_TEMP 		:=	'';
+	PASS_TEMP 	:=	'';
+	DD_LOG1 		:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+(************************************************* Demande de connexion *********************************************)
+IF DD_LOG THEN
+
+	TROUV	:=	FALSE;
+	TROUV2	:=	FALSE;
+	NB		:=	1;
+	NB2		:=	1;
+
+	IF	LOG_TEMP = 'ac' AND PASS_TEMP = 'ac' THEN
+		ACTU_USER.LOGIN		:=	'Alliance-concept';
+		ACTU_USER.CONF_MACHINE		:=	TRUE;
+		ACTU_USER.FONCTION_SA		:=	TRUE;
+		ACTU_USER.MAINTENANCE		:=	TRUE;
+		ACTU_USER.PRODUCTION		:=	TRUE;
+		ACTU_USER.PROGRAMMATION		:=	TRUE;
+		ACTU_USER.SUPERVISEUR		:=	TRUE;
+		ACTU_USER.CONF_TRF			:=	TRUE;
+		ACTU_USER.MODIF_ENLIGNE		:=	TRUE;
+		ACTU_USER.ARCHIVE_EV		:=	TRUE;
+		ACTU_USER.DECONSIGNATION	:=	TRUE;
+		ACTU_USER.GROUPE			:=	'';
+		MANUFACTURER				:=	TRUE;
+		UTIL_EC						:=	TRUE;
+		CONNECTED_USER				:= 'Alliance Concept';
+	ELSE
+	MANUFACTURER:=FALSE;
+	(*recherche de l'utilisateur dans la table des utilisateurs*)
+		FOR NB := 1 TO NB_USER DO
+			IF TBL_USER[NB].LOGIN	=	LOG_TEMP AND TBL_USER[NB].PASS	=	PASS_TEMP THEN
+				TROUV	:=	TRUE;
+				ACTU_USER.GROUPE	:=	TBL_USER[NB].GROUPE;
+				ACTU_USER.LOGIN		:=	LOG_TEMP;
+				ACTU_USER.NOM		:=	TBL_USER[NB].NOM;
+				ACTU_USER.PASS		:=	TBL_USER[NB].PASS;
+				ACTU_USER.PRENOM	:=	TBL_USER[NB].PRENOM;
+			END_IF
+
+			IF TROUV THEN
+
+				FOR NB2 := 1 TO NB_GROUP DO
+					IF TBL_GROUP[NB2].NOM	=	ACTU_USER.GROUPE THEN
+						TROUV2		:=	TRUE;
+						ACTU_USER.CONF_MACHINE		:=	TBL_GROUP[NB2].CONF_MACHINE;
+						ACTU_USER.FONCTION_SA		:=	TBL_GROUP[NB2].FONCTION_SA;
+						ACTU_USER.MAINTENANCE		:=	TBL_GROUP[NB2].MAINTENANCE;
+						ACTU_USER.PRODUCTION		:=	TBL_GROUP[NB2].PRODUCTION;
+						ACTU_USER.PROGRAMMATION	:=	TBL_GROUP[NB2].PROGRAMMATION;
+						ACTU_USER.SUPERVISEUR		:=	TBL_GROUP[NB2].SUPERVISEUR;
+						ACTU_USER.CONF_TRF			:=	TBL_GROUP[NB2].CONF_TRF;
+						ACTU_USER.MODIF_ENLIGNE		:=	TBL_GROUP[NB2].MODIF_ENLIGNE OR TBL_GROUP[NB2].PROGRAMMATION;
+						ACTU_USER.ARCHIVE_EV		:=	TBL_GROUP[NB2].ARCHIVE_EV;
+						ACTU_USER.DECONSIGNATION	:=	TBL_GROUP[NB2].DECONSIGNATION;	(*droit modifié en maintenance non sécurisée*)
+						IF NOT (ACTU_USER.PRENOM  = '') OR NOT (ACTU_USER.NOM = '') THEN
+							CONNECTED_USER:=CONCAT(ACTU_USER.PRENOM, CONCAT(' ',ACTU_USER.NOM));
+						ELSE
+							CONNECTED_USER:=ACTU_USER.LOGIN;
+						END_IF
+						UTIL_EC							:=	TRUE;
+					END_IF;
+				END_FOR;
+			END_IF
+		END_FOR;
+
+	END_IF
+(*
+	IF NOT TROUV AND NB >= NB_USER THEN
+			(* Rajout controle code débloquage *)
+			IF LEN(LOG_TEMP) = 8  AND LEN(PASS_TEMP) = 8 THEN
+				PRG_SEC.Id_tp			:=	LOG_TEMP;
+				PRG_SEC.Mdp_tp		:=	PASS_TEMP;
+				PRG_SEC.DD_Deblok	:=	TRUE;
+				TROUV2				:=	TRUE;
+			ELSE
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+	        				msgFmtStr :=  'Error Code 1', strArg := ''); (* L"utilisateur n"existe pas ou le mot de passe n"est pas bon. *)
+			END_IF
+	END_IF
+*)
+	IF NOT TROUV2 AND NB2 >= NB_GROUP THEN
+		ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'Error Code 2', strArg := ''); (* Le groupe utilisateur n"est plus présent. *)
+	END_IF
+
+	DD_LOG	:=	FALSE;
+END_IF
+(*Gestion des événements de connexion*)
+FM_UTIL_EC(CLK:=UTIL_EC);
+FD_UTIL_EC(CLK:=UTIL_EC);
+EV_CONNECT(
+	CONDITION:=FM_UTIL_EC.Q ,
+	VAL1:= CONNECTED_USER
+	);
+EV_DISCONNECT(
+	CONDITION:=FD_UTIL_EC.Q ,
+	VAL1:= PREVIOUS_USER
+
+	);
+
+(*===================================================================================================*)
+
+
+(************************************************* Demande de création d'un nouvel utilisateur *********************************************)
+IF DD_NEW_USER THEN
+	NB2		:=	0;
+
+	IF TBL_GROUP[LIGNE_GROUP].NOM = '' THEN
+			ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'Error Code 3', strArg := ''); (* Veuillez sélectionner un groupe valide. *)
+		GROUP_INEXISTANT	:=	TRUE;
+	END_IF
+
+	IF USER_TEMP.LOGIN <> '' AND USER_TEMP.LOGIN <> ' ' AND NOT GROUP_INEXISTANT THEN
+
+		FOR NB := 1 TO NB_USER DO
+
+			IF TBL_USER[NB].LOGIN	=	USER_TEMP.LOGIN THEN
+				UTIL_EXIST	:=	TRUE;
+			END_IF
+
+			IF TBL_USER[NB].LOGIN = '' AND NB2	= 0 THEN
+				NB2	:=	NB;
+			END_IF
+
+		END_FOR
+
+	END_IF
+
+	IF UTIL_EXIST THEN
+		ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+			msgFmtStr :=  'Error Code 4', strArg := ''); (* Un autre utilisateur possède le meme identifiant. *)
+	END_IF
+
+	IF UTIL_EXIST = FALSE AND NB2 > 0 AND NOT GROUP_INEXISTANT THEN
+		TBL_USER[NB2].LOGIN		:=	USER_TEMP.LOGIN;
+		TBL_USER[NB2].NOM			:=	USER_TEMP.NOM;
+		TBL_USER[NB2].PRENOM		:=	USER_TEMP.PRENOM;
+		TBL_USER[NB2].PASS		:=	USER_TEMP.PASS;
+		TBL_USER[NB2].GROUPE		:=	TBL_GROUP[LIGNE_GROUP].NOM;
+	END_IF
+
+	DD_NEW_USER	:=	FALSE;			(*RAZ de la demande*)
+	RQ_SAV_PERSISTENT := TRUE;		(*Demande de sauvegarde des variables*)
+
+ELSE
+	GROUP_INEXISTANT	:=	FALSE;
+	UTIL_EXIST			:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Chargement page nouvelle utilisateur *********************************************)
+IF DD_EFFACE_NEW THEN
+	USER_TEMP.GROUPE	:=	'';
+	USER_TEMP.LOGIN		:=	'';
+	USER_TEMP.NOM		:=	'';
+	USER_TEMP.PASS		:=	'';
+	USER_TEMP.PRENOM	:=	'';
+	PASS_CONF			:=	'';
+	DD_EFFACE_NEW		:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Demande de création d'un groupe *********************************************)
+IF DD_NEW_GROUP THEN
+
+	FOR NB := 1 TO NB_GROUP DO
+		IF TBL_GROUP[NB].NOM = GROUP_TEMP.NOM THEN
+			GROUP_EXIST := TRUE;
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'Error Code 5', strArg := ''); (* Ce groupe existe déjà ! *)
+		END_IF
+	END_FOR
+
+	IF NOT GROUP_EXIST THEN
+		NB2		:=	0;
+		FOR NB := 1 TO NB_GROUP DO
+			IF TBL_GROUP[NB].NOM = '' AND NB2 = 0 THEN
+				NB2		:=	NB;
+			END_IF
+		END_FOR
+		IF NB2 > 0 THEN
+			TBL_GROUP[NB2].NOM				:=	GROUP_TEMP.NOM;
+			TBL_GROUP[NB2].CONF_MACHINE		:=	GROUP_TEMP.CONF_MACHINE;
+			TBL_GROUP[NB2].FONCTION_SA		:=	GROUP_TEMP.FONCTION_SA;
+			TBL_GROUP[NB2].MAINTENANCE		:=	GROUP_TEMP.MAINTENANCE;
+			TBL_GROUP[NB2].PRODUCTION		:=	GROUP_TEMP.PRODUCTION;
+			TBL_GROUP[NB2].PROGRAMMATION	:=	GROUP_TEMP.PROGRAMMATION;
+			TBL_GROUP[NB2].SUPERVISEUR		:=	GROUP_TEMP.SUPERVISEUR;
+			TBL_GROUP[NB2].CONF_TRF			:=	GROUP_TEMP.CONF_TRF;
+			TBL_GROUP[NB2].MODIF_ENLIGNE	:=	GROUP_TEMP.MODIF_ENLIGNE;
+			TBL_GROUP[NB2].ARCHIVE_EV		:=	GROUP_TEMP.ARCHIVE_EV;
+			TBL_GROUP[NB2].DECONSIGNATION	:=	GROUP_TEMP.DECONSIGNATION;
+		END_IF
+	END_IF
+
+	DD_NEW_GROUP	:=	FALSE;
+	RQ_SAV_PERSISTENT	:=	TRUE;			(*Demande de sauvegarde des variables persistentes*)
+ELSE
+	GROUP_EXIST := FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Chargement page nouveau groupe *********************************************)
+IF DD_EFFACE_NEW2 THEN
+	GROUP_TEMP.NOM		:=	'';
+	GROUP_TEMP.CONF_MACHINE		:=	FALSE;
+	GROUP_TEMP.FONCTION_SA			:=	FALSE;
+	GROUP_TEMP.MAINTENANCE			:=	FALSE;
+	GROUP_TEMP.PRODUCTION			:=	FALSE;
+	GROUP_TEMP.PROGRAMMATION		:=	FALSE;
+	GROUP_TEMP.SUPERVISEUR			:=	FALSE;
+	GROUP_TEMP.CONF_TRF			:=	FALSE;
+	GROUP_TEMP.MODIF_ENLIGNE		:=	FALSE;
+	GROUP_TEMP.ARCHIVE_EV			:=	FALSE;
+	GROUP_TEMP.DECONSIGNATION		:=	FALSE;
+	DD_EFFACE_NEW2					:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Suppression d'un utilisateur *********************************************)
+IF DD_DEL_USER THEN
+	IF LIGNE > 0 THEN
+		TBL_USER[LIGNE].NOM			:=	'';
+		TBL_USER[LIGNE].GROUPE		:=	'';
+		TBL_USER[LIGNE].LOGIN			:=	'';
+		TBL_USER[LIGNE].PASS			:=	'';
+		TBL_USER[LIGNE].PRENOM		:=	'';
+	END_IF
+	DD_DEL_USER	:=	FALSE;
+	RQ_SAV_PERSISTENT	:= TRUE;
+	DD_ORG_USER		:=	TRUE;
+END_IF
+(*===================================================================================================*)
+
+
+
+(************************************************* Suppression d'un groupe *********************************************)
+IF DD_DEL_GROUP THEN
+
+	IF LIGNE_GROUP > 0 THEN
+		FOR NB := 1 TO NB_USER DO
+			IF TBL_USER[NB].GROUPE = TBL_GROUP[LIGNE_GROUP].NOM THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'Error Code 6', strArg := ''); (* Un utilisateur possède ce groupe. Suppression impossible *)
+				DEL_GROUP_IMPOS	:=	TRUE;
+			END_IF
+		END_FOR
+		IF NOT DEL_GROUP_IMPOS THEN
+			TBL_GROUP[LIGNE_GROUP].NOM					:=	'';
+			TBL_GROUP[LIGNE_GROUP].CONF_MACHINE		:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].FONCTION_SA		:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].MAINTENANCE		:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].PRODUCTION			:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].PROGRAMMATION	:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].SUPERVISEUR		:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].CONF_TRF			:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].MODIF_ENLIGNE		:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].ARCHIVE_EV			:=	FALSE;
+			TBL_GROUP[LIGNE_GROUP].DECONSIGNATION	:=	FALSE;
+		END_IF
+	END_IF
+	DD_DEL_GROUP	:=	FALSE;
+	RQ_SAV_PERSISTENT := TRUE;
+	DD_ORG_GRP			:=	TRUE;
+ELSE
+	DEL_GROUP_IMPOS		:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+
+(************************************************* Init avant ouverture page modification groupe *********************************************)
+IF DD_mod_group1 THEN
+	GROUP_TEMP.CONF_MACHINE		:=	TBL_GROUP[LIGNE_GROUP].CONF_MACHINE;
+	GROUP_TEMP.FONCTION_SA			:=	TBL_GROUP[LIGNE_GROUP].FONCTION_SA;
+	GROUP_TEMP.MAINTENANCE			:=	TBL_GROUP[LIGNE_GROUP].MAINTENANCE;
+	GROUP_TEMP.NOM					:=	TBL_GROUP[LIGNE_GROUP].NOM;
+	GROUP_TEMP.PRODUCTION			:=	TBL_GROUP[LIGNE_GROUP].PRODUCTION;
+	GROUP_TEMP.PROGRAMMATION		:=	TBL_GROUP[LIGNE_GROUP].PROGRAMMATION;
+	GROUP_TEMP.SUPERVISEUR			:=	TBL_GROUP[LIGNE_GROUP].SUPERVISEUR;
+	GROUP_TEMP.CONF_TRF			:=	TBL_GROUP[LIGNE_GROUP].CONF_TRF;
+	GROUP_TEMP.MODIF_ENLIGNE		:=	TBL_GROUP[LIGNE_GROUP].MODIF_ENLIGNE;
+	GROUP_TEMP.ARCHIVE_EV			:=	TBL_GROUP[LIGNE_GROUP].ARCHIVE_EV;
+	GROUP_TEMP.DECONSIGNATION		:=	TBL_GROUP[LIGNE_GROUP].DECONSIGNATION;
+	DD_mod_group1	:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Modification d'un groupe *********************************************)
+IF DD_mod_group2 THEN
+	TBL_GROUP[LIGNE_GROUP].CONF_MACHINE		:=	GROUP_TEMP.CONF_MACHINE;
+	TBL_GROUP[LIGNE_GROUP].FONCTION_SA		:=	GROUP_TEMP.FONCTION_SA;
+	TBL_GROUP[LIGNE_GROUP].MAINTENANCE		:=	GROUP_TEMP.MAINTENANCE;
+	TBL_GROUP[LIGNE_GROUP].NOM					:=	GROUP_TEMP.NOM;
+	TBL_GROUP[LIGNE_GROUP].PRODUCTION			:=	GROUP_TEMP.PRODUCTION;
+	TBL_GROUP[LIGNE_GROUP].PROGRAMMATION	:=	GROUP_TEMP.PROGRAMMATION;
+	TBL_GROUP[LIGNE_GROUP].SUPERVISEUR		:=	GROUP_TEMP.SUPERVISEUR	;
+	TBL_GROUP[LIGNE_GROUP].CONF_TRF			:=	GROUP_TEMP.CONF_TRF;
+	TBL_GROUP[LIGNE_GROUP].MODIF_ENLIGNE		:=	GROUP_TEMP.MODIF_ENLIGNE;
+	TBL_GROUP[LIGNE_GROUP].ARCHIVE_EV			:=	GROUP_TEMP.ARCHIVE_EV;
+	TBL_GROUP[LIGNE_GROUP].DECONSIGNATION	:=	GROUP_TEMP.DECONSIGNATION;
+	DD_mod_group2	:=	FALSE;
+	RQ_SAV_PERSISTENT	:= TRUE;		(*Ecriture des variables persitante*)
+END_IF
+(*===================================================================================================*)
+
+
+
+(************************************************* Init avant ouverture page modification groupe defaut *********************************************)
+IF DD_mod_def1 THEN
+	GROUP_TEMP.CONF_MACHINE		:=	GROUP_DEFAUT.CONF_MACHINE;
+	GROUP_TEMP.FONCTION_SA			:=	GROUP_DEFAUT.FONCTION_SA;
+	GROUP_TEMP.MAINTENANCE			:=	GROUP_DEFAUT.MAINTENANCE;
+	GROUP_TEMP.PRODUCTION			:=	GROUP_DEFAUT.PRODUCTION;
+	GROUP_TEMP.PROGRAMMATION		:=	GROUP_DEFAUT.PROGRAMMATION;
+	GROUP_TEMP.SUPERVISEUR			:=	GROUP_DEFAUT.SUPERVISEUR;
+	GROUP_TEMP.CONF_TRF			:=	GROUP_DEFAUT.CONF_TRF;
+	GROUP_TEMP.MODIF_ENLIGNE		:=	GROUP_DEFAUT.MODIF_ENLIGNE;
+	GROUP_TEMP.ARCHIVE_EV			:=	GROUP_DEFAUT.ARCHIVE_EV;
+	GROUP_TEMP.DECONSIGNATION		:=	GROUP_DEFAUT.DECONSIGNATION;
+	 DD_mod_def1	:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+(************************************************* Demande modification des droits par défaut  *********************************************)
+IF DD_mod_def2 THEN
+	GROUP_DEFAUT.CONF_MACHINE		:=	GROUP_TEMP.CONF_MACHINE;
+	GROUP_DEFAUT.FONCTION_SA		:=	GROUP_TEMP.FONCTION_SA;
+	GROUP_DEFAUT.MAINTENANCE		:=	GROUP_TEMP.MAINTENANCE;
+	GROUP_DEFAUT.NOM				:=	'Default';
+	GROUP_DEFAUT.PRODUCTION		:=	GROUP_TEMP.PRODUCTION;
+	GROUP_DEFAUT.PROGRAMMATION	:=	GROUP_TEMP.PROGRAMMATION;
+	GROUP_DEFAUT.SUPERVISEUR		:=	GROUP_TEMP.SUPERVISEUR;
+	GROUP_DEFAUT.CONF_TRF			:=	GROUP_TEMP.CONF_TRF;
+	GROUP_DEFAUT.MODIF_ENLIGNE		:=	GROUP_TEMP.MODIF_ENLIGNE;
+	GROUP_DEFAUT.ARCHIVE_EV		:=	GROUP_TEMP.ARCHIVE_EV;
+	GROUP_DEFAUT.DECONSIGNATION	:=	GROUP_TEMP.DECONSIGNATION;
+	RQ_SAV_PERSISTENT				:= TRUE;		(*Ecriture des variables persistentes*)
+	DD_mod_def2	:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Init avant ouverture page modification user *********************************************)
+IF DD_mod_user1 THEN
+	USER_TEMP.GROUPE		:=	TBL_USER[LIGNE].GROUPE;
+	USER_TEMP.LOGIN			:=	TBL_USER[LIGNE].LOGIN;
+	USER_TEMP.NOM			:=	TBL_USER[LIGNE].NOM;
+	USER_TEMP.PASS			:=	TBL_USER[LIGNE].PASS;
+	USER_TEMP.PRENOM		:=	TBL_USER[LIGNE].PRENOM;
+	DD_mod_user1	:=	FALSE;
+END_IF
+(*===================================================================================================*)
+
+
+(************************************************* Modification d'un user *********************************************)
+IF DD_mod_user2 THEN
+	TBL_USER[LIGNE].GROUPE		:=		TBL_GROUP[LIGNE_GROUP].NOM;
+	TBL_USER[LIGNE].LOGIN			:=		USER_TEMP.LOGIN;
+	TBL_USER[LIGNE].NOM			:=		USER_TEMP.NOM;
+	TBL_USER[LIGNE].PASS			:=		USER_TEMP.PASS;
+	TBL_USER[LIGNE].PRENOM		:=		USER_TEMP.PRENOM;
+	DD_mod_user2	:=	FALSE;
+	RQ_SAV_PERSISTENT 			:=	TRUE;	(*Ecriture des variables persistante*)
+END_IF
+(*===================================================================================================*)
+
+
+
+
+
+(************************************************* Sauvegarde des utilisateurs *********************************************)
+IF DD_sauv THEN
+	Step	:=	1;
+	DD_sauv	:=	FALSE;
+END_IF
+
+CASE Step OF
+	0:(* do nothing *)
+	ITER := 1;
+	ITER2 := 1;
+
+	1:
+		(*OUVERTURE*)
+		FCT_Ouv_File( bExecute := FALSE );
+		FCT_Ouv_File(
+			sNetId:=			'' ,
+			sPathName := 	Patch_file,
+			nMode:= 			FOPEN_MODEWRITE,
+			ePath:= 			PATH_GENERIC,
+			tTimeout:= 		T#10s,
+			bExecute:=		TRUE
+			 );
+		Step := Step + 1;
+
+	2:
+		FCT_Ouv_File( bExecute := FALSE );
+		IF ( NOT FCT_Ouv_File.bBusy ) THEN
+			IF ( FCT_Ouv_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+	        			msgFmtStr :=  'Error Code 7', strArg := ''); (* Le fichier de sauvegarde n"est pas accessible. *)
+				Step := 50;
+			ELSE
+				hDestFile := FCT_Ouv_File.hFile;
+				Step := Step + 1;
+			END_IF
+		END_IF
+
+
+	3:
+		IF ITER2 <= NB_GROUP THEN
+			CASE ITER OF
+				1:
+					Buffer	:=	CONCAT(TBL_GROUP[ITER2].NOM,'$N');
+				2:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].CONF_MACHINE),'$N');
+				3:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].FONCTION_SA),'$N');
+				4:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].MAINTENANCE),'$N');
+				5:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].PRODUCTION),'$N');
+				6:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].PROGRAMMATION),'$N');
+				7:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].SUPERVISEUR),'$N');
+				8:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].CONF_TRF),'$N');
+				9:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].MODIF_ENLIGNE),'$N');
+				10:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].ARCHIVE_EV),'$N');
+				11:
+					Buffer	:=	CONCAT(BOOL_TO_STRING(TBL_GROUP[ITER2].DECONSIGNATION),'$N');
+			END_CASE
+		ELSE
+			CASE ITER OF
+				1:
+					Buffer	:=	CONCAT(TBL_USER[ITER2-NB_GROUP].GROUPE,'$N');
+				2:
+					Buffer	:=	CONCAT(TBL_USER[ITER2-NB_GROUP].LOGIN,'$N');
+				3:
+					Buffer	:=	CONCAT(TBL_USER[ITER2-NB_GROUP].NOM,'$N');
+				4:
+					Buffer	:=	CONCAT(TBL_USER[ITER2-NB_GROUP].PASS,'$N');
+				5:
+					Buffer	:=	CONCAT(TBL_USER[ITER2-NB_GROUP].PRENOM,'$N');
+			END_CASE
+		END_IF
+
+		FCT_Write_File( bExecute := FALSE );
+		FCT_Write_File(sNetId:='',
+				hFile:=hDestFile,
+				pWriteBuff:= ADR(Buffer),
+				cbWriteLen	:=	FIND(Buffer,'$N'),
+				bExecute:=TRUE,
+				tTimeout:=T#10s );
+		Step := Step + 1;
+		ITER	:=	ITER + 1;
+
+	4:
+		FCT_Write_File( bExecute := FALSE );
+		IF ( NOT FCT_Write_File.bBusy ) THEN
+			IF ( FCT_Write_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+    					msgFmtStr :=  'Error Code 8', strArg := '');	(* Erreur d"écriture dans le fichier. *)
+				Step := 50;
+			ELSE
+				IF ITER > 11 AND ITER2 <= NB_GROUP THEN
+					ITER2 := ITER2 + 1;
+					ITER := 1;
+				ELSE
+					IF ITER > 5 AND ITER2 > NB_GROUP THEN
+						ITER2 := ITER2 + 1;
+						IF ITER2 > NB_GROUP + NB_USER THEN
+							Step := 50;
+						ELSE
+							ITER := 1;
+							Step := 3;
+						END_IF
+					ELSE
+						Step := 3;
+					END_IF
+				END_IF
+			END_IF
+		END_IF
+
+	30:
+		FCT_Ferm_File( bExecute := FALSE );
+		FCT_Ferm_File( 	sNetId:='',
+				hFile:=hDestFile,
+				bExecute:=TRUE,
+				tTimeout:=T#10s  );
+		Step := Step + 1;
+
+	31:
+		FCT_Ferm_File( bExecute := FALSE );
+		IF ( NOT FCT_Ferm_File.bBusy ) THEN
+			IF ( FCT_Ferm_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+        				msgFmtStr :=  'Error Code 9', strArg := '');	(* Erreur de fermeture du fichier. *)
+			ELSE
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'OK !', strArg := '');
+			END_IF
+			Step := 50;
+			hDestFile := 0;
+		END_IF
+
+	50:
+		IF ( hDestFile <> 0 ) THEN
+			Step := 30; (* close the destination file*)
+		ELSE
+			Step	:=	0;
+		END_IF
+
+END_CASE
+(*===================================================================================================*)
+
+
+(************************************************* Chargement des utilisateurs *********************************************)
+IF DD_load THEN
+	Step2	:=	1;
+	DD_load	:=	FALSE;
+	ITER3 := 1;
+	ITER4 := 1;
+END_IF
+
+CASE Step2 OF
+	0:(* do nothing *)
+	;
+
+	1:
+		(*OUVERTURE*)
+		FCT_Ouv_File( bExecute := FALSE );
+		FCT_Ouv_File(
+			sNetId:=			'' ,
+			sPathName := 	Patch_file,
+			nMode:= 			FOPEN_MODEREAD OR FOPEN_MODEBINARY,
+			ePath:= 			PATH_GENERIC,
+			tTimeout:= 		T#10s,
+			bExecute:=		TRUE
+			 );
+		Step2 := Step2 + 1;
+
+	2:
+		FCT_Ouv_File( bExecute := FALSE );
+		IF ( NOT FCT_Ouv_File.bBusy ) THEN
+			IF ( FCT_Ouv_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+	        			msgFmtStr :=  'Error Code 10', strArg := ''); (* Le fichier de sauvegarde n"est pas accessible. *)
+				Step2 := 50;
+			ELSE
+				hDestFile := FCT_Ouv_File.hFile;
+				Step2 := Step2 + 1;
+			END_IF
+		END_IF
+
+	3:
+		FCT_Read_File( bExecute:= FALSE );
+		FCT_Read_File( 	sNetId:='',
+				hFile:=hDestFile,
+				bExecute:=TRUE,
+				tTimeout:=T#10s );
+		Step2 := Step2 + 1;
+
+	4:
+		FCT_Read_File( bExecute:= FALSE );
+		IF ( NOT FCT_Read_File.bBusy ) THEN
+			IF ( FCT_Read_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+	        			msgFmtStr :=  'Error Code 11', strArg := ''); (* Problème de lecture du fichier. *)
+				Step2 := 50;
+			ELSE
+				Buff2 := FCT_Read_File.sLine;
+				IF FCT_Read_File.bEOF THEN
+					Step2 := 50;
+				ELSE
+					Step2 := Step2 + 1;
+				END_IF
+			END_IF
+		END_IF
+
+	5:
+
+		IF ITER4 <= NB_GROUP THEN
+			IF ITER3 > 11 THEN
+				ITER3 := 1;
+				ITER4 := ITER4 + 1;
+				IF ITER4 <= NB_GROUP THEN
+					TBL_GROUP[ITER4].NOM	:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+				ELSE
+					TBL_USER[ITER4-NB_GROUP].GROUPE			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+				END_IF
+			ELSE
+				CASE ITER3 OF
+					1:
+						TBL_GROUP[ITER4].NOM	:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+					2:
+						TBL_GROUP[ITER4].CONF_MACHINE	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					3:
+						TBL_GROUP[ITER4].FONCTION_SA	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					4:
+						TBL_GROUP[ITER4].MAINTENANCE	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					5:
+						TBL_GROUP[ITER4].PRODUCTION	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					6:
+						TBL_GROUP[ITER4].PROGRAMMATION	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					7:
+						TBL_GROUP[ITER4].SUPERVISEUR	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					8:
+						TBL_GROUP[ITER4].CONF_TRF	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					9:
+						TBL_GROUP[ITER4].MODIF_ENLIGNE	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					10:
+						TBL_GROUP[ITER4].ARCHIVE_EV	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+					11:
+						TBL_GROUP[ITER4].DECONSIGNATION	:=	STRING_TO_BOOL(MID(Buff2,FIND(Buff2,'$R')-1,1));
+
+				END_CASE
+			END_IF
+			Step2 := 3;
+		ELSE
+			IF ITER3 > 5 AND ITER4 <= 30 THEN
+				ITER3 := 1;
+				ITER4 := ITER4 + 1;
+				Step2 := 3;
+				TBL_USER[ITER4-NB_GROUP].GROUPE			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+			ELSE
+				IF ITER4 > 30 THEN
+					Step2 := 50;
+				ELSE
+					CASE ITER3 OF
+						1:
+							TBL_USER[ITER4-NB_GROUP].GROUPE			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+						2:
+							TBL_USER[ITER4-NB_GROUP].LOGIN			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+						3:
+							TBL_USER[ITER4-NB_GROUP].NOM			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+						4:
+							TBL_USER[ITER4-NB_GROUP].PASS			:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+						5:
+							TBL_USER[ITER4-NB_GROUP].PRENOM		:=	MID(Buff2,FIND(Buff2,'$R')-1,1);
+					END_CASE
+					Step2 := 3;
+				END_IF
+			END_IF
+		END_IF
+		ITER3 := ITER3 + 1;
+
+	30:
+		FCT_Ferm_File( bExecute := FALSE );
+		FCT_Ferm_File( 	sNetId:='',
+				hFile:=hDestFile,
+				bExecute:=TRUE,
+				tTimeout:=T#10s  );
+		Step2 := Step2 + 1;
+
+	31:
+		FCT_Ferm_File( bExecute := FALSE );
+		IF ( NOT FCT_Ferm_File.bBusy ) THEN
+			IF ( FCT_Ferm_File.bError ) THEN
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_ERROR ,
+        				msgFmtStr :=  'Error Code 12', strArg := ''); (* Erreur de fermeture du fichier. *)
+			ELSE
+				ADSLOGSTR( msgCtrlMask := ADSLOG_MSGTYPE_MSGBOX,
+        				msgFmtStr :=  'OK !', strArg := '');
+				RQ_SAV_PERSISTENT	:=	TRUE;		(*Ecriture des variables persistante*)
+			END_IF
+			Step2 := 50;
+			hDestFile := 0;
+		END_IF
+
+	50:
+		IF ( hDestFile <> 0 ) THEN
+			Step2 := 30; (* close the destination file*)
+		ELSE
+			Step2	:=	0;
+		END_IF
+END_CASE
+(*===================================================================================================*)
+
+IF Step > 0 THEN
+	SAVE_EC	:=	TRUE;
+ELSE
+	SAVE_EC	:=	FALSE;
+END_IF
+
+IF Step2 > 0 THEN
+	LOAD_EC	:=	TRUE;
+ELSE
+	LOAD_EC	:=	FALSE;
+END_IF
+
+IF TBL_GROUP[NB_GROUP].NOM	<>	'' THEN
+	STOP_GROUP	:=	TRUE;
+ELSE
+	STOP_GROUP	:=	FALSE;
+END_IF
+
+IF TBL_USER[NB_USER].LOGIN	<>	'' THEN
+	STOP_USER	:=	TRUE;
+ELSE
+	STOP_USER	:=	FALSE;
+END_IF
+
+(*********************************************************** Autorisation modification groupe **********************************************************)
+IF TBL_GROUP[LIGNE_GROUP].NOM = '' THEN
+	AUT_MOD_GRP		:=	FALSE;
+ELSE
+	AUT_MOD_GRP		:=	TRUE;
+END_IF
+(*==============================================================================================*)
+
+(*********************************************************** Autorisation modification utilisateur **********************************************************)
+IF TBL_USER[LIGNE].LOGIN = '' THEN
+	AUT_MOD_USER		:=	FALSE;
+ELSE
+	AUT_MOD_USER		:=	TRUE;
+END_IF
+(*==============================================================================================*)
+
+
+(****************************************************** 	Organisation des groupes après suppression **********************************************)
+IF DD_ORG_GRP THEN
+
+	FOR NB2 := 1 TO NB_GROUP DO
+		IF TBL_GROUP[NB2].NOM	= '' THEN
+			IF NB2 < NB_GROUP THEN
+				IF TBL_GROUP[NB2+1].NOM	<> '' THEN
+					TBL_GROUP[NB2].NOM				:=	TBL_GROUP[NB2+1].NOM;
+					TBL_GROUP[NB2].CONF_MACHINE	:=	TBL_GROUP[NB2+1].CONF_MACHINE;
+					TBL_GROUP[NB2].FONCTION_SA		:=	TBL_GROUP[NB2+1].FONCTION_SA;
+					TBL_GROUP[NB2].MAINTENANCE		:=	TBL_GROUP[NB2+1].MAINTENANCE;
+					TBL_GROUP[NB2].PRODUCTION		:=	TBL_GROUP[NB2+1].PRODUCTION;
+					TBL_GROUP[NB2].PROGRAMMATION	:=	TBL_GROUP[NB2+1].PROGRAMMATION;
+					TBL_GROUP[NB2].SUPERVISEUR		:=	TBL_GROUP[NB2+1].SUPERVISEUR;
+					TBL_GROUP[NB2].CONF_TRF			:=	TBL_GROUP[NB2+1].CONF_TRF;
+					TBL_GROUP[NB2].MODIF_ENLIGNE	:=	TBL_GROUP[NB2+1].MODIF_ENLIGNE;
+					TBL_GROUP[NB2].ARCHIVE_EV		:=	TBL_GROUP[NB2+1].ARCHIVE_EV;
+					TBL_GROUP[NB2].DECONSIGNATION	:=	TBL_GROUP[NB2+1].DECONSIGNATION;
+					TBL_GROUP[NB2+1].NOM				:=	'';
+					TBL_GROUP[NB2+1].CONF_MACHINE	:=	FALSE;
+					TBL_GROUP[NB2+1].FONCTION_SA	:=	FALSE;
+					TBL_GROUP[NB2+1].MAINTENANCE	:=	FALSE;
+					TBL_GROUP[NB2+1].PRODUCTION		:=	FALSE;
+					TBL_GROUP[NB2+1].PROGRAMMATION	:=	FALSE;
+					TBL_GROUP[NB2+1].SUPERVISEUR		:=	FALSE;
+					TBL_GROUP[NB2+1].CONF_TRF			:=	FALSE;
+					TBL_GROUP[NB2+1].MODIF_ENLIGNE		:=	FALSE;
+					TBL_GROUP[NB2+1].ARCHIVE_EV			:=	FALSE;
+					TBL_GROUP[NB2+1].DECONSIGNATION	:=	FALSE;
+				END_IF
+			END_IF
+		END_IF;
+	END_FOR;
+
+	DD_ORG_GRP	:=	FALSE;
+END_IF
+(*================================================================================================*)
+
+
+(****************************************************** 	Organisation des utlisateurs après suppression **********************************************)
+IF DD_ORG_USER THEN
+	FOR NB := 1 TO NB_USER DO
+		IF  TBL_USER[NB].LOGIN = '' THEN
+			IF NB < NB_USER THEN
+				IF  TBL_USER[NB+1].LOGIN <> '' THEN
+					TBL_USER[NB].LOGIN		:=	TBL_USER[NB+1].LOGIN;
+					TBL_USER[NB].GROUPE	:=	TBL_USER[NB+1].GROUPE;
+					TBL_USER[NB].NOM		:=	TBL_USER[NB+1].NOM;
+					TBL_USER[NB].PRENOM	:=	TBL_USER[NB+1].PRENOM;
+					TBL_USER[NB].PASS		:=	TBL_USER[NB+1].PASS;
+					TBL_USER[NB+1].LOGIN		:=	'';
+					TBL_USER[NB+1].GROUPE		:=	'';
+					TBL_USER[NB+1].NOM			:=	'';
+					TBL_USER[NB+1].PRENOM	:=	'';
+					TBL_USER[NB+1].PASS		:=	'';
+				END_IF
+			END_IF
+		END_IF
+	END_FOR
+
+	DD_ORG_USER	:=	FALSE;
+END_IF
+(*================================================================================================*)
+
+
+
+(****************************************************** 	Autorisation modification nom du groupe ***************************************************)
+TROUV:=FALSE;
+FOR NB := 1 TO NB_GROUP DO
+	IF nb <> LIGNE_GROUP THEN
+		IF TBL_GROUP[NB].NOM = GROUP_TEMP.NOM THEN
+			TROUV := TRUE;
+		END_IF
+	END_IF
+END_FOR
+FOR NB := 1 TO NB_USER DO
+	IF TBL_USER[NB].GROUPE = TBL_GROUP[LIGNE_GROUP].NOM AND TBL_GROUP[LIGNE_GROUP].NOM <> GROUP_TEMP.NOM THEN
+		TROUV		:=	TRUE;
+	END_IF
+END_FOR
+IF TROUV THEN
+	AUT_NOM_GRP	:=	FALSE;
+ELSE
+	AUT_NOM_GRP	:=	TRUE;
+END_IF
+(*================================================================================================*)
+
+
+
+(****************************************************** 	Autorisation modification nom des utilisateurs ***************************************************)
+TROUV:=FALSE;
+FOR NB := 1 TO NB_USER DO
+	IF nb <> LIGNE THEN
+		IF TBL_USER[NB].LOGIN = USER_TEMP.LOGIN THEN
+			TROUV := TRUE;
+		END_IF
+	END_IF
+END_FOR
+IF TROUV THEN
+	AUT_NOM_USER	:=	FALSE;
+ELSE
+	AUT_NOM_USER	:=	TRUE;
+END_IF
+(*================================================================================================*)
+
+
+
+(****************************************************** 	Autorisation création utilisateur ***************************************************)
+IF USER_TEMP.LOGIN = '' OR USER_TEMP.PASS = '' OR USER_TEMP.PASS <> PASS_CONF OR USER_TEMP.LOGIN = 'ac' THEN
+	AUT_NEW_USER	:=	FALSE;
+ELSE
+	AUT_NEW_USER	:=	TRUE;
+END_IF
+(*================================================================================================*)
+
+
+(********************************************************** Gestion du logout automatique **************************************************)
+IF OPT_LOGOUT THEN
+	TPS_ECOUL.IN		:=	UTIL_EC AND NOT MANUFACTURER;
+	TPS_ECOUL.PT	:=	TIM_LOGOUT;
+	TPS_ECOUL();
+	IF TPS_ECOUL.Q AND NOT MACHINE.STATE_Prod THEN
+		DD_DELOG	:=	TRUE;
+	END_IF
+END_IF
+(*=========================================================================================*)
+
+(********************************************************** Autorisation utilisation logout auto **************************************************)
+IF TIM_LOGOUT > T#10s THEN
+	AUT_OPT_LOGOUT	:=	TRUE;
+ELSE
+	AUT_OPT_LOGOUT	:=	FALSE;
+END_IF
+(*=========================================================================================*)]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_USER">
+      <LineId Id="3" Count="979" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

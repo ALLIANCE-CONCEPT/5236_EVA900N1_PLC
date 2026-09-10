@@ -1,0 +1,455 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_REGUL_PR_GAZ" Id="{665eb52a-8fce-4e44-ab7a-c8f398db4086}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_REGUL_PR_GAZ
+(* Gestion d'une fonction de régulation de la pression d'une enceinte directement sur débit de gaz
+Interfaçage avec fonction de pompage avec vanne asservie
+Interfaçage avec une seule ligne de gaz
+Introduction du BLOCK_CONTROL_GAZ gérant le PID
+*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - AB - VERSION INITIALE - aff 8415 CT200 n8 Nivarox*)
+
+(*************************************************************************)
+
+VAR_INPUT
+
+(*informations générales*)
+	RESET:					BOOL;		(* Condition de réinitialisation de la fonction *)
+	MANUAL:					BOOL;		(* Ordre de commmande manuel de la fonction *)
+	CTRL_PLC:				BOOL;		(* Mode de contrôle de la fonction - 0 = contrôle depuis l'IHM - 1=contrôle depuis l'automate*)
+(*sécurité*)
+	VAC:					BOOL;		(* Entrée d'interlock de vide*)
+	DOOR:					BOOL;		(* Entrée d'interlock porte*)
+	USER:					BOOL;		(* Entrée d'interlock utilisateur*)
+(*Composants*)
+	CONTROLEUR_GAZ:			BLOCK_CONTROL_GAZ;
+
+(*Paramètres*)
+	PRM_Pos_Vanne:			REAL;		(*Position fixe de la vanne secondaire*)
+	PRM_Pressure:			REAL;		(*Consigne de pression à obtenir en régulation*)
+	PRM_Pressure_H:			REAL;		(*Limite haute de l'intervalle de pression considéré pour regul ok*)
+	PRM_Pressure_L:			REAL;		(*Limite basse de l'intervalle de pression considéré pour regul ok*)
+	PRM_Tim_Stab:			TIME;		(*Temps considéré pour valider la stabilisation*)
+	PRM_Tim_Max_Stab:		TIME;		(*Temps max pour obtention stabilisation, avant déclenchement défaut : doit être supérieur à PRM_tim_stab*)
+
+	CO_Modif:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)	(* Demande modification en ligne*)
+
+(*Interfaçage avec autres fonctionnalités*)
+	I_Pompage_Proc_Ok:		BOOL;		(*Retour mise en position vanne asservie ok*)
+	I_Pompage_Sec_Ok:		BOOL;		(*Retour pompage secondaire ok*)
+	I_Act_Pressure:			REAL;		(*Retour mesure pression*)
+	I_Atm:					BOOL;		(*retour d'info de chambre à H, sert à éviter de lancer le pompage sec en arrêt lors d'un init chambre ouverte*)
+
+	I_Marche_Gaz_Ok:		BOOL;		(*Retour mise en gaz ok*)
+	I_Arret_Gaz_Ok:			BOOL;		(*Retour arret gaz ok*)
+	VAR_Controleur_Gaz_Ok:	BOOL;		(*Retour mise en marche controleur gaz ok*)
+
+(*Opérations*)
+	OP_MARCHE:				BLOCK_OPERATION;		(* Opération mise en gaz ligne*)
+	OP_ARRET:				BLOCK_OPERATION;		(* Opération arret gaz*)
+
+(*Défaut*)
+	DEF_Pression:				PRCDEF;			(*Défaut d'obtention de la pression*)
+	DEF_Surv_Pression:			PRCDEF;			(*Défaut de surveillance de la pression - perte du critère de stabilisation*)
+	ALA_Surv_Pression:			PRCDEF;			(*Alarme de surveillance de la rpession - perte du critère de stabilisation*)
+END_VAR
+
+VAR_OUTPUT
+	(*gestion fonctions externes*)
+	RQ_Ctrl_Pompage:			BOOL;		(*Prise en charge pompage*)
+	RQ_Ctrl_Gaz:				BOOL;		(*Prise en charge gaz*)
+
+	(*demandes pour fonctions externes*)
+	RQ_Pompage_Proc:		BOOL;		(*mise en laminage*)
+	RQ_Pompage_Sec:			BOOL;		(*pompage secondaire*)
+	RQ_Marche_Gaz:			BOOL;		(*mise en gaz*)
+	RQ_Arret_Gaz:			BOOL;		(*arret gaz*)
+
+	STATE_Ready:			BOOL;		(* Etat prêt*)
+	STATE_NOK:				BOOL;		(* Défaut asservissement pression*)
+END_VAR
+
+VAR_INPUT PERSISTENT
+	PRM_Tim_Def_Pr:			TIME;
+	PRM_Tim_Ala_Pr:			TIME;
+	CONF_Flow_Init:			REAL;		(*consigne de gaz initiale*)
+
+	(*Entité*)
+	IsAssembly:		BOOL;			(*entité : fonction*)
+	IdXML:			STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:			UINT;			(*nom entité : identifiant pour recherche dans dico*)
+END_VAR
+
+VAR
+	VAR_Start_Controleur_Gaz_Ok:	BOOL;		(*Mise en marche controleur gaz ok*)
+	VAR_Stop_Controleur_Gaz_Ok:		BOOL;		(*Arret controleur gaz ok*)
+	VAR_Stab_Pression_Ok:			BOOL;		(*Stabilisation pression ok*)
+
+	VAR_Attente_Stab:				BOOL;		(*falg indiquant que l'on est dans l'étape d'attente de stabilsiation de la pression*)
+	 VAR_Surv_Pression:				BOOL;		(*flag de demande de surveillance de maintien de la pression stabilisée*)
+
+	FM_CO_Modif:			R_TRIG;
+
+	(*fronts montants*)
+	FM_Arret_2:				R_TRIG;
+	FM_Arret_4:				R_TRIG;
+	FM_Marche_4:			R_TRIG;
+	FM_Marche_6:			R_TRIG;
+
+	(*timer*)
+	TIMER_Valid_Press_Ok:	TON;
+
+	TIMER_Marche2:			TON;
+	TIMER_Arret5:			TON;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Début de bloc*)
+PRL();
+(*Opération arrêt gaz*)
+ACT_STOP();
+(*Opération marche gaz*)
+ACT_START();
+(*Fin de bloc*)
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_START" Id="{8d7972a5-8bb0-4fad-b445-744a5dad5954}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION MARCHE GAZ*)
+(*Marche gaz en continu*)
+
+OP_MARCHE(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= reset,
+	MANUAL:=manual ,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 12,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_MARCHE.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_MARCHE.ETAPE = 0
+		THEN
+				OP_MARCHE.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_ARRET.ETAPE.1
+		THEN
+				OP_MARCHE.ETAPE := 0;
+				OP_MARCHE.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_MARCHE.ETAPE.0
+		AND OP_MARCHE.MARCHE_OP
+		THEN
+				OP_MARCHE.ETAPE.1:=TRUE;
+				OP_MARCHE.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_MARCHE.ETAPE.1
+		AND OP_ARRET.ETAPE.0
+		THEN
+				OP_MARCHE.ETAPE.2:=TRUE;
+				OP_MARCHE.ETAPE.1:=FALSE;
+(*étape 2-3 ==> prise de controle pompage et gaz*)
+ELSIF	OP_MARCHE.ETAPE.2
+		AND Timer_Marche2.Q
+		THEN
+				OP_MARCHE.ETAPE.3:=TRUE;
+				OP_MARCHE.ETAPE.2:=FALSE;
+(*étape 3-4*)
+ELSIF	OP_MARCHE.ETAPE.3
+		THEN
+				OP_MARCHE.ETAPE.4:=TRUE;
+				OP_MARCHE.ETAPE.3:=FALSE;
+(*étape 4-5 ==> mise en pompage procédé*)
+ELSIF	OP_MARCHE.ETAPE.4
+		AND I_Pompage_Proc_Ok
+		THEN
+				OP_MARCHE.ETAPE.5:=TRUE;
+				OP_MARCHE.ETAPE.4:=FALSE;
+(*étape 5-6*)
+ELSIF	OP_MARCHE.ETAPE.5
+		THEN
+				OP_MARCHE.ETAPE.6:=TRUE;
+				OP_MARCHE.ETAPE.5:=FALSE;
+(*étape 6-7 ==> mise en marche gaz*)
+ELSIF	OP_MARCHE.ETAPE.6
+		AND I_Marche_Gaz_Ok
+		THEN
+				OP_MARCHE.ETAPE.7:=TRUE;
+				OP_MARCHE.ETAPE.6:=FALSE;
+(*étape 7-8*)
+ELSIF	OP_MARCHE.ETAPE.7
+		THEN
+				OP_MARCHE.ETAPE.8:=TRUE;
+				OP_MARCHE.ETAPE.7:=FALSE;
+(*étape 8-9 ==> marche controlleur gaz*)
+ELSIF	OP_MARCHE.ETAPE.8
+		(*AND VAR_Start_Controleur_Gaz_Ok*)
+		THEN
+				OP_MARCHE.ETAPE.9:=TRUE;
+				OP_MARCHE.ETAPE.8:=FALSE;
+(*étape 9-10*)
+ELSIF	OP_MARCHE.ETAPE.9
+		THEN
+				OP_MARCHE.ETAPE.10:=TRUE;
+				OP_MARCHE.ETAPE.9:=FALSE;
+(*étape 10-11*)
+ELSIF	OP_MARCHE.ETAPE.10
+		AND VAR_Stab_Pression_ok
+		THEN
+				OP_MARCHE.ETAPE.11:=TRUE;
+				OP_MARCHE.ETAPE.10:=FALSE;
+(*étape 11-12*)
+ELSIF	OP_MARCHE.ETAPE.11
+		THEN
+				OP_MARCHE.ETAPE.12:=TRUE;
+				OP_MARCHE.ETAPE.11:=FALSE;
+
+(*étape 12-1*)
+ELSIF	OP_MARCHE.Etape.12
+		AND OP_MARCHE.MARCHE_OP
+		THEN
+				OP_MARCHE.Etape.1 := TRUE;
+				OP_MARCHE.Etape.12 := FALSE;
+END_IF;
+(*cloture du traitement de l'opération*)
+OP_MARCHE.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{5b5488db-cc97-43d1-90fa-8f3d5bccff2a}">
+      <Implementation>
+        <ST><![CDATA[(*OPERATION STOP GAZ*)
+
+OP_ARRET(
+	CTRL_PLC:= CTRL_PLC,
+	RESET:= reset,
+	MANUAL:=manual ,
+	ON_AUTO_INT:=	CONTROLEUR_GAZ.STATE_Nok
+					OR DEF_Pression.DEF
+					OR DEF_Surv_Pression.DEF,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 6,
+	N_STEP_OP_NOK:=0 );
+
+(*appel de l'action de préparation de l'opération*)
+OP_ARRET.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_ARRET.ETAPE = 0
+		THEN
+				OP_ARRET.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF 	MANUAL OR RESET OR OP_MARCHE.ETAPE.1
+		THEN
+				OP_ARRET.ETAPE := 0;
+				OP_ARRET.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_ARRET.ETAPE.0
+		AND OP_ARRET.MARCHE_OP
+		THEN
+				OP_ARRET.ETAPE.1:=TRUE;
+				OP_ARRET.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF 	OP_ARRET.ETAPE.1
+		AND OP_MARCHE.Etape.0
+		THEN
+				OP_ARRET.ETAPE.2:=TRUE;
+				OP_ARRET.ETAPE.1:=FALSE;
+(*étape 2-3 ==> arrêt controlleur gaz et arrêt ligne gaz*)
+ELSIF 	OP_ARRET.ETAPE.2
+		(*AND VAR_Stop_Controleur_Gaz_Ok*)
+		AND I_Arret_Gaz_Ok
+		THEN
+				OP_ARRET.ETAPE.3:=TRUE;
+				OP_ARRET.ETAPE.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_ARRET.ETAPE.3
+		THEN
+				OP_ARRET.ETAPE.4:=TRUE;
+				OP_ARRET.ETAPE.3:=FALSE;
+(*étape 4-5*)
+ELSIF 	OP_ARRET.ETAPE.4
+		AND (I_Pompage_Sec_Ok OR I_Atm)
+		THEN
+				OP_ARRET.ETAPE.5:=TRUE;
+				OP_ARRET.ETAPE.4:=FALSE;
+(*étape 5-6*)
+ELSIF 	OP_ARRET.ETAPE.5
+		AND TIMER_Arret5.Q
+		THEN
+				OP_ARRET.ETAPE.6:=TRUE;
+				OP_ARRET.ETAPE.5:=FALSE;
+(*étape 6-1*)
+ELSIF	OP_ARRET.Etape.6
+		AND OP_ARRET.MARCHE_OP
+		THEN
+				OP_ARRET.Etape.1 := TRUE;
+				OP_ARRET.Etape.6 := FALSE;
+
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_ARRET.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{284e0cae-67d8-4bc8-b582-62ff45192b64}">
+      <Implementation>
+        <ST><![CDATA[(*Etat prêt*)
+STATE_READY	:=	VAC AND DOOR AND USER;
+
+(*Autorisations*)
+OP_ARRET.ENABLE_INT		:=	TRUE;
+OP_MARCHE.ENABLE_INT	:=	STATE_Ready;
+
+(*timers*)
+TIMER_Marche2.IN := OP_MARCHE.Etape.2;
+TIMER_Marche2.PT := T#100ms;
+TIMER_Marche2();
+
+TIMER_Arret5.IN := OP_ARRET.Etape.5;
+TIMER_Arret5.PT := T#100ms;
+TIMER_Arret5();
+
+(*Gestion mode de controle des fonctions externes*)
+IF		OP_MARCHE.Etape.2 THEN
+			RQ_Ctrl_Pompage	:=	TRUE;
+			RQ_Ctrl_Gaz			:=	TRUE;
+ELSIF	OP_ARRET.Etape.5
+		OR MANUAL
+		OR RESET
+		THEN
+			RQ_Ctrl_Pompage	:=	FALSE;
+			RQ_Ctrl_Gaz			:=	FALSE;
+END_IF
+
+(*Gestion controleur gaz*)
+CONTROLEUR_GAZ.PRM_Pressure		:=	PRM_Pressure;
+CONTROLEUR_GAZ.I_Act_Pressure		:=	I_Act_Pressure;
+
+IF OP_MARCHE.Etape.8 THEN
+	CONTROLEUR_GAZ.CO_On	:=	TRUE;
+ELSIF OP_ARRET.Etape.2
+		OR MANUAL
+		OR RESET THEN
+	CONTROLEUR_GAZ.CO_On	:=	FALSE;
+END_IF
+
+CONTROLEUR_GAZ(
+		RESET	:=	RESET,
+					);
+
+(*Gestion variables internes*)
+(*attente stabilisation pression*)
+IF op_marche.Etape.10 THEN
+	VAR_Attente_Stab		:=	TRUE;
+ELSE
+	VAR_Attente_Stab		:=	FALSE;
+END_IF
+
+(*stabilisation pression ok*)
+TIMER_Valid_Press_OK.IN		:=		(
+								(
+								(I_Act_Pressure >= PRM_Pressure_L)
+								AND (I_Act_Pressure <= PRM_Pressure_H)
+								) OR (PRM_Tim_Stab = T#0ms)
+									)
+								(*AND NOT VAR_Prm_Pression_modifie ;*);
+TIMER_Valid_Press_OK.PT		:=	PRM_Tim_Stab;
+TIMER_Valid_Press_OK();
+VAR_Stab_Pression_Ok			:=	TIMER_Valid_Press_ok.Q;
+
+(*surveillance pression*)
+IF OP_MARCHE.Etape.11 OR OP_MARCHE.Etape.12 THEN
+	VAR_Surv_Pression	:=	TRUE;
+ELSE
+	VAR_Surv_Pression	:=	FALSE;
+END_IF
+
+
+(*Prise en charge des fonctions externes - passage des consignes*)
+RQ_Arret_Gaz		:=	FM_Arret_2.Q;
+RQ_Pompage_Sec	:=	FM_Arret_4.Q AND NOT I_Atm;
+RQ_Pompage_Proc	:=	FM_Marche_4.Q;
+RQ_Marche_Gaz		:=	FM_Marche_6.Q;
+
+
+(*Gestion défauts*)
+DEF_Pression.Condition	:= 	NOT VAR_Stab_Pression_Ok
+							AND VAR_Attente_Stab
+							AND NOT MANUAL
+							AND NOT RESET
+							AND (PRM_Tim_Max_Stab > T#0ms);
+DEF_Pression(DELAY		:=	PRM_Tim_Max_Stab);
+
+(*défaut de surveillance de la pression - l'état STATE_Press_Ok est perdu pendant un temps supérieur à PRM_TIM_SURV_PR *)
+DEF_Surv_Pression.CONDITION	:=	NOT VAR_Stab_Pression_Ok
+									AND VAR_Surv_Pression
+									AND NOT MANUAL
+									AND NOT RESET;
+DEF_Surv_Pression(DELAY:=PRM_Tim_Def_Pr);
+
+
+(*alarme de surveillance de la pression - l'état STATE_Press_Ok est perdu pendant un temps supérieur à PRM_ALA_SURV_PR*)
+ALA_Surv_Pression.CONDITION 	:=	NOT VAR_Stab_Pression_Ok
+									AND VAR_Surv_Pression
+									AND NOT MANUAL
+									AND NOT RESET;
+ALA_Surv_Pression(DELAY:=PRM_Tim_Ala_Pr);
+
+
+(*Etat défaut*)
+STATE_NOK		:=	DEF_Pression.DEF OR DEF_Surv_Pression.DEF OR CONTROLEUR_GAZ.STATE_Nok;
+
+(*Reset demandes*)
+CO_Modif	:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{8d5e4dc1-4e3d-4dde-99b5-89f13b48c28c}">
+      <Implementation>
+        <ST><![CDATA[	OP_MARCHE.IdXML		:=	'0';
+	OP_MARCHE.TagXML	:=	1;
+
+	OP_ARRET.IdXML		:=	'0';
+	OP_ARRET.TagXML		:=	2;
+
+	DEF_Pression.IdXml				:=	'16';
+	DEF_Pression.TagXml				:=	8;
+
+	DEF_Surv_Pression.IdXml			:=	'16';
+	DEF_Surv_Pression.TagXml		:=	11;
+
+	ALA_Surv_Pression.IdXml			:=	'16';
+	ALA_Surv_Pression.TagXml		:=	10;
+	ALA_Surv_Pression.Groupe		:=	1;
+
+
+(*fronts montants*)
+FM_Arret_2(clk := OP_ARRET.Etape.2);
+FM_Arret_4(clk := OP_ARRET.Etape.4);
+FM_Marche_4(clk := OP_MARCHE.Etape.4);
+FM_Marche_6(clk := OP_MARCHE.Etape.6);]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_REGUL_PR_GAZ">
+      <LineId Id="105" Count="7" />
+    </LineIds>
+    <LineIds Name="BLOCK_REGUL_PR_GAZ.ACT_START">
+      <LineId Id="0" Count="100" />
+    </LineIds>
+    <LineIds Name="BLOCK_REGUL_PR_GAZ.ACT_STOP">
+      <LineId Id="0" Count="72" />
+    </LineIds>
+    <LineIds Name="BLOCK_REGUL_PR_GAZ.POST">
+      <LineId Id="0" Count="107" />
+    </LineIds>
+    <LineIds Name="BLOCK_REGUL_PR_GAZ.PRL">
+      <LineId Id="0" Count="21" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,140 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <TextList Name="TextList_Gaz" Id="{7d80d96e-8a3b-4910-981c-730ee4dc011a}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"select"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Sélectionner</v>
+                <v>Select</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"ouvert"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ouverte</v>
+                <v>Opened</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"fermé"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Fermée</v>
+                <v>Closed</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"ligne 1"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ligne de gaz 1</v>
+                <v>Gas line 1</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"ligne 2"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ligne de gaz 2</v>
+                <v>Gas line 2</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"ligne 3"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ligne de gaz 3</v>
+                <v>Gas line 3</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"ligne 4"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Ligne de gaz 4</v>
+                <v>Gas line 4</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"debit"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Débit (sccm)</v>
+                <v>Flow (sccm)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"Consigne pos"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne de position (%)</v>
+                <v>Position setpoint (%)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"Consigne pres"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Consigne de pression (mbar)</v>
+                <v>Pressure setpoint (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"Press min"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression min. (mbar)</v>
+                <v>Min. pressure (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"Press max"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pression max. (mbar)</v>
+                <v>Max. pressure (mbar)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"Temps stab"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps de stab.</v>
+                <v>Stab. time</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{365c552a-cbfa-4b2b-9c3e-7cdb4ee15147}</v>
+          <v n="GuidReInit">{709b10fd-006c-43e0-8878-b81f1edbc780}</v>
+          <v n="GuidExitX">{eeac3db7-93e5-4279-8845-50847844c660}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>

@@ -1,0 +1,1009 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="BLOCK_EVAP" Id="{991471d7-f991-481c-b440-152a0dd15e56}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_EVAP
+
+(* Gestion évaporation *)
+
+(****************historique des versions*****************************)
+
+(* Version 0-0 - SD - VERSION INITIALE CT200 n°7 - 8157 *)
+(* Version 1-0 - GV - Ajout Gestion du balayage (Demande de marche & Arrêt balayage)
+				+ Ajout demande de changement de creuset
+				+ Ajout Timer temps couche pour visualisation
+				+ Gestion Time Power *)
+(* Version 2.0 - HG - Ajout CONF_No_Sweep
+				- Suppression du délais défaut pmin et pmax pour configuration externe*)
+(*Version 3-0 - GV -  Ajout gestion demande ouverture cache + Arrêt HT sur changement creuset + Ajout Défaut de refroidissement - affaire 9070 - 07/2015*)
+(*Version 4-0 - HG - Ajout option dépôt à puissance fixe avec puissance segment 8 et temps max de dépôt
+					Front montant pour start controleur*)
+(*Version 4-1 - GV - Modification mémorisation mem_power pour Idle ramp pour éviter que la puissance passe à zéro*)
+(*Version 4-2 - GV - Modification mémorisation mem_power pour Idle ramp -> Ajout (OUT_POWER <> 0) pour eviter que la puissance passe a zero*)
+(*Versiob 5-0 - HG - Raccord avec block 3.3 des machines récentes
+						Ajout CO_Modif
+						Ajout I_Maintien_Source
+						Modification reset RQ_Switch_crucible sur op_stop lorsqu'arrêt couche avant même le démarrage de la source
+						Pas de défaut Pmin si PRM_Pmin = 0*)
+(*************************************************************************)
+
+VAR_INPUT
+(*information générale*)
+	RESET:								BOOL;
+	MANUAL:								BOOL;
+	I_EVAP_ON:							BOOL;			(*Demande d'évaporation par le bloc empilement aprés la phase de préfusion*)
+	I_END_DEPOSITION:					BOOL;			(*Demande d'arrêt du dépôt*)
+	I_DEF_QZ_CTRL_RATE:					BOOL;
+	I_TIME_POWER:						BOOL;			(*Permet d'inhiber le défaut du quartz de contrôle de l'épaisseur si Option time power*)
+	CO_FIN_ETAPE:						BOOL;	
+	CO_MODIF:							BOOL;			(*Modification en ligne - Prise en compte nouvelles rampes de préfusion*)
+	I_THICKNESS:						REAL;			(*épaisseur globale déposée*)
+	I_SWITCH_XTAL_OK:					BOOL;			(*Indique que le positionnement de la tête multiquartz à été effectué*)
+	I_OUV_CACHE_SOURCE:					BOOL;			(*Entrée de demande d'ouverture cache par le contrôleur de dépôt*)
+	I_MAINTIEN_SOURCE:					BOOL;			(*Entrée de maintien de la source provenant du Block_Step_Empilement*)
+
+(*opération*)
+	OP_Marche:							BLOCK_OPERATION;	(*opération marche du bloc evap*)
+	OP_Stop:							BLOCK_OPERATION;	(*opération arrêt du bloc*)
+
+(*Défauts*)
+	DEF_Pmax:							PRCDEF;		(*Défaut dépassement puissance max*)
+	DEF_Pmin:							PRCDEF;		(*Défaut dépassement puissance min pendant les phases de dépôt/d'ajustement*)
+	DEF_TEMPS_MAX:						PRCDEF;		(*Défaut temps d'enveloppe du dépôt*)
+	DEF_QZ_CTRL_RATE:					PRCDEF;		(*Défaut du quartz de contrôle de l'épaisseur*)
+	DEF_REF:							PRCDEF;		(*Défaut de refroidissement *)
+
+(*Entrée diverses*)
+	I_cache_ouvert:						BOOL;		(*Entrée Cache source ouvert*)
+	I_cache_ferme:						BOOL;		(*Entree Cache source fermé*)
+ 	I_ref_source_ok:					BOOL;		(*Retour de refroidissement de la source ok*)
+	I_ref_mesure_ok:					BOOL;		(*Retour de refroidissement de la mesure ok*)
+	I_retour_pos_creuset_ok:			BOOL;		(*Retour de positionnement du creuset ok*)
+	I_HT_ON:							BOOL;		(*Retour HT on*)
+	I_HT_OFF:							BOOL;		(*Retour HT Off*)
+	I_FIL_ON:							BOOL;		(*Retour FIL On*)
+	I_FIL_OFF:							BOOL;		(*Retour Fil Off*)
+	I_SWEEP_ON:							BOOL;		(*Retour balayage en marche*)
+	I_Power:							REAL;		(*puissance demandée par le controleur de dépôt pendant la phase d'évaporation en %*)
+END_VAR
+
+
+VAR_OUTPUT
+	STATE_Segment:					USINT;			(*N° du segment en cours*)
+	STATE_Temps_segment:			TIME;			(*Temps restant pour le segment en cours*)
+	STATE_Temps_Phase:				TIME;			(*Temps restant pour la phase en cours : préparation / dépôt / cloture*)
+	STATE_TEMPS_PREPARATION:		INT;			(*Temps de préparation total en seconde*)
+	STATE_TEMPS_CLOTURE:			INT;			(*Temps de cloture total en seconde*)
+	STATE_TEMPS_DEPOT:				INT;			(*Temps de dépôt estimé en fonction de la vitesse et de l'épaisseur attendue*)
+	STATE_TEMPS_RESTANT_PREP:		INT;			(*Temps de préparation restant en seconde*)
+	STATE_TEMPS_RESTANT_CLOT:		INT;			(*Temps de cloture restant en seconde*)
+	STATE_TEMPS_RESTANT_DEPOT:		INT;			(*Temps restant de dépôt en seconde*)
+
+	OUT_Power:							REAL;		(*Puissance demandée en %*)
+	OUT_Cons_Pos_Qz:					INT;		(*Quartz à utiliser*)
+	OUT_Start_Controleur:				BOOL;		(*Demande de start du controleur*)
+	RQ_ouv_cache_IAD:					BOOL;		(*bit utilisé pour ouverture synchronisé du cache IAD*)
+	RQ_Ref_source:						BOOL;		(*Demande de refroidissement de la source*)
+	RQ_Ref_mesure:						BOOL;		(*Demande de refroidissement de la mesure*)
+	RQ_Ouv_Cache_source:				BOOL;		(*Demande d'ouverture du cache*)
+	RQ_marche_HT:						BOOL;		(*Demande de marche de la haute tension*)
+	RQ_marche_FIL:						BOOL;		(*Demande de marche de la source à effet joule ou de la haute-tension*)
+	RQ_marche_SWEEP:					BOOL;		(*Demande de marche du balayage*)
+	RQ_Switch_Crucible:					BOOL;		(*Demande de changement de creuset*)
+	RQ_Switch_Crystal:					BOOL;		(*Demande de switch tête multiquartz*)
+
+
+	STATE_PREP_OK:					BOOL;		(*Phase de préparation ok*)
+	STATE_EVAP:						BOOL;		(*Phase d'évaporation en cource*)
+	STATE_CLOT_OK:					BOOL;
+	STATE_AR:						BOOL;		(*Evaporation à l'arrêt*)
+	STATE_PREFU:					BOOL;		(*Phase de préfusion en cours*)
+	STATE_IDLE:						BOOL;		(*Phase de descente en cours*)
+	STATE_END_DEPOT_PFIXE:			BOOL;		(*Fin dépot détecté sur puissance fixe, pour STEP_EMPILEMENT*)
+
+END_VAR
+VAR_INPUT PERSISTENT
+(*Entité*)
+	IsAssembly:							BOOL;		(*entité : fonction*)
+	IdXML:								STRING;		(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:								UINT;		(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:							STRING;		(*MNEMO de l'appelant*)
+	MNEMO:								STRING;		(*MNEMO de l'entité*)
+
+
+(*Paramètres de configurations*)
+	PRM_Thickness:						REAL;			(*Consigne d'épaisseur en kA°*)
+	PRM_Rate:							REAL;			(*Consigne de vitesse de dépôt en A°/s*)
+	PRM_PFixe:							BOOL;			(*Option dépôt à puissance fixe*)
+	PRM_TPS_Max_PFixe:					UINT;			(*Temps max de dépôt si option puissance fixe*)
+	PRM_TPS_SEGMENT:				ARRAY[0..10] OF INT;	(*Temps pour chaque segment*)
+	PRM_PWR_SEGMENT:				ARRAY[0..10] OF REAL;	(*Puissance pour chaque segment*)
+	PRM_GAIN:							REAL;			(*Parametre de gain*)
+	PRM_INTEGRAL:						REAL;			(*Paramètre intégrale source*)
+	PRM_DERIVEE:						REAL;			(*Paramètre derivée*)
+	PRM_AUTO_SOAK2:						BOOL;			(*Option de calcul automatique de la valeur du segment 7*)
+	PRM_PHASE_PREFFUSION:				USINT:=1;		(*N° de phase de préfusion, permet de savoir par quelle phase commencer, = à 1 par défaut*)
+	PRM_PMAX:							REAL:= 10;		(*Puissance max pour la source*)
+	PRM_PMIN:							REAL;			(*Puissance min pour la source*)
+	PRM_TIMEPOWER:						BOOL;			(*Paramètre time power*)
+	PRM_RETARD_FERM_CACHE:				REAL;			(*Paramètre de retard fermeture cache en s*)
+	PRM_REOUV_CACHE:					REAL;			(*Temps pour réouverture du cache*)
+	PRM_NCR:							USINT;			(*N° de creuset selectionné*)
+	PRM_NBAL:							USINT;			(*N° de programme de balayage*)
+	PRM_HT:								REAL;			(*consigne HT*)
+
+	PRM_CRYSTAL_POSITION:				INT;		(*Numéro du crystal à utiliser pour la tête MultiQuartz, 1 à 6 *)
+
+	PRM_Transfer_Tooling:				REAL;		(*Facteur de correction du Quartz d'ajustement de la vitesse en fin de phase de préfusion*)
+
+	PRM_MULTIPOINT:						BOOL;		(*Indique s'il y a utilisation de plusieurs Quartz pour le contrôle vitesse, donnée par l'éditeur*)
+	PRM_MULTI_QUARTZ:					BOOL;		(*Indique s'il y a une tête multiquartz*)
+
+	PRM_NQz_Rate:						USINT;					(*N° de quartz qui controle la vitesse de dépot de la source en mode MonoPoint*)
+	PRM_NQz_MultiPoint:					ARRAY[0..7] OF USINT;		(*N° des Quartz utilisés pour contrôle de la vitesse de dépôt en mode MultiPoint*)
+	PRM_Num_Transfer_Sensor:			BYTE;					(*Numéro du capteur utilisé pour le Quartz de contrôle pendant phase de préfusion*)
+
+	PRM_SOAK2_POWER:					REAL;		(*Puissance soak power 2 à transmettre au controleur de dépôt*)
+	PRM_Quartz_Cache_Source:			BOOL;		(*Indique s'il y a un Quartz de contrôle sous le cache source*)
+	PRM_SHUTTER_Option:					BOOL;		(*Option d'utilisation du Quartz de transfert, Quartz sous le cache source*)
+	PRM_CTRL_DELAY_TIME:				INT;		(*Délai en secondes entre l'ouverture du cache source et prise de contrôle de la vitesse d'évaporation*)
+(*	PRM_CTRL_DELAY:						BOOL;		(*Option d'utilisation du Quartz de transfert, Quartz sous le cache source*)*)
+
+(*Parametres quartz*)
+	PRM_Quality_Percent:					USINT;		(*Déviation max de la fréquence*)
+	PRM_Quality_Counts:						USINT;		(*Nombre de déviation de la fréquence autorisée*)
+	PRM_Stability_Single:					UINT;		(*Déviation de la fréquence*)
+	PRM_Stability_Total:					UINT;		(*Déviation total de la fréquence*)
+
+	PRM_Shutter_Delay_Acc:					USINT;
+
+(*Parametres pour la nouvelle vitesse*)
+	PRM_New_Rate:						REAL;		(*Nouvelle consigne de vitesse en A°/s*)
+	PRM_Rate_Ramp_Time:					UINT;		(*Temps de monté à la nouvelle consigne de vitesse en secondes*)
+	PRM_Thick_SP:						REAL;		(*Epaisseur qui déclenche la nouvelle vitesse en kA°*)
+
+
+(*configuration Surveillance du dépôt*)
+	PRM_TPS_MIN_SURV_DEPOT:			INT;		(*Temps mini pour la surveillance du temps de depot*)
+(*	PRM_SEUIL_TEMPS_DEPOT:			REAL;		(*Seuil temps de dépôt théorique à partir duquel on applique un facteur au temps de dépôt théorique*)*)
+	PRM_FACTEUR_TEMPS_DEPOT:		REAL;		(*Facteur du temps théorique*)
+
+(*Paramètres de configuration matériel*)
+	CONF_No_Sweep:					BOOL;
+END_VAR
+
+VAR_TEMP
+	FLAG_PMAX:						BOOL;		(*Flag puissance max atteinte*)
+	FLAG_PMIN:						BOOL;		(*Flag puissance min atteinte*)
+END_VAR
+
+VAR_IN_OUT
+	CONS_NCR:						USINT;		(*Consigne n° de creuset à utiliser*)
+	CONS_NBAL:						USINT;		(*Consigne n° de programme de balayage*)
+	CONS_HT:						REAL;
+END_VAR
+
+VAR
+	MEM_POWER:							REAL;		(*Variable mémoire puissance*)
+	TIMER_SEGMENT:						ARRAY[0..10] OF TON;
+	I:									USINT;
+	VAR_Pi:								REAL;		(*utilisé pour calcul*)
+	VAR_Pf:								REAL;		(*utilisé pour calcul*)
+	VAR_Time:							REAL;		(*Utilisé pour calcul*)
+	VAR_Tseg:							REAL;		(*Utilisé pour calcul*)
+	VAR_Mem_Creuset:					USINT;		(*Variable mémoire du n° de creuset utilisé lors de la dernière couche*)
+	TIMER_RETARD_FCACHE:			TP;
+	TIMER_RETARD_OCACHE:			TON;
+	FM_ETAPE3_MARCHE:				R_TRIG;
+	FM_ETAPE14_MARCHE:				R_TRIG;
+	VAR_RETARD_FERM_CACHE:			BOOL;
+	TIMER_Prise_Controle:			TON;
+	TIMER_Temps_Couche:				TON;
+	TIMER_Start_Controleur:			TP;
+	FM_CO_Modif:					R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRL();
+
+ACT_MARCHE();
+ACT_STOP();
+
+POST();]]></ST>
+    </Implementation>
+    <Action Name="ACT_MARCHE" Id="{3aadbc98-a4ad-4fa3-9ecb-8c3293b2d778}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION marche évaporation*)
+
+OP_MARCHE(
+	ON_AUTO_INT:= ,
+	CTRL_PLC:= TRUE,
+	RESET:= RESET ,
+	MANUAL:= MANUAL,
+	ENABLE_INT:= TRUE,
+	RESTART_ENABLE_IF_OK:=TRUE ,
+	N_STEP_OP_OK:= 16,
+	N_STEP_OP_NOK:=0 );
+
+
+OP_MARCHE.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Marche.ETAPE = 0 THEN
+				OP_Marche.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR RESET OR OP_Stop.Etape.1	THEN
+				OP_Marche.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Marche.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Marche.ETAPE.0
+		AND OP_Marche.MARCHE_OP   THEN
+				OP_Marche.ETAPE.1:=TRUE;
+				OP_Marche.ETAPE.0:=FALSE;
+(*étape 5.6.7.8.9.10.11.12.13 - 14 fin de couche*)
+ELSIF	(OP_Marche.ETAPE.5 OR
+		OP_Marche.ETAPE.6 OR
+		OP_Marche.ETAPE.7 OR
+		OP_Marche.ETAPE.8 OR
+		OP_Marche.ETAPE.9 OR
+		OP_Marche.Etape.10 OR
+		OP_Marche.Etape.11 OR
+		OP_Marche.Etape.12 OR
+		OP_Marche.Etape.13 )
+		AND CO_FIN_ETAPE THEN
+				OP_Marche.Etape.14:=TRUE;
+				OP_Marche.Etape.5:=FALSE;
+				OP_Marche.Etape.6:=FALSE;
+				OP_Marche.Etape.7:=FALSE;
+				OP_Marche.Etape.8:=FALSE;
+				OP_Marche.Etape.9:=FALSE;
+				OP_Marche.Etape.10:=FALSE;
+				OP_Marche.Etape.11:=FALSE;
+				OP_Marche.Etape.12:=FALSE;
+				OP_Marche.Etape.13:=FALSE;
+(*étape 1.2.3.4. - 16 - fin de couche*)
+ELSIF	(OP_Marche.ETAPE.1 OR
+		OP_Marche.ETAPE.2 OR
+		OP_Marche.ETAPE.3 OR
+		OP_Marche.ETAPE.4 )
+		AND CO_FIN_ETAPE THEN
+				OP_Marche.Etape.16:=TRUE;
+				OP_Marche.Etape.1:=FALSE;
+				OP_Marche.Etape.2:=FALSE;
+				OP_Marche.Etape.3:=FALSE;
+				OP_Marche.Etape.4:=FALSE;
+
+(*étape 1-2*)
+ELSIF	OP_Marche.ETAPE.1
+		AND OP_Stop.AR AND ((NOT (PRM_NCR = VAR_Mem_Creuset) AND I_HT_OFF AND I_FIL_OFF) OR (PRM_NCR = VAR_Mem_Creuset)) THEN
+				OP_Marche.Etape.2:=TRUE;
+				OP_Marche.Etape.1:=FALSE;
+(*étape 2-17*)
+ELSIF 	OP_Marche.Etape.2
+		AND I_retour_pos_creuset_ok
+		AND I_ref_mesure_ok
+		AND I_ref_source_ok
+		AND (I_SWITCH_XTAL_OK OR NOT PRM_MULTI_QUARTZ)
+		 THEN
+				OP_Marche.Etape.17:=TRUE;
+				OP_Marche.Etape.2:=FALSE;
+(*étape 17-3*)
+ELSIF	OP_Marche.Etape.17
+		AND (I_SWEEP_ON OR CONF_No_Sweep) THEN
+				OP_Marche.Etape.3:=TRUE;
+				OP_Marche.Etape.17:= FALSE;
+(*étape 3-4*)
+ELSIF	OP_Marche.ETAPE.3
+		AND I_HT_ON THEN
+				OP_Marche.Etape.4:=TRUE;
+				OP_Marche.Etape.3:=FALSE;
+(*étape 4-5*)
+(*	La puissance n'a pas été maintenue et la phase de préfusion 0 est demandée- execution de la premiere rampe
+	et du premier palier*)
+ELSIF	OP_MARCHE.ETAPE.4 AND
+		I_FIL_ON AND ( PRM_PHASE_PREFFUSION =1) AND NOT I_MAINTIEN_SOURCE THEN
+				MEM_POWER := OUT_POWER;
+				OP_Marche.Etape.5:=TRUE;
+				OP_Marche.Etape.4:=FALSE;
+(*étape 4-10*)
+(*	La puissance a été maintenue ou la phase de préfusion 2 est demandée - passage au segment n°6*)
+ELSIF	OP_MARCHE.ETAPE.4
+		AND ( PRM_PHASE_PREFFUSION = 3) AND I_FIL_ON AND NOT I_MAINTIEN_SOURCE THEN
+				MEM_POWER := OUT_POWER;
+				OP_Marche.Etape.10:=TRUE;
+				OP_Marche.Etape.4:=FALSE;
+(*Etape 4-8*)
+ELSIF	OP_MARCHE.ETAPE.4
+		AND ( PRM_PHASE_PREFFUSION = 2) AND I_FIL_ON AND NOT I_MAINTIEN_SOURCE THEN
+				MEM_POWER := OUT_POWER;
+				OP_Marche.Etape.8:=TRUE;
+				OP_Marche.Etape.4:=FALSE;		
+
+(*Etape 4-6*)		
+ELSIF	OP_MARCHE.ETAPE.4
+		AND I_MAINTIEN_SOURCE AND I_FIL_ON THEN
+				MEM_POWER := OUT_POWER;
+				OP_Marche.Etape.6:=TRUE;
+				OP_Marche.Etape.4:=FALSE;				
+(*étape 5-6*)
+ELSIF	OP_MARCHE.ETAPE.5
+		AND TIMER_SEGMENT[1].Q THEN 			(*fin segment 1*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.6:=TRUE;
+				OP_MARCHE.Etape.5:=FALSE;
+(*étape 6-7*)
+ELSIF	OP_MARCHE.ETAPE.6
+		AND TIMER_SEGMENT[2].Q THEN 			(*fin segment 2*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.7:=TRUE;
+				OP_MARCHE.Etape.6:=FALSE;
+(*étape 7-8*)
+ELSIF	OP_MARCHE.ETAPE.7
+		AND TIMER_SEGMENT[3].Q THEN			(*fin segment 3*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.8:=TRUE;
+				OP_MARCHE.Etape.7:=FALSE;
+(*étape 8-9*)
+ELSIF	OP_MARCHE.ETAPE.8
+		AND TIMER_SEGMENT[4].Q THEN			(*fin segment 4*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.9:=TRUE;
+				OP_MARCHE.Etape.8:=FALSE;
+(*étape 9-10*)
+ELSIF	OP_MARCHE.ETAPE.9
+		AND TIMER_SEGMENT[5].Q THEN			(*fin segment 5*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.10:=TRUE;
+				OP_MARCHE.Etape.9:=FALSE;
+(*étape 10-11*)
+ELSIF	OP_MARCHE.ETAPE.10
+		AND TIMER_SEGMENT[6].Q THEN			(*fin segment 6*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.11:=TRUE;
+				OP_MARCHE.Etape.10:=FALSE;
+(*étape 11-12*)
+ELSIF	OP_MARCHE.ETAPE.11
+		AND TIMER_SEGMENT[7].Q THEN			(*fin segment 7*)
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.12:=TRUE;
+				OP_MARCHE.Etape.11:=FALSE;
+
+(*étape 12-13*)
+ELSIF	OP_MARCHE.ETAPE.12
+		AND I_EVAP_ON THEN						(*Demande START dépot par bloc empilement*)
+				OP_MARCHE.Etape.13:=TRUE;
+				OP_MARCHE.Etape.12:=FALSE;
+
+(*Début du dépôt*)
+(*étape 13-14*)
+ELSIF	OP_MARCHE.ETAPE.13
+		AND I_END_DEPOSITION THEN
+				VAR_RETARD_FERM_CACHE:=TRUE;
+				OP_MARCHE.Etape.14:=TRUE;
+				OP_MARCHE.Etape.13:=FALSE;
+(*étape 14-15*)
+ELSIF	OP_MARCHE.ETAPE.14
+		AND TIMER_SEGMENT[9].Q THEN
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.15:=TRUE;				(*Rampe de descente 1*)
+				OP_MARCHE.Etape.14:=FALSE;
+(*étape 15-16*)
+ELSIF	OP_MARCHE.ETAPE.15
+		AND TIMER_SEGMENT[10].Q THEN
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.16:=TRUE;				(*Rampe de descente 2*)
+				OP_MARCHE.Etape.15:=FALSE;
+(*étape 16-1*)
+ELSIF	OP_MARCHE.ETAPE.16
+		AND OP_MARCHE.MARCHE_OP  THEN
+				MEM_POWER := OUT_POWER;
+				OP_MARCHE.Etape.1:=TRUE;
+				OP_MARCHE.Etape.16:=FALSE;
+
+END_IF;
+
+(*cloture du traitement de l'opération*)
+OP_Marche.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ACT_STOP" Id="{7c1eab93-2f2d-40cb-9715-56d6a0c3107c}">
+      <Implementation>
+        <ST><![CDATA[(* OPERATION d'arret d'évaporation*)
+(* arrêt de l'opération*)
+
+(*initialisation de l'opération*)
+OP_STOP(
+	ON_AUTO_INT:= ,
+	CTRL_PLC:= TRUE,
+	RESET:= RESET ,
+	MANUAL:= MANUAL,
+	ENABLE_INT:= TRUE,
+	RESTART_ENABLE_IF_OK:=FALSE ,
+	N_STEP_OP_OK:= 5,
+	N_STEP_OP_NOK:=0 );
+
+
+(*appel de l'action de préparation de l'opération*)
+OP_STOP.PRL();
+
+(*GRAFCET*)
+(* initialisation du grafcet*)
+IF 		OP_Stop.ETAPE = 0 THEN
+				OP_Stop.ETAPE.0 := TRUE;
+(*repositionnement sur étape 0*)
+ELSIF	MANUAL OR Reset OR OP_Marche.Etape.1 THEN
+				OP_Stop.ETAPE := 0;			(*RAZ grafcet*)
+				OP_Stop.ETAPE.0:=TRUE;
+(*étape 0-1*)
+ELSIF 	OP_Stop.ETAPE.0
+		AND OP_Stop.marche_op THEN
+				OP_Stop.ETAPE.1:=TRUE;
+				OP_Stop.ETAPE.0:=FALSE;
+(*étape 1-2*)
+ELSIF	OP_Stop.ETAPE.1
+		AND OP_Marche.AR  THEN
+				OP_Stop.Etape.2:=TRUE;
+				OP_Stop.Etape.1:=FALSE;
+(*étape 2-3*)
+ELSIF 	OP_Stop.Etape.2
+		AND I_FIL_OFF
+		 THEN
+				OP_Stop.Etape.3:=TRUE;
+				OP_Stop.Etape.2:=FALSE;
+(*étape 3-4*)
+ELSIF 	OP_Stop.Etape.3
+		AND I_HT_OFF
+		 THEN
+				OP_Stop.Etape.4:=TRUE;
+				OP_Stop.Etape.3:=FALSE;
+(*étape 4-5*)
+ELSIF	OP_Stop.Etape.4
+		(*AND (NOT I_SWEEP_ON OR CONF_No_Sweep)*)		(*Pas de commande d'arrêt du sweep*)
+		THEN
+				OP_Stop.Etape.5:=TRUE;
+				OP_Stop.Etape.4:=FALSE;
+END_IF;
+
+
+(*cloture du traitement de l'opération*)
+OP_Stop.POST();]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="POST" Id="{1e1ea298-7652-42f0-abd7-ffeda5800e9c}">
+      <Implementation>
+        <ST><![CDATA[(*Gestion demandes*)
+FM_CO_Modif(clk:=CO_modif);
+
+(*************************************************)
+(* GESTION PUISSANCE DE SORTIE     *)
+(************************************************)
+(*
+FM_ETAPE14_MARCHE(CLK:=OP_marche.Etape.14);
+IF FM_ETAPE14_MARCHE.Q THEN
+	MEM_POWER := OUT_POWER;
+END_IF
+*)
+
+IF OP_MARCHE.Etape.13 AND NOT I_END_DEPOSITION AND (OUT_POWER <> 0) THEN 
+	MEM_POWER := OUT_POWER;
+END_IF
+
+(*initialisation des temporisations de segment*)
+IF OP_MARCHE.Etape.1 OR FM_CO_Modif.Q THEN
+		TIMER_SEGMENT[1].PT := INT_TO_TIME(PRM_TPS_SEGMENT[1])*1000;
+		TIMER_SEGMENT[2].PT := INT_TO_TIME(PRM_TPS_SEGMENT[2])*1000;
+		TIMER_SEGMENT[3].PT := INT_TO_TIME(PRM_TPS_SEGMENT[3])*1000;
+		TIMER_SEGMENT[4].PT := INT_TO_TIME(PRM_TPS_SEGMENT[4])*1000;
+		TIMER_SEGMENT[5].PT := INT_TO_TIME(PRM_TPS_SEGMENT[5])*1000;
+		TIMER_SEGMENT[6].PT := INT_TO_TIME(PRM_TPS_SEGMENT[6])*1000;
+		TIMER_SEGMENT[7].PT := INT_TO_TIME(PRM_TPS_SEGMENT[7])*1000;
+		TIMER_SEGMENT[8].PT := INT_TO_TIME(PRM_TPS_SEGMENT[8])*1000;	(*Dépôt*)
+		TIMER_SEGMENT[9].PT := INT_TO_TIME(PRM_TPS_SEGMENT[9])*1000;
+		TIMER_SEGMENT[10].PT := INT_TO_TIME(PRM_TPS_SEGMENT[10])*1000;
+END_IF
+
+TIMER_SEGMENT[1].IN := OP_MARCHE.Etape.5;
+TIMER_SEGMENT[2].IN := OP_MARCHE.Etape.6;
+TIMER_SEGMENT[3].IN := OP_MARCHE.Etape.7;
+TIMER_SEGMENT[4].IN := OP_MARCHE.Etape.8;
+TIMER_SEGMENT[5].IN := OP_MARCHE.Etape.9;
+TIMER_SEGMENT[6].IN := OP_MARCHE.Etape.10;
+TIMER_SEGMENT[7].IN := OP_MARCHE.Etape.11;
+TIMER_SEGMENT[8].IN := OP_MARCHE.Etape.13;
+TIMER_SEGMENT[9].IN := OP_MARCHE.Etape.14;
+TIMER_SEGMENT[10].IN := OP_MARCHE.Etape.15;
+
+TIMER_SEGMENT[1]();
+TIMER_SEGMENT[2]();
+TIMER_SEGMENT[3]();
+TIMER_SEGMENT[4]();
+TIMER_SEGMENT[5]();
+TIMER_SEGMENT[6]();
+TIMER_SEGMENT[7]();
+TIMER_SEGMENT[8]();
+TIMER_SEGMENT[9]();
+TIMER_SEGMENT[10]();
+
+TIMER_Prise_Controle.IN := OP_MARCHE.Etape.13;
+TIMER_Prise_Controle.PT :=T#3s;
+TIMER_Prise_Controle();
+
+(*Timer pour pour visualisation temps de la couche*)
+TIMER_Temps_Couche (	PT:= T#30000m,
+						IN := OP_MARCHE.Etape.13,);
+
+(*Puissance appliquée en fin de préfusion*)
+PRM_SOAK2_POWER:= PRM_PWR_SEGMENT[7];
+(*Demande de switch crystal*)
+RQ_Switch_Crystal:= OP_Marche.Etape.2 AND PRM_MULTI_QUARTZ;
+(*Position à utiliser pour la tête multiquartz*)
+OUT_Cons_Pos_Qz:= PRM_CRYSTAL_POSITION;
+
+(*Calcul du temps total de préparation du dépôt*)
+IF OP_Marche.Etape.1 OR FM_CO_Modif.Q THEN
+(*	STATE_TEMPS_PREPARATION := 	PRM_TPS_SEGMENT[1] + PRM_TPS_SEGMENT[2] + PRM_TPS_SEGMENT[3] +
+										PRM_TPS_SEGMENT[4] + PRM_TPS_SEGMENT[5] + PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+*)
+	IF PRM_PHASE_PREFFUSION  = 1 THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[1] + PRM_TPS_SEGMENT[2] + PRM_TPS_SEGMENT[3] +
+										PRM_TPS_SEGMENT[4] + PRM_TPS_SEGMENT[5] + PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+	IF PRM_PHASE_PREFFUSION = 2THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[4] + PRM_TPS_SEGMENT[5] + PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+	IF PRM_PHASE_PREFFUSION = 3 THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+
+	STATE_TEMPS_CLOTURE  :=	PRM_TPS_SEGMENT[9] + PRM_TPS_SEGMENT[10];		(*Temps de clôture estimé*)
+
+	IF PRM_RATE > 0 THEN	(*On évite la division par 0*)
+		IF PRM_New_Rate > 0 THEN	(*Calcul du temps théorique si nouvelle vitesse*)
+			STATE_TEMPS_DEPOT	:=	REAL_TO_INT(((PRM_THICK_SP*1000) / PRM_Rate) + (((PRM_Thickness-PRM_Thick_SP)*1000) / PRM_New_Rate));
+		ELSE
+			STATE_TEMPS_DEPOT	:=	REAL_TO_INT((PRM_Thickness*1000) / PRM_Rate);		(*Temps de dépôt estimé, théorique*)
+		END_IF
+	END_IF
+
+	STATE_TEMPS_RESTANT_CLOT 		:=	STATE_TEMPS_CLOTURE;
+	STATE_TEMPS_RESTANT_PREP		:=	STATE_TEMPS_PREPARATION;
+	STATE_TEMPS_RESTANT_DEPOT 	:=	STATE_TEMPS_DEPOT;
+END_IF
+
+
+(*ATTENTION Modif amory pour anticipation, il faut mettre à jour les temps lors de cloture pour pouvoir relancer l'évap*)
+IF OP_Marche.Etape.16 OR OP_Marche.Etape.15 OR OP_Marche.Etape.14 OR OP_Marche.Etape.0 THEN
+	IF PRM_PHASE_PREFFUSION  = 1 THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[1] + PRM_TPS_SEGMENT[2] + PRM_TPS_SEGMENT[3] +
+										PRM_TPS_SEGMENT[4] + PRM_TPS_SEGMENT[5] + PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+	IF PRM_PHASE_PREFFUSION = 2 THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[4] + PRM_TPS_SEGMENT[5] + PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+	IF PRM_PHASE_PREFFUSION = 3 THEN
+		STATE_TEMPS_PREPARATION := 		PRM_TPS_SEGMENT[6] +
+										PRM_TPS_SEGMENT[7];
+	END_IF
+END_IF
+
+
+(*Calcul de la consigne de puissance en % en fonction du segment en cours*)
+CASE OP_MARCHE.STATUS OF
+	5:
+		STATE_Segment 	:= 	1;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[1].PT - TIMER_SEGMENT[1].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION -
+													TIME_TO_INT(TIMER_SEGMENT[1].ET / 1000);
+
+			2,3:
+				STATE_TEMPS_RESTANT_PREP :=	STATE_TEMPS_RESTANT_PREP;
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	6:
+		STATE_Segment	:= 	2;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[2].PT - TIMER_SEGMENT[2].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION - PRM_TPS_SEGMENT[1] -
+													TIME_TO_INT(TIMER_SEGMENT[2].ET / 1000);
+
+			2,3:
+				STATE_TEMPS_RESTANT_PREP :=	STATE_TEMPS_RESTANT_PREP;
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	7:
+		STATE_Segment 	:= 	3;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[3].PT - TIMER_SEGMENT[3].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION - PRM_TPS_SEGMENT[1] - PRM_TPS_SEGMENT[2] -
+							 						TIME_TO_INT(TIMER_SEGMENT[3].ET / 1000);
+
+			2,3:
+				STATE_TEMPS_RESTANT_PREP :=	STATE_TEMPS_RESTANT_PREP;
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	8:
+		STATE_Segment	:= 	4;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[4].PT - TIMER_SEGMENT[4].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[1] - PRM_TPS_SEGMENT[2] - PRM_TPS_SEGMENT[3]
+													- TIME_TO_INT(TIMER_SEGMENT[4].ET / 1000);
+			2:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- TIME_TO_INT(TIMER_SEGMENT[4].ET / 1000);
+			3:
+				STATE_TEMPS_RESTANT_PREP :=	STATE_TEMPS_RESTANT_PREP;
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	9:
+		STATE_Segment	:= 	5;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[5].PT - TIMER_SEGMENT[5].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[1] - PRM_TPS_SEGMENT[2] - PRM_TPS_SEGMENT[3]
+													- PRM_TPS_SEGMENT[4] - TIME_TO_INT(TIMER_SEGMENT[5].ET / 1000);
+			2:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[4] - TIME_TO_INT(TIMER_SEGMENT[5].ET / 1000);
+			3:
+				STATE_TEMPS_RESTANT_PREP :=	STATE_TEMPS_RESTANT_PREP;
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	10:
+		STATE_Segment 	:= 	6;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[6].PT - TIMER_SEGMENT[6].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[1] - PRM_TPS_SEGMENT[2] - PRM_TPS_SEGMENT[3]
+													- PRM_TPS_SEGMENT[4] - PRM_TPS_SEGMENT[5]
+									 				- TIME_TO_INT(TIMER_SEGMENT[6].ET / 1000);
+			2:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[4] - PRM_TPS_SEGMENT[5]
+									 				- TIME_TO_INT(TIMER_SEGMENT[6].ET / 1000);
+			3:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+									 				- TIME_TO_INT(TIMER_SEGMENT[6].ET / 1000);
+		END_CASE
+
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+
+	11,12:
+		STATE_Segment	:=	7;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[7].PT - TIMER_SEGMENT[7].ET;
+
+		CASE PRM_PHASE_PREFFUSION OF
+			1:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[1] - PRM_TPS_SEGMENT[2] - PRM_TPS_SEGMENT[3]
+													- PRM_TPS_SEGMENT[4] - PRM_TPS_SEGMENT[5]
+													- PRM_TPS_SEGMENT[6] - TIME_TO_INT(TIMER_SEGMENT[7].ET / 1000);
+			2:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[4] - PRM_TPS_SEGMENT[5]
+													- PRM_TPS_SEGMENT[6] - TIME_TO_INT(TIMER_SEGMENT[7].ET / 1000);
+			3:
+				STATE_TEMPS_RESTANT_PREP := 	STATE_TEMPS_PREPARATION
+													- PRM_TPS_SEGMENT[6] - TIME_TO_INT(TIMER_SEGMENT[7].ET / 1000);
+		END_CASE
+
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_PREP) * 1000;
+		STATE_TEMPS_RESTANT_CLOT := 	STATE_TEMPS_CLOTURE;
+
+	13:
+		STATE_Segment 	:=	8;	(*Phase d'évaporation*)
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[8].PT - TIMER_SEGMENT[8].ET; (*représente le temps max de dépôt*)
+		IF PRM_RATE > 0 THEN
+			STATE_TEMPS_RESTANT_DEPOT :=	REAL_TO_INT(((PRM_Thickness*1000) - I_THICKNESS) / PRM_Rate);
+		END_IF
+		STATE_TEMPS_SEGMENT := T#0ms;
+		STATE_Temps_Phase 		       := 	T#0ms;
+
+	14:
+		STATE_Segment	:=	9;
+
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[9].PT - TIMER_SEGMENT[9].ET;
+		STATE_TEMPS_RESTANT_DEPOT := 	0;
+		STATE_TEMPS_RESTANT_PREP 	:=	0;
+		STATE_TEMPS_RESTANT_CLOT 	:=	STATE_TEMPS_CLOTURE - TIME_TO_INT(TIMER_SEGMENT[9].ET / 1000);
+
+		STATE_Temps_phase		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_CLOT) * 1000;
+
+	15:
+		STATE_Segment	:=	10;
+		STATE_TEMPS_SEGMENT := TIMER_SEGMENT[10].PT - TIMER_SEGMENT[10].ET;
+		STATE_TEMPS_RESTANT_DEPOT := 	0;
+		STATE_TEMPS_RESTANT_PREP 	:=	0;
+		STATE_TEMPS_RESTANT_CLOT 	:=	STATE_TEMPS_CLOTURE - PRM_TPS_SEGMENT[9] - TIME_TO_INT(TIMER_SEGMENT[9].ET / 1000);
+		STATE_Temps_Phase 		       := 	INT_TO_TIME(STATE_TEMPS_RESTANT_CLOT) * 1000;
+	ELSE
+		STATE_TEMPS_SEGMENT := T#0ms;
+		STATE_Segment	:= 	0;
+		STATE_Temps_Phase 		       := 	T#0ms;
+
+END_CASE
+
+(*Calcul de la puissance à appliquer pendant la phase de préfusion*)
+IF NOT (STATE_Segment = 0) AND NOT (STATE_Segment = 8) THEN
+		IF (STATE_segment = 1) THEN
+			VAR_Pi 		:= 	0.0;
+		ELSIF (STATE_segment = 9) THEN
+			VAR_Pi		:=	MEM_POWER ;
+		ELSE
+			VAR_Pi		:=	MEM_POWER;  (*PRM_PWR_SEGMENT[STATE_Segment - 1]*)
+		END_IF
+		VAR_Pf 			:=	PRM_PWR_SEGMENT[STATE_Segment];
+		VAR_Time 		:=	TIME_TO_REAL(TIMER_SEGMENT[STATE_Segment].ET) / 1000;
+		VAR_Tseg 		:=	PRM_TPS_SEGMENT[STATE_SEGMENT] ;
+		IF VAR_Tseg > 0 THEN
+			OUT_Power 		:=	(((VAR_Pf - VAR_Pi)/VAR_Tseg)	* VAR_Time) + VAR_Pi;
+		ELSE
+			OUT_Power 		:= 	VAR_Pf;
+		END_IF
+END_IF
+
+(*Calcul de la puissance à appliquer pendant la phase d'évaporation*)
+IF (STATE_SEGMENT = 8) AND TIMER_Prise_Controle.Q AND NOT PRM_PFixe THEN
+		OUT_Power 		:=	I_Power;		(*Application de la consigne du controleur de dépôt*)
+ELSIF (STATE_SEGMENT = 8) AND PRM_PFixe THEN
+		OUT_Power 		:=	PRM_PWR_SEGMENT[8];		(*Application de la consigne du controleur de dépôt*)
+END_IF
+IF OP_MARCHE.Etape.0 AND NOT MANUAL OR
+	(OP_Marche.Etape.1 AND NOT (PRM_NCR = VAR_Mem_Creuset)) THEN	(*RAZ de la puissance si on utilise pas le même creuset*)
+		OUT_POWER	:=	0.0;
+		RQ_marche_HT	:=	FALSE;
+		RQ_marche_FIL	:=	FALSE;
+END_IF
+
+(*Etat de l'évaporation*)
+STATE_PREP_OK	:= 	OP_MARCHE.Etape.12;
+STATE_EVAP 		:= 	OP_MARCHE.Etape.13;
+STATE_CLOT_OK 	:= 	OP_MARCHE.OK OR OP_MARCHE.AR;
+STATE_PREFU 		:= 	(STATE_Segment >= 1) AND (STATE_Segment < 8);
+STATE_IDLE			:= 	(STATE_Segment = 9) OR (STATE_Segment = 10);
+STATE_END_DEPOT_PFIXE	:=	OP_MARCHE.Etape.13 AND (I_THICKNESS >= PRM_Thickness) AND PRM_PFIXE;
+
+
+FM_ETAPE3_MARCHE(CLK:=OP_MARCHE.Etape.3);
+IF FM_ETAPE3_MARCHE.Q THEN
+	CONS_HT:=	PRM_HT;
+END_IF
+
+(*Gestion de la mémorisation des creusets*)
+IF OP_MARCHE.etape.3 THEN
+	VAR_Mem_Creuset := PRM_NCR;
+END_IF
+RQ_Ref_mesure 	:= 	NOT OP_MARCHE.Etape.0 OR OP_STOP.etape.1 OR OP_STOP.etape.2 OR OP_STOP.etape.3;
+RQ_Ref_source	:=	NOT OP_MARCHE.Etape.0 OR OP_STOP.etape.1 OR OP_STOP.etape.2 OR OP_STOP.etape.3;
+
+(*marche balayage*)
+IF	OP_Marche.Etape.17 THEN
+	RQ_marche_SWEEP	:=	TRUE;
+ELSIF (OP_Marche.Etape.0 AND OP_Stop.Etape.0) OR OP_STOP.Etape.4 OR RESET OR MANUAL THEN
+	RQ_marche_SWEEP	:=	FALSE;
+END_IF
+
+(* marche HT *)
+IF	OP_Marche.Etape.3 THEN
+	RQ_marche_HT 	:= TRUE;
+ELSIF (Op_marche.Etape.0 AND OP_stop.Etape.0) OR OP_STOP.Etape.3 THEN
+	RQ_marche_HT 	:= FALSE;
+END_IF
+
+(* Marche filament*)
+IF	OP_Marche.Etape.4 THEN
+	RQ_marche_FIL 	:= TRUE;
+ELSIF (Op_marche.Etape.0 AND OP_stop.Etape.0) OR OP_STOP.Etape.2 THEN
+	RQ_marche_FIL 	:= FALSE;
+END_IF
+
+(*Changement de creuset*)
+IF OP_Marche.Etape.1 THEN
+	RQ_Switch_Crucible := TRUE;
+ELSIF (OP_Marche.Etape.0 AND OP_Stop.Etape.0) OR OP_Marche.Etape.17 OR OP_STOP.Etape.4 THEN
+	RQ_Switch_Crucible := FALSE;
+END_IF
+
+IF OP_MARCHE.Etape.1 THEN
+	CONS_NBAL := PRM_NBAL ;
+	CONS_NCR := PRM_NCR;
+END_IF
+
+
+(*
+IF (Op_marche.Etape.0 AND OP_stop.Etape.0 AND NOT MANUAL) OR OP_STOP.Etape.2 THEN
+	CONS_NBAL := 0;
+END_IF
+*)
+(*Seuillage Pmax*)
+IF (OUT_POWER >= PRM_PMAX) THEN
+	OUT_POWER := PRM_PMAX;
+	FLAG_PMAX := TRUE;				(*Flag pour puissance max atteinte*)
+ELSE
+	FLAG_PMAX := FALSE;
+END_IF
+
+(*
+IF (OUT_POWER > (PRM_PMAX * 1.05)) THEN
+	IF OUT_Power <= 95 THEN
+		OUT_Power := PRM_PMAX * 1.05;
+	ELSE
+		OUT_Power := PRM_PMAX;
+	END_IF
+	FLAG_PMAX := TRUE;				(*Flag pour puissance max atteinte*)
+ELSE
+	FLAG_PMAX := FALSE;
+END_IF
+*)
+
+(*
+(*Demande d'ouverture du cache source*)
+TIMER_RETARD_FCACHE(
+		IN:= VAR_RETARD_FERM_CACHE,
+		PT:= REAL_TO_TIME(PRM_RETARD_FERM_CACHE*1000)
+		);
+VAR_RETARD_FERM_CACHE := FALSE;
+TIMER_RETARD_OCACHE(
+		IN:= NOT (OP_MARCHE.Etape.5 OR OP_MARCHE.Etape.6 OR OP_MARCHE.Etape.7 OR OP_MARCHE.Etape.8 OR
+			OP_MARCHE.Etape.9 OR OP_MARCHE.Etape.10 OR OP_MARCHE.Etape.11 OR OP_MARCHE.Etape.12 OR
+			OP_MARCHE.Etape.13) ,
+		PT:= REAL_TO_TIME(PRM_REOUV_CACHE*1000),
+		);
+RQ_Ouv_Cache_source := OP_MARCHE.Etape.13 OR TIMER_RETARD_FCACHE.Q OR (TIMER_RETARD_OCACHE.Q AND
+		NOT (PRM_REOUV_CACHE = 0));
+*)
+RQ_Ouv_Cache_source := OP_MARCHE.Etape.13 AND (I_OUV_CACHE_SOURCE OR PRM_PFixe);
+
+(*Défaut du quartz qui contrôle la vitesse de dépôt*)
+DEF_QZ_CTRL_RATE.CONDITION :=  OP_Marche.Etape.13 AND I_DEF_QZ_CTRL_RATE AND NOT I_TIME_POWER;
+DEF_QZ_CTRL_RATE.DELAY := T#60s;
+DEF_QZ_CTRL_RATE();
+
+(*Défaut de refroidissement*)
+DEF_REF.CONDITION := NOT OP_MARCHE.Etape.0 AND (NOT I_ref_mesure_ok OR NOT I_ref_source_ok);
+DEF_REF.DELAY := T#5s;
+DEF_REF();
+
+
+(*Défaut de puissance max atteinte*)
+DEF_Pmax.CONDITION:= FLAG_PMAX;
+DEF_Pmax();
+
+(*Seuillage Pmin pendant la phase de dépôt et d'ajustement vitesse en fin de préfusion*)
+IF (OUT_Power <= PRM_PMIN) AND (STATE_Segment = 8) AND (PRM_PMIN > 0) THEN
+	OUT_Power:= PRM_PMIN;
+	FLAG_PMIN := TRUE;
+ELSE
+	FLAG_PMIN := FALSE;
+END_IF
+
+(*Demande de marche du contrôleur*)
+TIMER_Start_Controleur.IN		:=	OP_Marche.Etape.13;
+TIMER_Start_Controleur.PT		:=	T#1s;
+TIMER_Start_Controleur();
+OUT_Start_Controleur	:=	OP_Marche.Etape.13(*TIMER_Start_Controleur.Q*);
+
+(*RAZ consigne vitesse pour affichage sur XTC si puissance fixe*)
+IF NOT OP_Marche.AR AND PRM_PFixe THEN
+	PRM_Rate	:=	0;
+END_IF
+
+(*Défaut de puissance min atteinte*)
+DEF_Pmin.CONDITION := FLAG_PMIN AND (op_marche.Etape.13 OR STATE_PREFU);
+DEF_Pmin();
+
+
+(*Surveillance du temps de dépôt théorique à ne pas dépasser*)
+(*si le temps théorique est > au temps min alors on ajoute le pourcentage pour le temps d'enveloppe*)
+IF (STATE_TEMPS_DEPOT > PRM_TPS_MIN_SURV_DEPOT) AND NOT PRM_PFIXE THEN
+	DEF_TEMPS_MAX.DELAY	:=	REAL_TO_TIME(INT_TO_REAL(STATE_TEMPS_DEPOT) * ((100+PRM_FACTEUR_TEMPS_DEPOT)/100)*1000);
+ELSIF PRM_PFIXE THEN
+	DEF_TEMPS_MAX.DELAY	:=	REAL_TO_TIME(UINT_TO_REAL(PRM_TPS_Max_PFixe)*1000);
+(*si le temps théorique  est < au temps min alors on ajoute le temps min pour le temps d'enveloppe*)
+ELSE
+	DEF_TEMPS_MAX.DELAY	:=	REAL_TO_TIME((INT_TO_REAL(STATE_TEMPS_DEPOT) + PRM_TPS_MIN_SURV_DEPOT)*1000);
+END_IF
+
+
+(*Defaut dépassement du temps max de dépôt*)
+DEF_TEMPS_MAX(
+				CONDITION:= OP_Marche.Etape.13  AND ( DEF_TEMPS_MAX.DELAY > T#0ms),
+				);
+
+
+STATE_AR := (OP_MARCHE.Etape.0 AND OP_STOP.Etape.0) OR OP_STOP.OK;
+
+(*Reset demandes*)
+CO_Modif	:=	FALSE;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PRL" Id="{e8395f34-79b5-45f9-83a0-6c4ba44a9e78}">
+      <Implementation>
+        <ST><![CDATA[OP_MARCHE.IdXML		:=	'0';
+OP_MARCHE.TagXML	:=	1;
+
+OP_STOP.IdXML		:=	'0';
+OP_STOP.TagXML		:=	2;
+
+DEF_QZ_CTRL_RATE.IDXML := '14';
+DEF_QZ_CTRL_RATE.TagXML := 8;
+
+DEF_PMAX.IdXML	:=	'14';
+DEF_PMAX.TagXML	:=	10;
+
+DEF_PMIN.IdXML := '14';
+DEF_Pmin.TagXML := 12;
+
+DEF_TEMPS_MAX.IdXML := '14';
+DEF_TEMPS_MAX.TagXML  := 11;
+
+DEF_REF.IdXML := '14';
+DEF_REF.TagXML:= 28;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BLOCK_EVAP">
+      <LineId Id="189" Count="5" />
+    </LineIds>
+    <LineIds Name="BLOCK_EVAP.ACT_MARCHE">
+      <LineId Id="0" Count="105" />
+      <LineId Id="193" Count="0" />
+      <LineId Id="192" Count="0" />
+      <LineId Id="188" Count="3" />
+      <LineId Id="186" Count="0" />
+      <LineId Id="106" Count="78" />
+    </LineIds>
+    <LineIds Name="BLOCK_EVAP.ACT_STOP">
+      <LineId Id="0" Count="58" />
+    </LineIds>
+    <LineIds Name="BLOCK_EVAP.POST">
+      <LineId Id="477" Count="0" />
+      <LineId Id="475" Count="1" />
+      <LineId Id="0" Count="2" />
+      <LineId Id="466" Count="8" />
+      <LineId Id="6" Count="442" />
+      <LineId Id="482" Count="0" />
+      <LineId Id="449" Count="3" />
+      <LineId Id="481" Count="0" />
+      <LineId Id="453" Count="11" />
+      <LineId Id="479" Count="1" />
+      <LineId Id="478" Count="0" />
+    </LineIds>
+    <LineIds Name="BLOCK_EVAP.PRL">
+      <LineId Id="0" Count="19" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

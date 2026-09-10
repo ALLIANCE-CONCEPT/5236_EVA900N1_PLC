@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.10">
+  <POU Name="BLOCK_CDG_ANA" Id="{6eb6598b-814f-4dea-9b97-4b017df535d1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK BLOCK_CDG_ANA
+
+
+(* Gestion d'une jauge capacitive de type CDGxxx*)
+
+(****************historique des versions*****************************)
+
+(* Version 1-0 - SP - VERSION INIITIALE VALIDEE SUR 6844 DP650 N35*)
+
+(*************************************************************************)
+
+VAR_INPUT
+(*paramètre standard*)
+	RESET:   				BOOL; 													(*Condition RAZ actionneur*)
+	MANUAL:  				BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Mode manuel*)
+	IN_Pression: 			ANALOG_INPUT; 											(* Entrée analogique de la jauge *)
+
+	CO_inhibe_Seuil:		BOOL;																		(*information externe d'inhibition des seuils*)
+	PRM_Seuil: 				ARRAY[0..10] OF REAL;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Valeur des seuils*)
+	PRM_Delais:				ARRAY[0..10] OF TIME;	(* ~ (OPC : 1 : available for OPC-clients) *)		(*Delais de validation du seuil en multiple de 100ms *)
+	PRM_Type_seuil: 		ARRAY[0..10] OF BOOL; 														(* Type du seuil n°1 (False=seuil vide, True=seuil pression) *)
+
+
+END_VAR
+
+VAR_OUTPUT
+(*Variable d'état*)
+	STATE_Seuil:		 	ARRAY[0..10] OF BOOL; 	(* ~ (OPC : 1 : available for OPC-clients) *)	(*Tableau des seuils*)
+	STATE_Pression:			REAL; 		(* ~ (OPC : 1 : available for OPC-clients) *)				(* Valeur de la pression (dans l'unité sélectionnée) *)
+	STATE_Ok:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)				(* Jauge à l'état OK*)
+	STATE_Nok:				BOOL;		(* ~ (OPC : 1 : available for OPC-clients) *)				(* Jauge en défaut*)
+
+END_VAR
+
+VAR
+	i:						USINT;
+	TIMER_Seuil:			ARRAY[0..10] OF TON;
+END_VAR
+
+
+VAR_INPUT PERSISTENT
+	CONF_Unit: 				USINT; 		(* Unité : 0=mb,1=mTorr,2=Pa *)
+	CONF_Pmax:				REAL;		(*valeur max. de la jauge dans l'unité sélectionnée*)
+
+(*TOCHECK*)
+(*Entité*)
+	IsComponent:			BOOL;			(*entité : composant*)
+	IdXML:					STRING;			(*nom entité : identifiant pour recherche dans dico*)
+	TagXML:					UINT;			(*nom entité : identifiant pour recherche dans dico*)
+	IdParent:				STRING;			(*MNEMO de l'appelant*)
+	MNEMO:					STRING;			(*MNEMO de l'entité*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Conversion du signal d'entrée en Volt*)
+IN_Pression	(
+			CONF_Bipolar	:= 	FALSE,
+			CONF_Range		:=	1,
+			CONF_Max 		:= 	CONF_Pmax,
+			CONF_Min		:= 	0.0
+			);
+
+
+(* Test de validité du signal de jauge si signal > 0.6V et si la jauge est en marche *)
+STATE_OK := TRUE;
+STATE_NOK:=FALSE;
+STATE_Pression:=IN_Pression.Value;
+
+
+(* GESTION DES SEUILS *)
+FOR i:=1 TO 10 DO
+	TIMER_Seuil[i].PT		:=	PRM_Delais[i];
+	TIMER_Seuil[i].IN		:=	(((STATE_Pression >= PRM_Seuil[i]) AND PRM_Type_seuil[i]) OR		(*Seuil en pression*)
+							((STATE_Pression <= PRM_Seuil[i]) AND NOT PRM_Type_seuil[i]))			(*Seuil de vide*)
+							AND NOT RESET AND NOT CO_inhibe_Seuil AND STATE_Ok;
+	TIMER_Seuil[i]();
+	STATE_Seuil[i]			:= 	TIMER_Seuil[i].Q;
+END_FOR;]]></ST>
+    </Implementation>
+    <LineIds Name="BLOCK_CDG_ANA">
+      <LineId Id="52" Count="7" />
+      <LineId Id="62" Count="15" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

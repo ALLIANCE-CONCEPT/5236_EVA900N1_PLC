@@ -1,0 +1,262 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <TextList Name="TextList_Config_Evap" Id="{94edaa7a-b0b7-43bc-af1e-724a121088c2}">
+    <XmlArchive>
+      <Data>
+        <o xml:space="preserve" t="TextListObject">
+          <v n="UniqueIdGenerator">"0"</v>
+          <l n="TextList" t="ArrayList" cet="TextListRow">
+            <o>
+              <v n="TextID">"0"</v>
+              <v n="TextDefault">"reg quartz"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglage quartz</v>
+                <v>Crystal setting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"1"</v>
+              <v n="TextDefault">"life seuil"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Seuil d'alarme vie des quartz</v>
+                <v>Crystal life alarm threshold</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"2"</v>
+              <v n="TextDefault">"evap settings"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglages surveillance temps maximum de dépôt</v>
+                <v>Maximum evaporation time monitoring settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"3"</v>
+              <v n="TextDefault">"prm_tim_surv_dep_min"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximum définissant un dépôt court
+Temps ajouté au temps théorique pour les dépôts courts</v>
+                <v>Maximum time to determinate a short deposit
+Theorical additional time for short deposit</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"4"</v>
+              <v n="TextDefault">"PRM_Fact_Surv_Dep"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Pourcentage temps supplémentaire ajouté pour les dépôts longs</v>
+                <v>Additional time porcentage for long deposit</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"5"</v>
+              <v n="TextDefault">"reg source 1"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglages source 1</v>
+                <v>Source 1 settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"6"</v>
+              <v n="TextDefault">"reg source 2"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglages source 2</v>
+                <v>Source 2 settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"7"</v>
+              <v n="TextDefault">"matériau"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Matériau</v>
+                <v>Material</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"8"</v>
+              <v n="TextDefault">"Nom balayage"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Nom du balayage</v>
+                <v>Sweeping name</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"9"</v>
+              <v n="TextDefault">"no mvts in proc"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Inhibition des mouvements canne en process</v>
+                <v>No transfer arm movements in process</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"10"</v>
+              <v n="TextDefault">"reglages mvts"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglages mouvements</v>
+                <v>Movement settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"11"</v>
+              <v n="TextDefault">"evap continue"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mode évaporation continue</v>
+                <v>Continuous evaporation mode</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"12"</v>
+              <v n="TextDefault">"mode actif"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Mode évaporation continue actif (si non, mode couche classique)</v>
+                <v>Continuous evaporation mode active (if not, classical layer mode)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"13"</v>
+              <v n="TextDefault">"rate watcher time"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Interval de temps entre les périodes d'échantillonage</v>
+                <v>Time interval between sample periods</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"14"</v>
+              <v n="TextDefault">"rate watcher accuracy"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Tolérance de la fenêtre de validation de la vitesse d'évaporation</v>
+                <v>Acceptance window for evaporation rate</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"15"</v>
+              <v n="TextDefault">"maximum time"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximum d'évaporation continue avant arrêt automatique</v>
+                <v>Maximum time for continuous evaporation before automatic stop</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"16"</v>
+              <v n="TextDefault">"confirm refill"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Cliquez ici pour confirmer que les creusets ont été chargés</v>
+                <v>Click here to confirm crucible refilling</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"17"</v>
+              <v n="TextDefault">"maximum time s1"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximum d'évaporation continue avant arrêt automatique (Canon 1)</v>
+                <v>Maximum time for continuous evaporation before automatic stop (E-Gun 1)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"18"</v>
+              <v n="TextDefault">"maximum time s2"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximum d'évaporation continue avant arrêt automatique (Source Joule)</v>
+                <v>Maximum time for continuous evaporation before automatic stop (Thermal source)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"19"</v>
+              <v n="TextDefault">"maximum time s3"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Temps maximum d'évaporation continue avant arrêt automatique (Canon 2)</v>
+                <v>Maximum time for continuous evaporation before automatic stop (E-Gun 2)</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"20"</v>
+              <v n="TextDefault">"Reg XTC"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglage XTC</v>
+                <v>XTC Setting</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"21"</v>
+              <v n="TextDefault">"IP"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Adresse IP de l'XTC</v>
+                <v>Ip Adress of XTC</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"22"</v>
+              <v n="TextDefault">"Cr"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Creuset</v>
+                <v>Crucible</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"23"</v>
+              <v n="TextDefault">"CONF_Min_Temp_IN"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température min. eau en entrée du canon</v>
+                <v>Min. water temperature at gun inlet</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"24"</v>
+              <v n="TextDefault">"CONF_Max_Temp_IN"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température max. eau en entrée du canon</v>
+                <v>Max. water temperature at gun inlet</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"25"</v>
+              <v n="TextDefault">"CONF_Min_Temp_OUT"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température min. eau en sortie du canon</v>
+                <v>Min. water temperature at gun outlet</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"26"</v>
+              <v n="TextDefault">"CONF_Max_Temp_OUT"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Température max. eau en sortie du canon</v>
+                <v>Max. water temperature at gun outlet</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">"27"</v>
+              <v n="TextDefault">"reg eau"</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v>Réglages température eau</v>
+                <v>Water temperature settings</v>
+              </l>
+            </o>
+            <o>
+              <v n="TextID">""</v>
+              <v n="TextDefault">""</v>
+              <l n="LanguageTexts" t="ArrayList" cet="String">
+                <v></v>
+                <v></v>
+              </l>
+            </o>
+          </l>
+          <l n="Languages" t="ArrayList" cet="String">
+            <v>FR</v>
+            <v>EN</v>
+          </l>
+          <v n="GuidInit">{88d98d8d-fd74-4b8e-bc31-b76db5138469}</v>
+          <v n="GuidReInit">{b9f7f371-3d93-4bc6-8d46-81220f01d26b}</v>
+          <v n="GuidExitX">{acdb81fa-c151-4a2e-b962-ac35e20a10f1}</v>
+        </o>
+      </Data>
+      <TypeList>
+        <Type n="ArrayList">System.Collections.ArrayList</Type>
+        <Type n="Guid">System.Guid</Type>
+        <Type n="String">System.String</Type>
+        <Type n="TextListObject">{2bef0454-1bd3-412a-ac2c-af0f31dbc40f}</Type>
+        <Type n="TextListRow">{53da1be7-ad25-47c3-b0e8-e26286dad2e0}</Type>
+      </TypeList>
+    </XmlArchive>
+  </TextList>
+</TcPlcObject>
